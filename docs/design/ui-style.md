@@ -18,8 +18,9 @@ Define once in `App.xaml` as `SolidColorBrush` resources; never hard-code hex in
 | `Brush.Ink` | `#1B2230` | Primary text |
 | `Brush.Muted` | `#5A6475` | Descriptions, helper text, counts (≥ 4.5:1 on all backgrounds above) |
 | `Brush.Line` | `#D6DBE3` | Field borders, column dividers |
-| `Brush.Brand` | `#2457D6` | Copy button, selection edge, focus ring, links. Matches the app icon. |
-| `Brush.BrandSoft` | `#E3EAFB` | Selected list item background |
+| `Brush.Brand` | `#4338CA` | Copy button, selection edge, focus ring, links. Matches the app icon (indigo bubble). |
+| `Brush.BrandSoft` | `#E8E7FB` | Selected list item background |
+| `Brush.Accent` | `#F5A524` | Bookmark amber from the icon. Use sparingly: onboarding illustration only, never for text. |
 | `Brush.Danger` | `#B42318` | Delete confirmation text, error text |
 | `Brush.Warn` | `#FFF4D6` / text `#6B4A00` | "Backups are off" bar |
 
