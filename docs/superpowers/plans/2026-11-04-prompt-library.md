@@ -376,7 +376,7 @@ Behaviour:
 - **Settings window:** shortcut capture box (press keys → shows `HotkeyGesture.ToString()`; invalid combos rejected with hint text), **backup location picker** (`Views/BackupLocationPicker.xaml` user control, shared with the onboarding wizard in Task 14 — see Task 13 for detection), backups to keep (1–365), Start with Windows checkbox. Save → `ApplyHotkey` (on failure keep old hotkey and show `That shortcut is in use by another app.`), `StartupRegistration.Apply`, `SaveSettings()`.
 - **Backup location picker (shared control):** one card per `CloudFolderDetector.Detect()` result (`OneDrive`, `OneDrive – <org>`, `Google Drive`, `Dropbox`, `Dropbox – Business`, `iCloud Drive`) showing the provider name and the folder path, plus `Choose another folder…` (`Microsoft.Win32.OpenFolderDialog` — any local, USB or network folder works) and `Refresh` (re-runs detection, e.g. after signing in), and, when nothing is detected, the line `No cloud folder found on this PC. Sign in to OneDrive (built into Windows), or install Google Drive, Dropbox or iCloud, then press Refresh. You can also choose any folder, like a USB drive.` If the saved backup folder's drive/parent no longer exists at startup, the main window bar reads `Backups paused: <folder> isn't available. Is <provider> signed in?` with `Open Settings`, and scheduled backups skip quietly (one tray message per session, not per attempt). Picking a card sets the folder to `<root>\Prompt Library Backups` (created on first backup), **runs `RunBackup(Manual)` immediately** and shows `Backed up to <provider>.` or the failure text inline. No separate Save needed for this part.
 - (First-run setup now lives in the onboarding wizard, Task 14 — Settings no longer auto-opens on first run.)
-- **Warning bar** in main window when `BackupFolder` is null: `Backups are off. Choose OneDrive or Google Drive in Settings.` with an `Open Settings` link.
+- **Warning bar** in main window when `BackupFolder` is null: `Backups are off.` with a `Set up backups` link (amended per design review).
 - **RunBackup(trigger):** if folder null → return; hash `library.json`; if `ShouldBackup` → `BackupNow`; success → set `LastBackupAt`, `LastBackedUpLibraryHash`, save settings, (Manual only) tray message `Backup saved.`; failure → tray message `Backup failed: <error>` (error flag), settings untouched.
 - **Triggers:** `DispatcherTimer` every 60 minutes → `RunBackup(Daily)`; also once 1 minute after startup. `ExitApp()` → `RunBackup(OnExit)` before shutdown. File → Back up now → `RunBackup(Manual)`.
 - **Restore window:** list `BackupService.List` (date, prompt count; unreadable shown as `unreadable` and disabled), Restore button → confirm `Replace your current library with the backup from <date>? Your current library will be backed up first.` → `Restore`; success → reload library into `AppHost`, refresh UI and tray; failure → show error. Also wire the Task 8 unreadable-library startup path to open this window.
@@ -543,3 +543,35 @@ Tests (names + what they pin):
 - [ ] **Step 6: Commit** `test: edge-case sweep and fixes`.
 
 Execution order (updated): 1–9 → 13 → **16** → 10 → 14 → 11 → 15 → UI review → final review. (Task 12 dropped by owner 2026-11-04.)
+
+---
+
+### Task 17: UI fixes round 1 (main window + Task 10 follow-ups)
+
+Runs after Task 10. Source of truth for the fixes: `.superpowers/sdd/2026-11-04-prompt-library/ui-review-1.md` — the "Consolidated, prioritised fix list" and "Fixes to bring the main window's simplicity score to 95%+" sections. Targets for round 2: every main-window state ≥ 90% (UI rubric) and main window ≥ 95% (simplicity rubric).
+
+Must include:
+- **Min size:** nothing clips at 860×520 (raise `MinWidth` or reflow the editor buttons).
+- **Visible category actions:** Rename and Delete visible on the selected/hovered category row (icon buttons with tooltips naming F2 / Delete), plus the "Enter to save, Esc to cancel" hint under the rename box.
+- **Prompt box keyboard:** Tab moves focus out (to the buttons) and Shift+Tab moves back; `Ctrl+Tab` inserts a tab character; a muted hint under the slip says `Ctrl+Tab inserts a tab`.
+- **Styled dialogs:** replace every remaining `MessageBox` (Save changes?, Delete prompt, Delete category confirmations) with the `ConfirmDialog` from Task 10, verb buttons `Save` / `Don't save` / `Cancel`, `Delete` (Danger) / `Cancel`; all UIA-clickable.
+- **Search:** typing selects the first match (after the unsaved-changes check); if the open prompt is filtered out, the editor clears; a visible `×` clears the search (Esc too).
+- **Feedback:** `Saved` on the Save button for 1.5 s; after a move, a muted inline line `Moved 2 prompts to Code review.`; first time the window is closed, tray message `Still running. Press <hotkey> or click the tray icon.`
+- **Empty states:** a single `New prompt` control in the empty library state; editor placeholder text per style guide; new-prompt editor shows a `New prompt` heading.
+- **Quieter bars** consistent with `docs/design/ui-style.md`.
+- **Seed categories in sentence case:** `User interface`, `Code review` (update `SeedLibrary`, its tests, and spec Appendix A).
+- **Shortcut capture when another app owns the combo (Task 10 follow-up):** while the Settings shortcut box is listening, install a `WH_KEYBOARD_LL` hook (only while listening) to read the combo, then try `RegisterHotKey`; report `That shortcut is in use by another app.` on failure.
+- **Backups off the UI thread (Task 10 follow-up):** scheduled and exit backups run via `Task.Run` with results marshalled to the dispatcher; exit waits at most 10 s, then exits and shows `The last backup didn't finish.` on next launch.
+- Remaining minor items from the ledger marked "carried to Task 17", if any.
+
+- [ ] **Step 1: Implement.** **Step 2:** build 0 warnings; `dotnet test` PASS (update seed tests).
+- [ ] **Step 3: Verify** with UI Automation + screenshots of each changed state into the workspace `task-17-shots/`; back up/restore the owner's `%APPDATA%\PromptLibrary`.
+- [ ] **Step 4: Commit** `fix: UI review round 1 fixes`.
+
+### Amendments to Tasks 14 and 15 (design review, 2026-11-04)
+
+Source: `.superpowers/sdd/2026-11-04-prompt-library/ui-design-review-unbuilt.md` (onboarding + installer sections and amendments). These override the Task 14/15 text above where they differ:
+- **Onboarding:** `Skip setup` on step 1 only; step 3 has a single `Skip backups for now` link; clicking a backup card on step 3 selects it but doesn't advance; `Next` on step 3 shows `Backing up…` and stays on the page if the backup fails (with `Try again`); Esc inside the shortcut capture cancels the capture, not the wizard; in the hotkey-conflict variant `Next` stays enabled; the startup hotkey-conflict tray message is suppressed while the wizard is open. Step 4: remove `Open Prompt Library`; `Finish` is the only primary; add the line `Press Ctrl+Alt+P in any app, pick a prompt, then paste with Ctrl+V. Prompt Library waits in the tray.` (actual hotkey text).
+- **Installer:** pages Welcome (with `Install` button) → Progress → Finish (`Launch Prompt Library` checked); drop the Ready page and `Change…`; all copy in sentence case; close the running app gracefully on upgrade/uninstall (no "files in use" dialog); drop the uninstall finish text (Settings → Apps uninstall never shows it). Installer scored on UI rubric criteria 1, 4, 8 only.
+
+Execution order (final): … 10 → **17** → 14 → 11 → 15 → UI review round 2 (all screens) → final review.

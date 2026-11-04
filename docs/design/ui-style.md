@@ -68,7 +68,7 @@ No gradients. No drop shadows inside the window (Windows draws the window shadow
 - **Empty search:** "No prompts match "<query>"." with a `Clear search` link.
 - **Unsaved:** window title gets a `•` prefix; Save enabled.
 - **Validation:** inline error text in `Danger` under the field (e.g. "Give the prompt a title."), never only a message box.
-- **Backups off:** `Warn` bar across the top of the window: "Backups are off. Choose a Google Drive folder in Settings." + `Open Settings` link.
+- **Backups off:** quiet `Warn` bar: "Backups are off." + `Set up backups` link. **Backups paused:** "Backups paused: <provider> isn't available. Is it signed in?" + `Set up backups`. Both clear automatically when resolved.
 
 ## Keyboard and accessibility
 

@@ -164,7 +164,7 @@ Mockup: `.superpowers/brainstorm/*/content/main-window-layout.html`, option A (l
 
 ## 9. Additions (2026-11-04, owner requests during build)
 
-- **Backups to OneDrive or Google Drive.** The app detects OneDrive (personal and work) and Google Drive for desktop folders automatically and offers them as one-click choices; any other folder can still be picked. Choosing one runs the first backup immediately and confirms it. Backups go to `<cloud root>\Prompt Library Backups`. Replaces the Google-Drive-only wording in §5 and §6.5.
+- **Backups to OneDrive, Google Drive, Dropbox or iCloud Drive.** The app detects OneDrive (personal and work), Google Drive for desktop (any drive letter or language), Dropbox (personal and business) and iCloud Drive folders automatically and offers them as one-click choices; any other folder can still be picked. Choosing one runs the first backup immediately and confirms it. Backups go to `<cloud root>\Prompt Library Backups`. Replaces the Google-Drive-only wording in §5 and §6.5.
 - **First-run onboarding wizard** (4 steps: welcome, try the shortcut, choose backups, start with Windows), skippable, reopenable from `Help → Setup guide…`. Replaces the first-run balloon and auto-opened Settings in §6.7.
 - **Installer with onboarding pages** for the direct download (per-user MSI: welcome, ready, progress, finish with "Launch Prompt Library"), which hands over to the first-run wizard. The Store version installs through the Store's own UI and then shows the same wizard.
 - **Microsoft Store** distribution via MSIX (see `docs/store-readiness.md`); start-with-Windows uses the package startup task when packaged.
