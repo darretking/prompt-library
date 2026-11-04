@@ -430,3 +430,6 @@ FodyWeavers.xsd
 
 # Brainstorm mockups
 .superpowers/
+
+# Core backup feature folder (overrides Backup*/ above)
+!src/PromptLibrary.Core/Backup/
