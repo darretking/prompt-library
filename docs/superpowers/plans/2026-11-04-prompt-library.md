@@ -373,9 +373,10 @@ Behaviour:
 - Produces: `AppHost.RunBackup(BackupTrigger trigger)`; `AppHost.OpenRestore()`.
 
 Behaviour:
-- **Settings window:** shortcut capture box (press keys → shows `HotkeyGesture.ToString()`; invalid combos rejected with hint text), backup folder + Browse (`Microsoft.Win32.OpenFolderDialog`), backups to keep (1–365), Start with Windows checkbox. Save → `ApplyHotkey` (on failure keep old hotkey and show `That shortcut is in use by another app.`), `StartupRegistration.Apply`, `SaveSettings()`.
-- **First-run backup folder:** if `settings.BackupFolder` is null and `G:\My Drive` exists, pre-fill `G:\My Drive\Prompt Library Backups` in Settings and open Settings once on first run; otherwise open Settings with an empty folder.
-- **Warning bar** in main window when `BackupFolder` is null: `Backups are off — choose a Google Drive folder in Settings.` with a `Settings…` link.
+- **Settings window:** shortcut capture box (press keys → shows `HotkeyGesture.ToString()`; invalid combos rejected with hint text), **backup location picker** (`Views/BackupLocationPicker.xaml` user control, shared with the onboarding wizard in Task 14 — see Task 13 for detection), backups to keep (1–365), Start with Windows checkbox. Save → `ApplyHotkey` (on failure keep old hotkey and show `That shortcut is in use by another app.`), `StartupRegistration.Apply`, `SaveSettings()`.
+- **Backup location picker (shared control):** one card per `CloudFolderDetector.Detect()` result (`OneDrive`, `OneDrive – <org>`, `Google Drive`) showing the provider name and the folder path, plus `Choose another folder…` (`Microsoft.Win32.OpenFolderDialog`) and, when nothing is detected, the line `No OneDrive or Google Drive folder found on this PC. Sign in to OneDrive (built into Windows) or install Google Drive for desktop, then come back.` Picking a card sets the folder to `<root>\Prompt Library Backups` (created on first backup), **runs `RunBackup(Manual)` immediately** and shows `Backed up to <provider>.` or the failure text inline. No separate Save needed for this part.
+- (First-run setup now lives in the onboarding wizard, Task 14 — Settings no longer auto-opens on first run.)
+- **Warning bar** in main window when `BackupFolder` is null: `Backups are off. Choose OneDrive or Google Drive in Settings.` with an `Open Settings` link.
 - **RunBackup(trigger):** if folder null → return; hash `library.json`; if `ShouldBackup` → `BackupNow`; success → set `LastBackupAt`, `LastBackedUpLibraryHash`, save settings, (Manual only) tray message `Backup saved.`; failure → tray message `Backup failed: <error>` (error flag), settings untouched.
 - **Triggers:** `DispatcherTimer` every 60 minutes → `RunBackup(Daily)`; also once 1 minute after startup. `ExitApp()` → `RunBackup(OnExit)` before shutdown. File → Back up now → `RunBackup(Manual)`.
 - **Restore window:** list `BackupService.List` (date, prompt count; unreadable shown as `unreadable` and disabled), Restore button → confirm `Replace your current library with the backup from <date>? Your current library will be backed up first.` → `Restore`; success → reload library into `AppHost`, refresh UI and tray; failure → show error. Also wire the Task 8 unreadable-library startup path to open this window.
@@ -401,3 +402,135 @@ Behaviour:
 - [ ] **Step 5:** Add `publish/` to `.gitignore`.
 - [ ] **Step 6: Run** the published exe through the checklist.
 - [ ] **Step 7: Commit** `chore: single-file publish, README, manual test checklist`.
+
+---
+
+## Additions (2026-11-04, owner requests)
+
+Execution order: 1–9 → **13** → 10 → **14** → 11 → **15** → **12** → UI review (every screen ≥ 90% per `docs/design/ui-review-rubric.md`) → final review.
+
+### Task 12: MSIX packaging for the Microsoft Store
+
+**Files:**
+- Create: `src/PromptLibrary.Package/` (`Package.appxmanifest`, logo PNGs generated from `Assets/app-icon.png` at the sizes the manifest needs), `build/package-msix.ps1`
+- Modify: `src/PromptLibrary.App/Startup/StartupRegistration.cs`, `.gitignore` (`artifacts/`), `README.md`, `docs/store-readiness.md` (tick off what's done)
+
+**Interfaces:**
+- Produces: `static bool StartupRegistration.IsPackaged` (true when the process has package identity — `GetCurrentPackageFullName` succeeds). `StartupRegistration.Apply(bool enabled, string exePath)` keeps its signature: packaged → `StartupTask` API (`StartupTask.GetAsync("PromptLibraryStartup")`, `RequestEnableAsync()` / `Disable()`); unpackaged → existing HKCU Run key logic.
+
+Behaviour:
+- Manifest: identity `PromptLibrary`, publisher placeholder `CN=PromptLibraryDev` (replaced with Partner Center values at submission), display name `Prompt Library`, `runFullTrust`, `desktop:Extension Category="windows.startupTask"` with `TaskId="PromptLibraryStartup"` and `Enabled="false"` (the app enables it from onboarding/Settings so the user stays in control).
+- `build/package-msix.ps1`: publish the app (Release, self-contained, win-x64), lay out the package folder, run Windows SDK `makeappx.exe` → `artifacts/PromptLibrary.msix`. For local install testing only, sign with a self-signed test cert the script creates in `CurrentUser\My` (never committed). Store submission goes unsigned (the Store signs).
+- If the Windows SDK (`makeappx.exe`) isn't installed, report BLOCKED naming the exact component needed.
+- Run the Windows App Certification Kit (`appcert.exe`) if present; record results in `docs/store-readiness.md`.
+
+- [ ] **Step 1:** Implement `IsPackaged` and the packaged `Apply` branch; build 0 warnings.
+- [ ] **Step 2:** Manifest, logos, script; run it → `artifacts/PromptLibrary.msix`.
+- [ ] **Step 3:** Install the test-signed package (`Add-AppxPackage`), launch from Start: tray icon, hotkey, library under the package's LocalCache; toggle Start with Windows and confirm it appears in Task Manager → Startup apps. Then `Remove-AppxPackage` and delete the test cert.
+- [ ] **Step 4:** Run WACK if available; record results.
+- [ ] **Step 5: Commit** `feat: MSIX packaging for Microsoft Store`.
+
+---
+
+### Task 13: Cloud backup folder detection (OneDrive + Google Drive)
+
+**Files:**
+- Create: `src/PromptLibrary.Core/Backup/CloudFolderDetector.cs`
+- Test: `tests/PromptLibrary.Core.Tests/CloudFolderDetectorTests.cs`
+
+**Interfaces:**
+- Produces:
+  - `enum CloudProvider { OneDrive, OneDriveBusiness, GoogleDrive }`
+  - `record CloudFolder(CloudProvider Provider, string DisplayName, string RootPath)` — `DisplayName` is `OneDrive`, `OneDrive – <org name>` or `Google Drive`.
+  - `interface ICloudProbe { string? GetEnvironmentVariable(string name); IEnumerable<string> GetOneDriveAccountFolders(); IEnumerable<string> GetDriveRoots(); bool DirectoryExists(string path); string UserProfile { get; } }` and a real `SystemCloudProbe` (registry `HKCU\Software\Microsoft\OneDrive\Accounts\*\UserFolder`, ready drives from `DriveInfo.GetDrives()`, `Environment`). `SystemCloudProbe` lives in Core but is excluded from unit tests.
+  - `static class CloudFolderDetector { const string BackupSubfolder = "Prompt Library Backups"; static IReadOnlyList<CloudFolder> Detect(ICloudProbe probe); static string BackupFolderFor(CloudFolder f); }`
+
+Rules:
+- OneDrive personal: `%OneDriveConsumer%`, else `%OneDrive%` when its folder name doesn't start with `OneDrive - `; plus registry account folders not starting with `OneDrive - `.
+- OneDrive business: `%OneDriveCommercial%` and registry folders whose name starts with `OneDrive - ` (org = text after `OneDrive - `).
+- Google Drive for desktop: any ready drive root containing a `My Drive` folder (default `G:`), plus `%UserProfile%\Google Drive\My Drive` and `%UserProfile%\My Drive`. RootPath = the `My Drive` folder.
+- Only existing folders returned; duplicates (case-insensitive, trailing separator ignored) removed; order OneDrive, OneDrive business (A–Z), Google Drive.
+
+- [ ] **Step 1: Write failing tests** with a fake probe: `Detect_OneDrivePersonalFromEnv`, `Detect_BusinessFromEnvAndRegistry_NameFromFolder` (`C:\Users\x\OneDrive - Contoso` → `OneDrive – Contoso`), `Detect_GoogleDriveVirtualDrive` (`G:\My Drive`), `Detect_GoogleDriveOnOtherLetter` (`H:\My Drive`), `Detect_GoogleDriveFolderMount`, `Detect_IgnoresMissingFolders`, `Detect_DeduplicatesEnvAndRegistry`, `Detect_Order`, `Detect_NothingInstalled_ReturnsEmpty`, `BackupFolderFor_AppendsSubfolder`.
+- [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → PASS.
+- [ ] **Step 5: Commit** `feat: detect OneDrive and Google Drive folders for backups`.
+
+---
+
+### Task 14: First-run onboarding wizard
+
+**Files:**
+- Create: `src/PromptLibrary.App/Views/OnboardingWindow.xaml(.cs)`, `src/PromptLibrary.App/ViewModels/OnboardingViewModel.cs`
+- Modify: `AppHost.cs` (first run opens the wizard instead of the first-run balloon; while the wizard's shortcut step shows, a hotkey press goes to the wizard instead of opening the menu), `Views/MainWindow.xaml` (add `Help` menu: `Setup guide…`, `About Prompt Library`)
+
+Design: `docs/design/ui-style.md` tokens and type. Fixed 640×480, centred, title `Welcome to Prompt Library`. Footer: `Step N of 4` (a real sequence), `Back`, filled primary (`Next` / `Finish`), quiet `Skip setup` link on steps 1–3. Esc or closing the window = Skip (defaults apply, nothing asked).
+
+Steps:
+1. **Welcome** — heading `Your prompts, one shortcut away.`; body `Prompt Library keeps all your AI prompts in one place. Press a shortcut in any app, pick a prompt, and it's on your clipboard ready to paste.`; the app icon large.
+2. **Shortcut** — current hotkey as large keycaps (`Ctrl` `Alt` `P`); `Try it now: press the shortcut.`; on press → `That's it. In any other app this opens your prompt menu.` with a check mark. `Change shortcut` opens the same capture box as Settings. If the hotkey failed to register, show the conflict text and the capture box straight away.
+3. **Backups** — heading `Keep a copy in the cloud`; the shared `BackupLocationPicker` (Task 10), first detected folder pre-selected; the first backup runs when the user clicks a card or presses Next with a selection, result shown inline, then advance. `Not now` link leaves backups off. Packaged (MSIX) installs add: `Your library is stored inside the app and removed if you uninstall it, so backups are recommended.`
+4. **Ready** — checkbox `Start Prompt Library when Windows starts` (checked; applies `StartupRegistration.Apply` on Finish); summary `Shortcut: Ctrl+Alt+P`, `Backups: OneDrive` / `Backups: off`; buttons `Open Prompt Library` (secondary) and `Finish` (primary).
+
+Finish/Skip → `FirstRunDone = true`, save settings. `Help → Setup guide…` reopens the wizard; `About Prompt Library` shows the version.
+
+- [ ] **Step 1: Implement.** **Step 2: Build** 0 warnings; `dotnet test` PASS.
+- [ ] **Step 3: Verify** (back up the owner's `%APPDATA%\PromptLibrary` first, restore after): delete `settings.json` → wizard on launch; screenshot all 4 steps into the plan workspace `shots/` folder; Skip leaves defaults; Help → Setup guide reopens it.
+- [ ] **Step 4: Commit** `feat: first-run onboarding wizard`.
+
+---
+
+### Task 15: Installer with onboarding pages (direct download)
+
+**Files:**
+- Create: `installer/PromptLibrary.Installer.wixproj` (WiX Toolset v5 SDK from NuGet — nothing installed machine-wide), `installer/Package.wxs`, `installer/Assets/banner.png` (493×58) and `installer/Assets/dialog.png` (493×312) in brand colours with the icon, `build/build-installer.ps1`
+- Modify: `README.md`, `.gitignore` (installer `bin/`, `obj/`)
+
+Behaviour:
+- Per-user install (no admin prompt) to `%LOCALAPPDATA%\Programs\Prompt Library`; Start menu shortcut `Prompt Library`; listed in Settings → Apps with icon and uninstall.
+- Pages: **Welcome** (`Install Prompt Library` + one sentence), **Ready to install** (shows location, `Change…`), **Progress**, **Finish** with checkbox `Launch Prompt Library` (checked) — the app's first-run wizard (Task 14) continues the onboarding.
+- Packs the single-file Release exe from Task 11. `MajorUpgrade` with a fixed `UpgradeCode` (generate once, commit). Uninstall removes program files and the Run key value but never `%APPDATA%\PromptLibrary`; its finish text says `Your prompts in %APPDATA%\PromptLibrary were kept.`
+- Not code-signed yet: README explains the SmartScreen "unknown publisher" prompt for the direct download.
+
+- [ ] **Step 1: Implement.** **Step 2: Build** `build/build-installer.ps1` → `artifacts/PromptLibrary-Setup.msi`.
+- [ ] **Step 3: Verify:** install through the UI (screenshot each page), launch from the finish page → onboarding wizard; uninstall → program gone, user data kept. Restore the owner's data folder afterwards if one existed.
+- [ ] **Step 4: Commit** `feat: Windows installer with onboarding pages`.
+
+---
+
+### Task 16: Edge-case test sweep (Core) + manual edge checklist
+
+Runs after Task 13 (so the detector is covered too). Adds tests for edge inputs and fixes the small behaviours they expose.
+
+**Files:**
+- Create: `tests/PromptLibrary.Core.Tests/EdgeCases/` — `StorageEdgeTests.cs`, `EditingEdgeTests.cs`, `SearchMenuEdgeTests.cs`, `HotkeyEdgeTests.cs`, `BackupEdgeTests.cs`, `ClipboardEdgeTests.cs`, `CloudDetectorEdgeTests.cs`; `docs/edge-cases.md` (manual checklist)
+- Modify (only as the tests require): `Backup/BackupService.cs`, `Hotkeys/HotkeyGesture.cs`, `Clipboard/ClipboardWriter.cs`, `Storage/AtomicFile.cs`, `Text/LineEndings.cs`
+
+Behaviour changes decided here (tests pin them):
+- `BackupService.Prune`/`BackupNow`: `keep < 1` treated as 1 (never deletes the backup just made).
+- `BackupService.ShouldBackup(Daily)`: a `LastBackupAt` in the future (clock moved back) counts as due.
+- `BackupService.BackupNow`: `Hash` = hash of the **copied file**, not the live library.
+- `BackupService.BackupNow` when `library.json` doesn't exist → `Success=false`, `Error` mentions the missing file.
+- `HotkeyGesture.TryParse`: key must be ASCII before uppercasing (`Ctrl+ſ` fails).
+- `ClipboardWriter`: constructor throws `ArgumentOutOfRangeException` for `attempts < 1` or `delayMs < 0`.
+- `AtomicFile.WriteAllText`: if writing/moving fails, delete the `.tmp` and rethrow; a leftover `.tmp` from an earlier crash is overwritten.
+- `LineEndings.ToCrlf(null!)` throws `ArgumentNullException` (explicit, not NRE).
+
+Tests (names + what they pin):
+- **Storage:** `Save_OverwritesExistingFile`; `Save_WithStaleTmpPresent_Succeeds`; `Save_ReadOnlyTarget_Throws_AndNoTmpLeft`; `Load_FileLockedByOtherProcess_ReturnsUnreadable` (open with `FileShare.None`); `RoundTrip_LargeLibrary` (5,000 prompts, one 1 MB prompt) under 2 s; `RoundTrip_UnicodeZoo` (CJK, Arabic RTL, combining marks `é` as e+U+0301, ZWJ family emoji, tab, NBSP, ` `) exact after CRLF normalisation; `RoundTrip_MixedLineEndings` (`a\r\r\nb\n\rc`); `Load_EmptyFile_Unreadable`; `Load_JsonArrayInsteadOfObject_Unreadable`.
+- **Editing:** `RenameCategory_Blank_Throws`; `AddPrompt_Invalid_LeavesLibraryUnchanged`; `AddCategory_NameDifferingOnlyByInnerWhitespace_Allowed` (`"Code Review"` vs `"Code  Review"`); `AddCategory_300CharName_Allowed`; `DeleteCategory_LastCategoryWithPrompts_NoTarget_Throws`.
+- **Search/menu:** `Filter_CategoryAndQuery_Combined`; `Filter_TitleMatch`; `Filter_RegexCharsAreLiteral` (`.*`, `[`, `(`); `Filter_EmojiQuery`; `Build_EqualTitles_StableOrder`; `ForMenu_TruncatesThenEscapes` (58 × `a` + `&&&` (61 chars) → truncate to 58 × `a` + `&` + `…` → escape → 58 × `a` + `&&` + `…`; assert exact); `ForMenu_OnlyAmpersand` (`&` → `&&`); `Truncate_Exactly60_Unchanged`.
+- **Hotkey:** `TryParse_NonAsciiKey_Fails` (`Ctrl+ſ`, `Ctrl+ı`); `TryParse_SpacesAroundParts_Ok` (`" ctrl + alt + p "`); `TryParse_LowercaseFunctionKey_Ok` (`ctrl+f12` → `Ctrl+F12`); `TryParse_DisallowedKey_Fails` (`Ctrl+Alt+Del`, `Ctrl+Space`).
+- **Backup:** `Restore_NoCurrentLibrary_Succeeds_NoSafetyBackup`; `BackupNow_PrunesEndToEnd`; `BackupNow_KeepZero_KeepsNewOne`; `ShouldBackup_FutureLastBackup_Due`; `BackupNow_HashIsOfCopiedFile`; `BackupNow_MissingLibrary_Fails`; `Prune_SuffixOrdering_Numeric` (`-10` newer than `-2`); `BackupNow_UnicodeAndSpacesInFolder` (`Prompt Library Backups ✓`); `List_1000Files_NewestFirst` (fast).
+- **Clipboard:** `TryCopy_AlreadyCrlf_Unchanged`; `Ctor_ZeroAttempts_Throws`; `TryCopy_CustomAttemptsAndDelay`.
+- **Cloud detector:** `Detect_EnvPointsToMissingFolder_Ignored`; `Detect_TrailingSlashDuplicates_Removed`; `Detect_DriveWithoutMyDrive_Ignored`; `Detect_BothOneDriveAndGoogle`.
+
+`docs/edge-cases.md` (manual, run during the UI review): hotkey while an **elevated** (admin) app has focus — the menu can't take focus from it (Windows UIPI), so document "paste works, but the menu may not open over admin windows"; full-screen apps; menu near each screen edge and on a second monitor at a different DPI; a category with 200 prompts (menu scrolls); Explorer restart (tray icon comes back); sleep/resume (hotkey still works); Google Drive / OneDrive paused or signed out during a backup (failure message, app keeps running); disk full on save; clipboard history (Win+V) shows the copied prompt; Remote Desktop session; second Windows user on the same PC (separate instance and data); uninstall/reinstall keeps data (MSI) / loses data but backups restore it (MSIX).
+
+- [ ] **Step 1: Write the failing tests** above (some will already pass — note which).
+- [ ] **Step 2: Run** → the decided-behaviour tests FAIL.
+- [ ] **Step 3: Implement** the behaviour changes.
+- [ ] **Step 4: Run** full suite → PASS, pristine output.
+- [ ] **Step 5:** Write `docs/edge-cases.md`.
+- [ ] **Step 6: Commit** `test: edge-case sweep and fixes`.
+
+Execution order (updated): 1–9 → 13 → **16** → 10 → 14 → 11 → 15 → 12 → UI review → final review.
