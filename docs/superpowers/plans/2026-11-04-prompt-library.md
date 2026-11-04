@@ -396,7 +396,7 @@ Behaviour:
 - Modify: `src/PromptLibrary.App/PromptLibrary.App.csproj` (publish properties), `README.md`
 
 - [ ] **Step 1:** Add to App csproj: `<RuntimeIdentifier>win-x64</RuntimeIdentifier>`, `<SelfContained>true</SelfContained>`, `<PublishSingleFile>true</PublishSingleFile>`, `<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>` (publish-only via a `Condition` on `'$(Configuration)'=='Release'` if it interferes with `dotnet run`).
-- [ ] **Step 2: Run** `dotnet publish src/PromptLibrary.App -c Release -o publish` → `publish/PromptLibrary.App.exe` exists (single file, plus optional `.pdb`).
+- [ ] **Step 2: Run** `dotnet publish src/PromptLibrary.App -c Release -o publish` → `publish/PromptLibrary.exe` exists (single file, plus optional `.pdb`).
 - [ ] **Step 3:** Write `docs/manual-test-checklist.md` — the manual checks from Tasks 8–10 plus: paste test in Windows Terminal, Chrome, VS Code, Claude Code and Claude desktop; reboot → app starts in tray.
 - [ ] **Step 4:** Update `README.md`: what it is, how to build (`dotnet build`), run (`dotnet run --project src/PromptLibrary.App`), publish command, where data lives, how backups work (install Google Drive for desktop, pick folder in Settings), default shortcut.
 - [ ] **Step 5:** Add `publish/` to `.gitignore`.
@@ -562,6 +562,7 @@ Must include:
 - **Seed categories in sentence case:** `User interface`, `Code review` (update `SeedLibrary`, its tests, and spec Appendix A).
 - **Shortcut capture when another app owns the combo (Task 10 follow-up):** while the Settings shortcut box is listening, install a `WH_KEYBOARD_LL` hook (only while listening) to read the combo, then try `RegisterHotKey`; report `That shortcut is in use by another app.` on failure.
 - **Backups off the UI thread (Task 10 follow-up):** scheduled and exit backups run via `Task.Run` with results marshalled to the dispatcher; exit waits at most 10 s, then exits and shows `The last backup didn't finish.` on next launch.
+- **App name in Windows notifications (owner report: toasts say "PromptLibrary.App"):** in `PromptLibrary.App.csproj` set `<AssemblyName>PromptLibrary</AssemblyName>` (exe becomes `PromptLibrary.exe`), `<AssemblyTitle>Prompt Library</AssemblyTitle>` (→ FileDescription, which Windows shows as the toast header for unpackaged apps), `<Product>Prompt Library</Product>`, `<Company>Prompt Library</Company>`. Do **not** set an explicit AppUserModelID in code (without a matching Start-menu shortcut Windows would show the raw ID). Update any references to `PromptLibrary.App.exe` (plan Task 11/15 text, scripts, README). Verify: build, run, trigger a `Copied:` toast, screenshot it — header reads `Prompt Library`. Note: Windows may cache the old name for the old exe path; the renamed exe gets a fresh entry.
 - Remaining minor items from the ledger marked "carried to Task 17", if any.
 
 - [ ] **Step 1: Implement.** **Step 2:** build 0 warnings; `dotnet test` PASS (update seed tests).
