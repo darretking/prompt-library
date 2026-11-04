@@ -407,9 +407,9 @@ Behaviour:
 
 ## Additions (2026-11-04, owner requests)
 
-Execution order: 1–9 → **13** → 10 → **14** → 11 → **15** → **12** → UI review (every screen ≥ 90% per `docs/design/ui-review-rubric.md`) → final review.
+Execution order: 1–9 → **13** → 10 → **14** → 11 → **15** → UI review (every screen ≥ 90% per `docs/design/ui-review-rubric.md`) → final review.
 
-### Task 12: MSIX packaging for the Microsoft Store
+### Task 12: MSIX packaging for the Microsoft Store — DROPPED (owner: ignore Store tasks)
 
 **Files:**
 - Create: `src/PromptLibrary.Package/` (`Package.appxmanifest`, logo PNGs generated from `Assets/app-icon.png` at the sizes the manifest needs), `build/package-msix.ps1`
@@ -468,7 +468,7 @@ Design: `docs/design/ui-style.md` tokens and type. Fixed 640×480, centred, titl
 Steps:
 1. **Welcome** — heading `Your prompts, one shortcut away.`; body `Prompt Library keeps all your AI prompts in one place. Press a shortcut in any app, pick a prompt, and it's on your clipboard ready to paste.`; the app icon large.
 2. **Shortcut** — current hotkey as large keycaps (`Ctrl` `Alt` `P`); `Try it now: press the shortcut.`; on press → `That's it. In any other app this opens your prompt menu.` with a check mark. `Change shortcut` opens the same capture box as Settings. If the hotkey failed to register, show the conflict text and the capture box straight away.
-3. **Backups** — heading `Keep a copy in the cloud`; the shared `BackupLocationPicker` (Task 10), first detected folder pre-selected; the first backup runs when the user clicks a card or presses Next with a selection, result shown inline, then advance. `Not now` link leaves backups off. Packaged (MSIX) installs add: `Your library is stored inside the app and removed if you uninstall it, so backups are recommended.`
+3. **Backups** — heading `Keep a copy in the cloud`; the shared `BackupLocationPicker` (Task 10), first detected folder pre-selected; the first backup runs when the user clicks a card or presses Next with a selection, result shown inline, then advance. `Not now` link leaves backups off.
 4. **Ready** — checkbox `Start Prompt Library when Windows starts` (checked; applies `StartupRegistration.Apply` on Finish); summary `Shortcut: Ctrl+Alt+P`, `Backups: OneDrive` / `Backups: off`; buttons `Open Prompt Library` (secondary) and `Finish` (primary).
 
 Finish/Skip → `FirstRunDone = true`, save settings. `Help → Setup guide…` reopens the wizard; `About Prompt Library` shows the version.
@@ -542,4 +542,4 @@ Tests (names + what they pin):
 - [ ] **Step 5:** Write `docs/edge-cases.md`.
 - [ ] **Step 6: Commit** `test: edge-case sweep and fixes`.
 
-Execution order (updated): 1–9 → 13 → **16** → 10 → 14 → 11 → 15 → 12 → UI review → final review.
+Execution order (updated): 1–9 → 13 → **16** → 10 → 14 → 11 → 15 → UI review → final review. (Task 12 dropped by owner 2026-11-04.)
