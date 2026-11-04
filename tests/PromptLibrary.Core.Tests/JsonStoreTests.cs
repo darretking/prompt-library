@@ -108,6 +108,42 @@ public sealed class JsonStoreTests : IDisposable
     }
 
     [Fact]
+    public void ParseLibrary_MissingSchemaVersionOrPromptText_Throws()
+    {
+        var id = Guid.NewGuid();
+        var noVersion = "{\"categories\":[],\"prompts\":[]}";
+        var noText = $"{{\"schemaVersion\":1,\"categories\":[{{\"id\":\"{id}\",\"name\":\"A\"}}],\"prompts\":[{{\"id\":\"{Guid.NewGuid()}\",\"title\":\"t\",\"categoryId\":\"{id}\"}}]}}";
+        Assert.Throws<InvalidDataException>(() => JsonStore.ParseLibrary(noVersion));
+        Assert.Throws<InvalidDataException>(() => JsonStore.ParseLibrary(noText));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(",\"description\":null")]
+    public void ParseLibrary_MissingOrNullDescription_BecomesEmpty(string descriptionJson)
+    {
+        var id = Guid.NewGuid();
+        var json = $"{{\"schemaVersion\":1,\"categories\":[{{\"id\":\"{id}\",\"name\":\"A\"}}],\"prompts\":[{{\"id\":\"{Guid.NewGuid()}\",\"title\":\"t\",\"text\":\"x\",\"categoryId\":\"{id}\"{descriptionJson}}}]}}";
+
+        var library = JsonStore.ParseLibrary(json);
+
+        Assert.Equal("", library.Prompts[0].Description);
+    }
+
+    [Fact]
+    public void LoadSettings_InvalidJson_ReturnsUnreadable_AndFileUntouched()
+    {
+        var path = PathFor("settings.json");
+        File.WriteAllText(path, "{ nope");
+        var before = File.ReadAllBytes(path);
+
+        var result = JsonStore.LoadSettings(path);
+
+        Assert.Equal(LoadStatus.Unreadable, result.Status);
+        Assert.Equal(before, File.ReadAllBytes(path));
+    }
+
+    [Fact]
     public void Save_LeavesNoTmpFile()
     {
         var path = PathFor("library.json");
