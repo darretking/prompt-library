@@ -37,6 +37,9 @@ public sealed record HotkeyGesture(HotkeyModifiers Modifiers, string Key)
             modifiers |= modifier;
         }
 
+        // Check for ASCII first: some non-ASCII letters upper-case to ASCII ones (for example 'ſ' becomes 'S').
+        if (!parts[^1].All(char.IsAscii))
+            return false;
         var key = parts[^1].ToUpperInvariant();
         if (!KeyPattern.IsMatch(key))
             return false;

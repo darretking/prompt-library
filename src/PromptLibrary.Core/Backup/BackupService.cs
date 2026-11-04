@@ -29,16 +29,25 @@ public class BackupService(Func<DateTime> nowLocal)
         if (currentHash == s.LastBackedUpLibraryHash) return false;
         if (trigger == BackupTrigger.OnExit) return true;
 
-        return s.LastBackupAt is null
-            || new DateTimeOffset(nowLocal()) - s.LastBackupAt.Value >= TimeSpan.FromHours(24);
+        if (s.LastBackupAt is null) return true;
+
+        // A last backup "in the future" means the clock was moved back; treat it as due rather than waiting.
+        var sinceLast = new DateTimeOffset(nowLocal()) - s.LastBackupAt.Value;
+        return sinceLast < TimeSpan.Zero || sinceLast >= TimeSpan.FromHours(24);
     }
 
-    /// <summary>Copies the library file byte for byte into the folder, then prunes. Never throws for IO problems.</summary>
+    /// <summary>
+    /// Copies the library file byte for byte into the folder, then prunes (always keeping at least the new backup).
+    /// The result's Hash is of the copied file. Never throws for IO problems.
+    /// </summary>
     public BackupResult BackupNow(string libraryPath, string backupFolder, int keep)
     {
         string target;
         try
         {
+            if (!File.Exists(libraryPath))
+                return Failure($"The library file '{libraryPath}' does not exist, so there is nothing to back up.");
+
             var parent = Path.GetDirectoryName(Path.GetFullPath(backupFolder));
             if (!Directory.Exists(backupFolder))
             {
@@ -58,7 +67,7 @@ public class BackupService(Func<DateTime> nowLocal)
         string hash;
         try
         {
-            hash = LibraryHash.OfFile(libraryPath);
+            hash = LibraryHash.OfFile(target);
         }
         catch (Exception ex) when (IsIoProblem(ex))
         {
@@ -71,7 +80,10 @@ public class BackupService(Func<DateTime> nowLocal)
         return new BackupResult(true, target, hash, null);
     }
 
-    /// <summary>Deletes the oldest backups beyond <paramref name="keep"/>. Only files with the exact backup name pattern are touched.</summary>
+    /// <summary>
+    /// Deletes the oldest backups beyond <paramref name="keep"/> (values below 1 count as 1, so the newest backup is never deleted).
+    /// Only files with the exact backup name pattern are touched.
+    /// </summary>
     public void Prune(string backupFolder, int keep)
     {
         if (!Directory.Exists(backupFolder)) return;
@@ -81,7 +93,7 @@ public class BackupService(Func<DateTime> nowLocal)
             .Where(x => x.Key is not null)
             .OrderByDescending(x => x.Key!.Value.Timestamp)
             .ThenByDescending(x => x.Key!.Value.Suffix)
-            .Skip(Math.Max(keep, 0))
+            .Skip(Math.Max(keep, 1))
             .Select(x => x.File);
 
         foreach (var file in doomed)

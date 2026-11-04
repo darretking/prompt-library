@@ -4,24 +4,10 @@ namespace PromptLibrary.Core.Tests;
 
 public class CloudFolderDetectorTests
 {
-    private sealed class FakeProbe : ICloudProbe
-    {
-        public Dictionary<string, string> Env { get; } = new(StringComparer.OrdinalIgnoreCase);
-        public List<string> AccountFolders { get; } = [];
-        public List<string> Roots { get; } = [];
-        public HashSet<string> Existing { get; } = new(StringComparer.OrdinalIgnoreCase);
-        public string UserProfile { get; set; } = @"C:\Users\x";
-
-        public string? GetEnvironmentVariable(string name) => Env.GetValueOrDefault(name);
-        public IEnumerable<string> GetOneDriveAccountFolders() => AccountFolders;
-        public IEnumerable<string> GetDriveRoots() => Roots;
-        public bool DirectoryExists(string path) => Existing.Contains(path);
-    }
-
     [Fact]
     public void Detect_OneDrivePersonalFromEnv()
     {
-        var p = new FakeProbe();
+        var p = new FakeCloudProbe();
         p.Env["OneDrive"] = @"C:\Users\x\OneDrive";
         p.Existing.Add(@"C:\Users\x\OneDrive");
 
@@ -33,9 +19,9 @@ public class CloudFolderDetectorTests
     [Fact]
     public void Detect_BusinessFromEnvAndRegistry_NameFromFolder()
     {
-        var p = new FakeProbe();
+        var p = new FakeCloudProbe();
         p.Env["OneDriveCommercial"] = @"C:\Users\x\OneDrive - Contoso";
-        p.AccountFolders.Add(@"C:\Users\x\OneDrive - Fabrikam");
+        p.Accounts.Add(("Business2", @"C:\Users\x\OneDrive - Fabrikam", null));
         p.Existing.Add(@"C:\Users\x\OneDrive - Contoso");
         p.Existing.Add(@"C:\Users\x\OneDrive - Fabrikam");
 
@@ -51,7 +37,7 @@ public class CloudFolderDetectorTests
     [Fact]
     public void Detect_GoogleDriveVirtualDrive()
     {
-        var p = new FakeProbe();
+        var p = new FakeCloudProbe();
         p.Roots.Add(@"C:\");
         p.Roots.Add(@"G:\");
         p.Existing.Add(@"G:\My Drive");
@@ -64,7 +50,7 @@ public class CloudFolderDetectorTests
     [Fact]
     public void Detect_GoogleDriveOnOtherLetter()
     {
-        var p = new FakeProbe();
+        var p = new FakeCloudProbe();
         p.Roots.Add(@"H:\");
         p.Existing.Add(@"H:\My Drive");
 
@@ -76,7 +62,7 @@ public class CloudFolderDetectorTests
     [Fact]
     public void Detect_GoogleDriveFolderMount()
     {
-        var p = new FakeProbe();
+        var p = new FakeCloudProbe();
         p.Existing.Add(@"C:\Users\x\Google Drive\My Drive");
         p.Existing.Add(@"C:\Users\x\My Drive");
 
@@ -92,10 +78,10 @@ public class CloudFolderDetectorTests
     [Fact]
     public void Detect_IgnoresMissingFolders()
     {
-        var p = new FakeProbe();
+        var p = new FakeCloudProbe();
         p.Env["OneDrive"] = @"C:\Users\x\OneDrive";
         p.Env["OneDriveCommercial"] = @"C:\Users\x\OneDrive - Contoso";
-        p.AccountFolders.Add(@"C:\Users\x\OneDrive - Gone");
+        p.Accounts.Add(("Business1", @"C:\Users\x\OneDrive - Gone", null));
         p.Roots.Add(@"G:\");
 
         Assert.Empty(CloudFolderDetector.Detect(p));
@@ -104,12 +90,12 @@ public class CloudFolderDetectorTests
     [Fact]
     public void Detect_DeduplicatesEnvAndRegistry()
     {
-        var p = new FakeProbe();
+        var p = new FakeCloudProbe();
         p.Env["OneDriveConsumer"] = @"C:\Users\x\OneDrive";
         p.Env["OneDrive"] = @"c:\users\x\onedrive\";
-        p.AccountFolders.Add(@"C:\Users\x\OneDrive\");
+        p.Accounts.Add(("Personal", @"C:\Users\x\OneDrive\", null));
         p.Env["OneDriveCommercial"] = @"C:\Users\x\OneDrive - Contoso";
-        p.AccountFolders.Add(@"c:\users\x\ONEDRIVE - CONTOSO\");
+        p.Accounts.Add(("Business1", @"c:\users\x\ONEDRIVE - CONTOSO\", null));
         p.Existing.Add(@"C:\Users\x\OneDrive");
         p.Existing.Add(@"c:\users\x\onedrive\");
         p.Existing.Add(@"C:\Users\x\OneDrive\");
@@ -126,7 +112,7 @@ public class CloudFolderDetectorTests
     [Fact]
     public void Detect_OneDriveEnvWithBusinessName_IsBusiness()
     {
-        var p = new FakeProbe();
+        var p = new FakeCloudProbe();
         p.Env["OneDrive"] = @"C:\Users\x\OneDrive - Contoso";
         p.Existing.Add(@"C:\Users\x\OneDrive - Contoso");
 
@@ -138,10 +124,10 @@ public class CloudFolderDetectorTests
     [Fact]
     public void Detect_Order()
     {
-        var p = new FakeProbe();
+        var p = new FakeCloudProbe();
         p.Roots.Add(@"G:\");
         p.Env["OneDriveCommercial"] = @"C:\Users\x\OneDrive - Zeta";
-        p.AccountFolders.Add(@"C:\Users\x\OneDrive - alpha");
+        p.Accounts.Add(("Business2", @"C:\Users\x\OneDrive - alpha", null));
         p.Env["OneDrive"] = @"C:\Users\x\OneDrive";
         foreach (var d in new[] { @"G:\My Drive", @"C:\Users\x\OneDrive - Zeta", @"C:\Users\x\OneDrive - alpha", @"C:\Users\x\OneDrive" })
             p.Existing.Add(d);
@@ -156,7 +142,7 @@ public class CloudFolderDetectorTests
     [Fact]
     public void Detect_NothingInstalled_ReturnsEmpty()
     {
-        Assert.Empty(CloudFolderDetector.Detect(new FakeProbe()));
+        Assert.Empty(CloudFolderDetector.Detect(new FakeCloudProbe()));
     }
 
     [Fact]

@@ -8,11 +8,19 @@ namespace PromptLibrary.Core.Clipboard;
 /// </summary>
 public class ClipboardWriter(Action<string> setText, Action<TimeSpan> sleep, int attempts = 5, int delayMs = 50)
 {
+    private readonly int _attempts = attempts >= 1
+        ? attempts
+        : throw new ArgumentOutOfRangeException(nameof(attempts), attempts, "At least one attempt is required.");
+
+    private readonly int _delayMs = delayMs >= 0
+        ? delayMs
+        : throw new ArgumentOutOfRangeException(nameof(delayMs), delayMs, "The delay can't be negative.");
+
     public bool TryCopy(string text)
     {
         var crlf = LineEndings.ToCrlf(text);
 
-        for (var attempt = 1; attempt <= attempts; attempt++)
+        for (var attempt = 1; attempt <= _attempts; attempt++)
         {
             try
             {
@@ -21,8 +29,8 @@ public class ClipboardWriter(Action<string> setText, Action<TimeSpan> sleep, int
             }
             catch (Exception)
             {
-                if (attempt < attempts)
-                    sleep(TimeSpan.FromMilliseconds(delayMs));
+                if (attempt < _attempts)
+                    sleep(TimeSpan.FromMilliseconds(_delayMs));
             }
         }
 
