@@ -427,3 +427,6 @@ FodyWeavers.xsd
 
 # Official VS Code C# Dev Kit Extension exclusion
 #*.lscache
+
+# Brainstorm mockups
+.superpowers/
