@@ -17,3 +17,34 @@ Used for the final UI review of every window. Each screen is scored from screens
 Score = Σ(weight × points/10). Record per-screen scores and the fixes made in `docs/design/ui-review-results.md`.
 
 Screens: Main window (populated), Main window (empty library), Main window (search with no results), Main window (unsaved + validation error), Settings, Restore, Move-category dialog, Quick menu (native — scored only on criteria 1, 4, 8), tray messages (criterion 8 only).
+
+---
+
+# Simplicity & intuitiveness score
+
+A second, separate score per screen. **Target: 95% or more** on the main window and the onboarding wizard; 90%+ on secondary dialogs.
+
+Method: a cognitive walkthrough of the core tasks below as a first-time user who has never seen the app (no docs, no tooltips read first), counting clicks/keystrokes and noting every hesitation ("where do I…?", "what does this do?"), plus a 5-second first-glance test from the screenshot.
+
+Core tasks (main window):
+1. Copy the prompt "Write unit tests" to the clipboard.
+2. Find a prompt that mentions "headline" without knowing its category.
+3. Add a new prompt to Marketing and save it.
+4. Fix a typo in an existing prompt's text and save.
+5. Rename a category.
+6. Delete a category that still has prompts.
+7. Get back to the prompt you were editing after closing the window (tray).
+
+| # | Criterion | Weight | Full marks when |
+|---|---|---|---|
+| S1 | First-glance clarity | 15 | In 5 seconds a newcomer can say what the window is for and where to start |
+| S2 | Effort for core tasks | 15 | Tasks 1–4 each take ≤ 3 actions after the window is open; none needs a hidden gesture |
+| S3 | Visual quietness | 10 | No redundant controls or text; every visible element earns its place; one primary action per view |
+| S4 | Discoverability | 15 | Every core task's control is visible or one obvious step away (no right-click-only or shortcut-only paths for core tasks) |
+| S5 | Plain words | 10 | Labels name what users want ("Copy prompt", "New prompt"), no jargon, consistent naming |
+| S6 | Familiar patterns | 10 | Behaves like a normal Windows app (list/detail, Ctrl+S, Delete, Esc, menu locations) |
+| S7 | Forgiveness | 10 | Hard-to-undo actions confirm; unsaved work is protected; errors say how to fix |
+| S8 | Feedback | 10 | Every action shows it worked (copied, saved, deleted, moved) within 1 s |
+| S9 | Low decision load | 5 | ≤ 1 decision per step; sensible defaults; no premature choices |
+
+Score = Σ(weight × points/10). Record the walkthrough (steps, hesitations) alongside the score in `docs/design/ui-review-results.md`.
