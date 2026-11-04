@@ -130,10 +130,14 @@ public sealed class TrayIcon : IDisposable
 
     private void OnMenuClosed(object? sender, Forms.ToolStripDropDownClosedEventArgs e)
     {
-        // A clicked item restores focus itself (after it has done its work); this covers Escape
-        // and other dismissals.
-        if (e.CloseReason != Forms.ToolStripDropDownCloseReason.ItemClicked)
+        // Give focus back only when the user finished with the menu itself: an item click (which has
+        // normally restored focus already, after doing its work) or Escape. If they clicked another
+        // window or elsewhere, that window should keep the focus they just gave it.
+        if (e.CloseReason is Forms.ToolStripDropDownCloseReason.ItemClicked
+            or Forms.ToolStripDropDownCloseReason.Keyboard)
             ReturnFocus();
+        else
+            _returnFocusTo = IntPtr.Zero;
     }
 
     private void ReturnFocus()

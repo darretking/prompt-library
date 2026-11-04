@@ -1,8 +1,11 @@
+using System.IO;
 using System.Threading;
 using System.Windows;
 using PromptLibrary.App.Hotkeys;
 using PromptLibrary.App.Startup;
 using PromptLibrary.App.Tray;
+using PromptLibrary.App.Views;
+using PromptLibrary.Core.Backup;
 using PromptLibrary.Core.Clipboard;
 using PromptLibrary.Core.Hotkeys;
 using PromptLibrary.Core.Menu;
@@ -16,7 +19,7 @@ namespace PromptLibrary.App;
 /// Owns the running app: library and settings, tray icon, global hotkey and windows.
 /// Created once on the UI thread by <see cref="App"/>.
 /// </summary>
-public sealed class AppHost
+public sealed class AppHost : IDisposable
 {
     private const string AppName = "Prompt Library";
     private const string DefaultHotkey = "Ctrl+Alt+P";
@@ -27,6 +30,7 @@ public sealed class AppHost
     private GlobalHotkey? _hotkey;
     private HotkeyGesture? _activeGesture;
     private MainWindow? _mainWindow;
+    private bool _disposed;
 
     public Library Library { get; private set; } = new();
     public AppSettings Settings { get; private set; } = new();
@@ -47,7 +51,7 @@ public sealed class AppHost
                 break;
             case LoadStatus.Missing:
                 Library = SeedLibrary.Create(DateTimeOffset.Now);
-                JsonStore.SaveLibrary(Paths.LibraryFile, Library);
+                WriteLibraryFile(); // on failure the message is shown and the app runs on in memory
                 break;
             case LoadStatus.Unreadable:
                 HandleUnreadableLibrary(Paths.LibraryFile, libraryResult.Error ?? "Unknown error.");
@@ -63,11 +67,13 @@ public sealed class AppHost
 
         _hotkey = new GlobalHotkey();
         _hotkey.Pressed += (_, _) => Tray.ShowMenuAtCursor(returnFocusAfterwards: true);
-        ApplyHotkey(Settings.Hotkey);
+        var hotkeyRegistered = ApplyHotkey(Settings.Hotkey);
 
         ApplyStartupRegistration();
 
-        if (!Settings.FirstRunDone)
+        // If the shortcut is taken, the conflict message is the one that matters; the welcome waits
+        // for a start where the shortcut works.
+        if (!Settings.FirstRunDone && hotkeyRegistered)
         {
             Tray.ShowMessage(AppName, $"Prompt Library is running. Press {Settings.Hotkey} or click this icon.");
             Settings.FirstRunDone = true;
@@ -77,25 +83,49 @@ public sealed class AppHost
         return true;
     }
 
-    /// <summary>Saves the library, tells listeners and refreshes the quick menu.</summary>
-    public void SaveLibrary()
+    /// <summary>
+    /// Saves the library, tells listeners and refreshes the quick menu. If the file can't be written
+    /// the user is told, the in-memory library is kept and false is returned.
+    /// </summary>
+    public bool SaveLibrary()
     {
-        JsonStore.SaveLibrary(Paths.LibraryFile, Library);
+        var saved = WriteLibraryFile();
         LibraryChanged?.Invoke(this, EventArgs.Empty);
         Tray.Rebuild(QuickMenuBuilder.Build(Library));
+        return saved;
     }
 
-    public void SaveSettings() => JsonStore.SaveSettings(Paths.SettingsFile, Settings);
+    /// <summary>Saves settings; if the file can't be written the user is told and false is returned.</summary>
+    public bool SaveSettings()
+    {
+        try
+        {
+            JsonStore.SaveSettings(Paths.SettingsFile, Settings);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ShowError($"Couldn't save your settings: {WithoutFinalPeriod(ex.Message)}. Try again.");
+            return false;
+        }
+    }
 
     /// <summary>Copies the prompt's text and confirms in the tray. False if the clipboard stayed busy.</summary>
     public bool CopyPrompt(Guid promptId)
     {
         var prompt = Library.Prompts.FirstOrDefault(p => p.Id == promptId);
-        if (prompt is null) return false;
+        return prompt is not null && CopyText(prompt.Text, prompt.Title);
+    }
 
-        if (_clipboard.TryCopy(prompt.Text))
+    /// <summary>
+    /// Copies <paramref name="text"/> (normalised to CRLF) and shows <c>Copied: title</c> in the tray.
+    /// False if the clipboard stayed busy.
+    /// </summary>
+    public bool CopyText(string text, string title)
+    {
+        if (_clipboard.TryCopy(text))
         {
-            Tray.ShowMessage(AppName, $"Copied: {prompt.Title}");
+            Tray.ShowMessage(AppName, $"Copied: {title}");
             return true;
         }
 
@@ -103,9 +133,14 @@ public sealed class AppHost
         return false;
     }
 
+    /// <summary>Shows the one main window, creating it the first time.</summary>
     public void ShowMainWindow()
     {
-        _mainWindow ??= new MainWindow();
+        if (_mainWindow is null)
+            _mainWindow = new MainWindow(this);
+        else if (!_mainWindow.IsVisible)
+            _mainWindow.ViewModel.RefreshAll(); // pick up anything that changed while it was hidden
+
         _mainWindow.Show();
         if (_mainWindow.WindowState == WindowState.Minimized)
             _mainWindow.WindowState = WindowState.Normal;
@@ -114,6 +149,16 @@ public sealed class AppHost
 
     /// <summary>Opens the Settings window. Task 10 fills this in; for now it does nothing.</summary>
     public void OpenSettings()
+    {
+    }
+
+    /// <summary>Backs up the library to the backup folder. Task 10 fills this in; for now it does nothing.</summary>
+    public void RunBackup(BackupTrigger trigger)
+    {
+    }
+
+    /// <summary>Opens the Restore window. Task 10 fills this in; for now it does nothing.</summary>
+    public void OpenRestore()
     {
     }
 
@@ -142,16 +187,54 @@ public sealed class AppHost
         return true;
     }
 
+    /// <summary>Quits the app. Unsaved edits in the main window are offered for saving first (Cancel stays).</summary>
     public void ExitApp()
     {
-        _hotkey?.Dispose();
-        _hotkey = null;
-        Tray.Dispose();
+        if (_mainWindow is { IsVisible: true } && !_mainWindow.ViewModel.ConfirmDiscardOrSave())
+            return;
+
+        Dispose();
         _mainWindow?.CloseForExit();
         Application.Current.Shutdown();
     }
 
+    /// <summary>Removes the tray icon and releases the global shortcut. Safe to call more than once.</summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        _hotkey?.Dispose();
+        _hotkey = null;
+        Tray?.Dispose();
+    }
+
     private static string TooltipFor(string hotkey) => $"{AppName} ({hotkey})";
+
+    /// <summary>Writes library.json. On failure tells the user and returns false; memory is left as is.</summary>
+    private bool WriteLibraryFile()
+    {
+        try
+        {
+            JsonStore.SaveLibrary(Paths.LibraryFile, Library);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ShowError($"Couldn't save your library: {WithoutFinalPeriod(ex.Message)}. Your changes are still open — try again.");
+            return false;
+        }
+    }
+
+    private void ShowError(string text)
+    {
+        if (_mainWindow is { IsVisible: true })
+            MessageBox.Show(_mainWindow, text, AppName, MessageBoxButton.OK, MessageBoxImage.Warning);
+        else
+            MessageBox.Show(text, AppName, MessageBoxButton.OK, MessageBoxImage.Warning);
+    }
+
+    private static string WithoutFinalPeriod(string message) => message.Trim().TrimEnd('.');
 
     /// <summary>Missing or unreadable settings fall back to defaults; odd values are corrected.</summary>
     private static AppSettings LoadSettings()

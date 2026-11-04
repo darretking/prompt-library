@@ -41,8 +41,16 @@ public partial class App : Application
         ListenForShowSignal(_showSignal, _host);
     }
 
+    protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+    {
+        // Logoff/shutdown may not run OnExit in time; remove the tray icon now so none is left behind.
+        _host?.Dispose();
+        base.OnSessionEnding(e);
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
+        _host?.Dispose();
         if (_ownsMutex)
             _singleInstance!.ReleaseMutex();
         _singleInstance?.Dispose();
