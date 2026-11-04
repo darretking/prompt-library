@@ -36,5 +36,4 @@ Mark each one **Pass**, **Fail** (with a note) or **N/A** (with the reason, e.g.
 
 | # | Case | Steps | Expected |
 |---|------|-------|----------|
-| 13 | Uninstall and reinstall (MSI) | Add a prompt, uninstall, reinstall. | The library is still there (data in `%APPDATA%\PromptLibrary\` is kept). |
-| 14 | Uninstall and reinstall (MSIX) | Add a prompt, make a backup to a cloud folder, uninstall, reinstall. | The library is gone (MSIX removes app data), but *Restore from backup* brings it back from the cloud folder. |
+| 13 | Uninstall and reinstall | Add a prompt, uninstall, reinstall. | The library is still there (data in `%APPDATA%\PromptLibrary\` is kept). |

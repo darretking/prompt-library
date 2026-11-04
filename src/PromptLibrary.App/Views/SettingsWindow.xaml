@@ -1,0 +1,57 @@
+<Window x:Class="PromptLibrary.App.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:PromptLibrary.App.Views"
+        Style="{StaticResource AppWindow}"
+        Title="Settings"
+        AutomationProperties.Name="Settings"
+        Icon="/Assets/app.ico"
+        Width="560" Height="640"
+        ResizeMode="NoResize">
+    <!-- Every setting applies as soon as it changes; Close (or Esc, or ×) just closes. -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Focusable="False">
+            <StackPanel Margin="16,16,16,8">
+
+                <!-- Shortcut -->
+                <TextBlock Text="Shortcut" Style="{StaticResource FieldLabel}" />
+                <StackPanel Orientation="Horizontal">
+                    <views:ShortcutBox x:Name="ShortcutField" Style="{StaticResource {x:Type TextBox}}" Width="280"
+                                       AutomationProperties.Name="Shortcut"
+                                       AutomationProperties.HelpText="Press Enter or Change, then press the new shortcut" />
+                    <Button Content="Change" Margin="8,0,0,0" Click="ChangeShortcut_Click"
+                            AutomationProperties.Name="Change shortcut" />
+                </StackPanel>
+                <TextBlock x:Name="ShortcutStatus" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,4,0,0" />
+
+                <!-- Backups -->
+                <TextBlock Text="Back up to" Style="{StaticResource FieldLabel}" Margin="0,24,0,4" />
+                <TextBlock Text="Your library is copied here once a day and when you exit."
+                           Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                <views:BackupLocationPicker x:Name="Picker" />
+
+                <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                    <TextBlock Text="Keep the last" VerticalAlignment="Center" />
+                    <ComboBox x:Name="KeepBox" Width="80" Margin="8,0"
+                              AutomationProperties.Name="Number of backups to keep" />
+                    <TextBlock Text="backups" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <!-- Startup -->
+                <CheckBox x:Name="StartupBox" Margin="0,24,0,0"
+                          Content="Start Prompt Library when Windows starts"
+                          AutomationProperties.Name="Start Prompt Library when Windows starts" />
+            </StackPanel>
+        </ScrollViewer>
+
+        <Border Grid.Row="1" BorderBrush="{StaticResource Brush.Line}" BorderThickness="0,1,0,0" Padding="16">
+            <Button Content="Close" IsCancel="True" HorizontalAlignment="Right" Click="Close_Click"
+                    AutomationProperties.Name="Close settings" />
+        </Border>
+    </Grid>
+</Window>

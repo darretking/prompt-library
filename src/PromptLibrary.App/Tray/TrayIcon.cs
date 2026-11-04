@@ -5,7 +5,7 @@ using Forms = System.Windows.Forms;
 namespace PromptLibrary.App.Tray;
 
 /// <summary>
-/// The notification-area icon and the quick menu (categories → prompts, then Open and Exit).
+/// The notification-area icon and the quick menu (categories → prompts, then Settings, Open and Exit).
 /// The same menu is shown for a tray click and for the global hotkey.
 /// </summary>
 public sealed class TrayIcon : IDisposable
@@ -26,6 +26,7 @@ public sealed class TrayIcon : IDisposable
 
     public event EventHandler<Guid>? PromptClicked;
     public event EventHandler? OpenRequested;
+    public event EventHandler? SettingsRequested;
     public event EventHandler? ExitRequested;
     public event EventHandler? DoubleClicked;
 
@@ -85,6 +86,14 @@ public sealed class TrayIcon : IDisposable
         }
 
         _menu.Items.Add(new Forms.ToolStripSeparator());
+
+        var settings = new Forms.ToolStripMenuItem("Settings…");
+        settings.Click += (_, _) =>
+        {
+            _returnFocusTo = IntPtr.Zero; // the Settings window takes focus instead
+            SettingsRequested?.Invoke(this, EventArgs.Empty);
+        };
+        _menu.Items.Add(settings);
 
         var open = new Forms.ToolStripMenuItem("Open Prompt Library…");
         open.Click += (_, _) =>

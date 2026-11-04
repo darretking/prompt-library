@@ -13,8 +13,10 @@
         <SolidColorBrush x:Key="Brush.Ink" Color="#1B2230" />
         <SolidColorBrush x:Key="Brush.Muted" Color="#5A6475" />
         <SolidColorBrush x:Key="Brush.Line" Color="#D6DBE3" />
-        <SolidColorBrush x:Key="Brush.Brand" Color="#2457D6" />
-        <SolidColorBrush x:Key="Brush.BrandSoft" Color="#E3EAFB" />
+        <SolidColorBrush x:Key="Brush.Brand" Color="#4338CA" />
+        <SolidColorBrush x:Key="Brush.BrandSoft" Color="#E8E7FB" />
+        <!-- Bookmark amber from the icon: onboarding illustration only, never text. -->
+        <SolidColorBrush x:Key="Brush.Accent" Color="#F5A524" />
         <SolidColorBrush x:Key="Brush.Danger" Color="#B42318" />
         <SolidColorBrush x:Key="Brush.Warn" Color="#FFF4D6" />
         <SolidColorBrush x:Key="Brush.WarnText" Color="#6B4A00" />
@@ -436,6 +438,44 @@
                     </Setter>
                 </Trigger>
             </Style.Triggers>
+        </Style>
+
+
+        <!-- Check box: 16 px Surface box with a Line frame; Brand fill and a white tick when checked. -->
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource Brush.Ink}" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid Background="Transparent">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border x:Name="Box" Width="16" Height="16" VerticalAlignment="Center"
+                                    Background="{StaticResource Brush.Surface}" BorderBrush="{StaticResource Brush.Muted}"
+                                    BorderThickness="1" CornerRadius="3" SnapsToDevicePixels="True">
+                                <Path x:Name="Tick" Data="M3,8 L6.5,11.5 L13,4.5" Stroke="{StaticResource Brush.OnBrand}"
+                                      StrokeThickness="2" Visibility="Collapsed" />
+                            </Border>
+                            <ContentPresenter Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center"
+                                              RecognizesAccessKey="True" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Box" Property="Background" Value="{StaticResource Brush.Brand}" />
+                                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Brush.Brand}" />
+                                <Setter TargetName="Tick" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style TargetType="Menu">

@@ -242,6 +242,9 @@ public sealed class PromptEditorViewModel : ObservableObject
     /// <summary>Re-sends the category to the combo box after its list of choices was rebuilt.</summary>
     public void RefreshCategoryChoice() => OnPropertyChanged(nameof(CategoryId));
 
+    /// <summary>Stops the "Copied" timer; called when this editor is replaced or closed.</summary>
+    public void StopTimers() => _copiedTimer.Stop();
+
     public void ShowCopiedFeedback()
     {
         ShowCopied = true;

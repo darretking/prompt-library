@@ -55,8 +55,16 @@ public sealed class MainViewModel : ObservableObject
         ClearSearchCommand = new RelayCommand(() => SearchText = "");
         BackupNowCommand = new RelayCommand(() => _host.RunBackup(BackupTrigger.Manual));
         RestoreCommand = new RelayCommand(_host.OpenRestore);
-        OpenSettingsCommand = new RelayCommand(_host.OpenSettings);
+        OpenSettingsCommand = new RelayCommand(() => _host.OpenSettings());
+        SetUpBackupsCommand = new RelayCommand(() => _host.OpenSettings(focusBackups: true));
         ExitCommand = new RelayCommand(_host.ExitApp);
+
+        _host.BackupStateChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(BackupWarning));
+            OnPropertyChanged(nameof(BackupWarningDetail));
+            OnPropertyChanged(nameof(ShowBackupWarning));
+        };
 
         RefreshAll();
     }
@@ -82,6 +90,7 @@ public sealed class MainViewModel : ObservableObject
     public IRelayCommand BackupNowCommand { get; }
     public IRelayCommand RestoreCommand { get; }
     public IRelayCommand OpenSettingsCommand { get; }
+    public IRelayCommand SetUpBackupsCommand { get; }
     public IRelayCommand ExitCommand { get; }
 
     public CategoryItem? SelectedCategory
@@ -136,7 +145,11 @@ public sealed class MainViewModel : ObservableObject
         private set
         {
             if (ReferenceEquals(value, _editor)) return;
-            if (_editor is not null) _editor.PropertyChanged -= OnEditorChanged;
+            if (_editor is not null)
+            {
+                _editor.PropertyChanged -= OnEditorChanged;
+                _editor.StopTimers();
+            }
             _editor = value;
             if (_editor is not null) _editor.PropertyChanged += OnEditorChanged;
             OnPropertyChanged();
@@ -156,8 +169,13 @@ public sealed class MainViewModel : ObservableObject
     public bool ShowNoMatches => Prompts.Count == 0 && !string.IsNullOrWhiteSpace(_searchText);
     public string NoMatchesText => $"No prompts match \"{_searchText.Trim()}\".";
 
-    /// <summary>True when no backup folder is set; the window shows the "Backups are off" bar.</summary>
-    public bool ShowBackupsOff => _host.Settings.BackupFolder is null;
+    /// <summary>The warning bar's text ("Backups are off…" or "Backups paused…"), or null when backups are fine.</summary>
+    public string? BackupWarning => _host.BackupWarning;
+
+    public bool ShowBackupWarning => _host.BackupWarning is not null;
+
+    /// <summary>The full backup folder while paused (the bar's tooltip).</summary>
+    public string? BackupWarningDetail => _host.BackupWarningDetail;
 
     public bool IsAddingCategory
     {
@@ -210,7 +228,19 @@ public sealed class MainViewModel : ObservableObject
 
         RebuildCategories(_selectedCategory?.Id);
         RefreshPrompts();
-        OnPropertyChanged(nameof(ShowBackupsOff));
+        OnPropertyChanged(nameof(BackupWarning));
+        OnPropertyChanged(nameof(ShowBackupWarning));
+    }
+
+    /// <summary>
+    /// The library was replaced by a restore: close the editor (its saved values are out of date; any unsaved
+    /// edits were offered for saving before the restore) and rebuild everything.
+    /// </summary>
+    public void ReloadAfterRestore()
+    {
+        _unwritten = null;
+        Editor = null;
+        RefreshAll();
     }
 
     // ---- Categories ----------------------------------------------------------------------------
@@ -415,7 +445,11 @@ public sealed class MainViewModel : ObservableObject
         if (written)
             editor.LoadSaved(_host.Library.Prompts.First(p => p.Id == promptId));
 
-        RebuildCategories(_selectedCategory?.Id);
+        // If the prompt moved out of the category being shown, follow it to its new category.
+        var showCategory = _selectedCategory?.Id is { } shown && shown != editor.CategoryId
+            ? editor.CategoryId
+            : _selectedCategory?.Id;
+        RebuildCategories(showCategory);
         RefreshPrompts();
         return written;
     }
@@ -629,6 +663,12 @@ public sealed class MainViewModel : ObservableObject
             Prompts.Clear();
             foreach (var prompt in PromptFilter.Apply(_host.Library, _selectedCategory?.Id, _searchText))
                 Prompts.Add(prompt);
+
+            // While the items were replaced the list box pushed null selections, and the binding may have left
+            // its SelectedItem at the kept prompt with nothing actually selected. Re-raising an unchanged value is
+            // ignored, so clear it first (as SnapBackSelection does) to make the final update stick.
+            _selectedPrompt = null;
+            OnPropertyChanged(nameof(SelectedPrompt));
             _selectedPrompt = Prompts.FirstOrDefault(p => p.Id == keepId);
         }
         finally

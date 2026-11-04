@@ -44,7 +44,8 @@ public partial class App : Application
     protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
     {
         // Logoff/shutdown may not run OnExit in time; remove the tray icon now so none is left behind.
-        _host?.Dispose();
+        // From here on nothing asks questions (unsaved edits stay unsaved rather than blocking logoff).
+        _host?.OnSessionEnding();
         base.OnSessionEnding(e);
     }
 

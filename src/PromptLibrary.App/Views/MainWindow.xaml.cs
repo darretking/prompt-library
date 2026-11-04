@@ -16,14 +16,19 @@ public partial class MainWindow : Window, IDialogs
 {
     private const string AppName = "Prompt Library";
 
+    private readonly AppHost _host;
     private bool _exiting;
 
     public MainWindow(AppHost host)
     {
+        _host = host;
         InitializeComponent();
         ViewModel = new MainViewModel(host, this);
         ViewModel.TitleFocusRequested += (_, _) => FocusLater(TitleBox);
         DataContext = ViewModel;
+
+        // Coming back to the window re-checks a paused backup folder (e.g. Google Drive signed in again).
+        Activated += (_, _) => _host.RecheckBackups();
     }
 
     public MainViewModel ViewModel { get; }
@@ -37,7 +42,9 @@ public partial class MainWindow : Window, IDialogs
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        if (!_exiting)
+        // When Windows is ending the session, close without asking: a question would block logoff,
+        // and unsaved edits are simply left unsaved.
+        if (!_exiting && !_host.IsSessionEnding)
         {
             e.Cancel = true;
             if (ViewModel.ConfirmDiscardOrSave())
@@ -118,9 +125,14 @@ public partial class MainWindow : Window, IDialogs
     private void RenameBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
         // Clicking away keeps a valid new name (like Explorer); an invalid one is dropped.
-        if (((FrameworkElement)sender).DataContext is CategoryItem { IsRenaming: true } item
-            && !ViewModel.CommitRename(item))
-            ViewModel.CancelRename(item);
+        // Deferred so the click that moved focus finishes first: committing rebuilds the rail, which
+        // would otherwise swallow that click.
+        if (((FrameworkElement)sender).DataContext is not CategoryItem { IsRenaming: true } item) return;
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+        {
+            if (item.IsRenaming && !ViewModel.CommitRename(item))
+                ViewModel.CancelRename(item);
+        });
     }
 
     private void NewCategoryBox_KeyDown(object sender, KeyEventArgs e)
