@@ -19,6 +19,20 @@ public static class BackupLocation
         return string.IsNullOrEmpty(parent) || !Exists(parent, directoryExists);
     }
 
+    /// <summary>How many safety copies are kept in the fallback folder (see <see cref="SafetyFolder"/>).</summary>
+    public const int SafetyBackupsToKeep = 10;
+
+    /// <summary>
+    /// Where a restore's safety copy of the current library goes: the configured backup folder when it is set and
+    /// available, otherwise <paramref name="fallbackFolder"/> (<c>%APPDATA%\PromptLibrary\Safety backups</c>).
+    /// Never the folder being restored from, unless that is the configured folder: a browsed folder (an old USB
+    /// stick, another PC's cloud folder) must not be written to or pruned.
+    /// </summary>
+    public static string SafetyFolder(string? configuredFolder, string fallbackFolder, Func<string, bool> directoryExists)
+        => configuredFolder is not null && !IsUnavailable(configuredFolder, directoryExists)
+            ? configuredFolder
+            : fallbackFolder;
+
     /// <summary>The display name of the cloud folder that contains <paramref name="folder"/> (deepest root wins), or null.</summary>
     public static string? ProviderFor(string folder, IEnumerable<CloudFolder> clouds)
         => clouds

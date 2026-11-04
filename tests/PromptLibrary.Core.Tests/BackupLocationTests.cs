@@ -176,4 +176,26 @@ public sealed class BackupLocationTests
         Assert.Equal("Yesterday, 18:30 · 12 prompts", BackupLocation.BackupRowText(info, Now));
         Assert.Equal("Yesterday, 18:30 · Damaged — can't restore", BackupLocation.BackupRowText(info with { PromptCount = -1 }, Now));
     }
+
+    private const string AppDataSafety = @"C:\Users\x\AppData\Roaming\PromptLibrary\Safety backups";
+
+    [Fact]
+    public void SafetyFolder_ConfiguredAndAvailable_UsesConfigured()
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { @"G:\My Drive" };
+        Assert.Equal(@"G:\My Drive\Prompt Library Backups",
+            BackupLocation.SafetyFolder(@"G:\My Drive\Prompt Library Backups", AppDataSafety, existing.Contains));
+    }
+
+    [Fact]
+    public void SafetyFolder_NotConfigured_UsesAppData()
+    {
+        Assert.Equal(AppDataSafety, BackupLocation.SafetyFolder(null, AppDataSafety, _ => true));
+    }
+
+    [Fact]
+    public void SafetyFolder_ConfiguredButUnavailable_UsesAppData()
+    {
+        Assert.Equal(AppDataSafety, BackupLocation.SafetyFolder(@"Z:\nope\Backups", AppDataSafety, _ => false));
+    }
 }

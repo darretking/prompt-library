@@ -11,4 +11,7 @@ public static class Paths
     public static string LibraryFile { get; } = Path.Combine(DataFolder, "library.json");
 
     public static string SettingsFile { get; } = Path.Combine(DataFolder, "settings.json");
+
+    /// <summary>Safety copies made before a restore when no backup folder is set or it isn't available.</summary>
+    public static string SafetyBackupsFolder { get; } = Path.Combine(DataFolder, "Safety backups");
 }

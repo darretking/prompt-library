@@ -245,6 +245,65 @@ public sealed class BackupServiceTests : IDisposable
     }
 
     [Fact]
+    public void Restore_FromOtherFolder_DoesNotWriteOrPruneSourceFolder()
+    {
+        // An old USB stick with 5 backups; the safety copy goes to the configured folder (keep = 1).
+        var source = Path.Combine(_dir, "usb");
+        Directory.CreateDirectory(source);
+        for (var day = 1; day <= 5; day++)
+            File.WriteAllText(Path.Combine(source, $"PromptLibrary-backup-2026-10-0{day}_080000.json"), LibraryJson(day));
+        var sourceBefore = Directory.GetFiles(source).Order().Select(f => (f, File.ReadAllText(f))).ToList();
+        WriteLibrary(LibraryJson(3, "current"));
+
+        var chosen = Path.Combine(source, "PromptLibrary-backup-2026-10-01_080000.json");
+        var safetyFolder = BackupLocation.SafetyFolder(_folder, Path.Combine(_dir, "appdata-safety"), Directory.Exists);
+        var result = ServiceAt(Now).Restore(chosen, _library, safetyFolder, 1);
+
+        Assert.True(result.Success);
+        Assert.Equal(sourceBefore, Directory.GetFiles(source).Order().Select(f => (f, File.ReadAllText(f))).ToList());
+        Assert.Equal(_folder, Path.GetDirectoryName(result.BackupPath));
+    }
+
+    [Fact]
+    public void Restore_SafetyCopyGoesToConfiguredFolder()
+    {
+        Directory.CreateDirectory(_folder);
+        var chosen = Path.Combine(_dir, "PromptLibrary-backup-2026-10-01_080000.json");
+        File.WriteAllText(chosen, LibraryJson(1));
+        var currentJson = LibraryJson(2, "current");
+        WriteLibrary(currentJson);
+
+        var safetyFolder = BackupLocation.SafetyFolder(_folder, Path.Combine(_dir, "appdata-safety"), Directory.Exists);
+        var result = ServiceAt(Now).Restore(chosen, _library, safetyFolder, 30);
+
+        Assert.True(result.Success);
+        Assert.Equal(_folder, safetyFolder);
+        Assert.Equal(currentJson, File.ReadAllText(Assert.Single(BackupFiles())));
+        Assert.False(Directory.Exists(Path.Combine(_dir, "appdata-safety")));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(@"Z:\nope\Prompt Library Backups")]
+    public void Restore_NoConfiguredFolder_SafetyCopyInAppData(string? configured)
+    {
+        var appDataSafety = Path.Combine(_dir, "appdata", "Safety backups");
+        var chosen = Path.Combine(_dir, "PromptLibrary-backup-2026-10-01_080000.json");
+        File.WriteAllText(chosen, LibraryJson(1));
+        var currentJson = LibraryJson(2, "current");
+        WriteLibrary(currentJson);
+
+        var safetyFolder = BackupLocation.SafetyFolder(configured, appDataSafety, Directory.Exists);
+        Directory.CreateDirectory(safetyFolder); // the app creates it; its parent (%APPDATA%\PromptLibrary) always exists
+        var result = ServiceAt(Now).Restore(chosen, _library, safetyFolder, BackupLocation.SafetyBackupsToKeep);
+
+        Assert.True(result.Success);
+        Assert.Equal(appDataSafety, safetyFolder);
+        Assert.Equal(currentJson, File.ReadAllText(result.BackupPath!));
+        Assert.Equal(appDataSafety, Path.GetDirectoryName(result.BackupPath));
+    }
+
+    [Fact]
     public void LibraryHash_IsLowercaseHexSha256()
     {
         File.WriteAllText(_library, "abc");

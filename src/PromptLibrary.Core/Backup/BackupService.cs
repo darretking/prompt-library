@@ -121,11 +121,13 @@ public class BackupService(Func<DateTime> nowLocal)
     }
 
     /// <summary>
-    /// Validates the chosen backup, saves a backup of the current library, then replaces the library with the
-    /// backup's original text. Any failure before the final replace leaves the library untouched.
+    /// Validates the chosen backup, saves a safety copy of the current library into <paramref name="safetyFolder"/>
+    /// (pruned to <paramref name="keep"/>), then replaces the library with the backup's original text. Any failure
+    /// before the final replace leaves the library untouched. The folder holding <paramref name="backupPath"/> is
+    /// only read, never written or pruned (unless it is also the safety folder).
     /// The result's BackupPath is the safety copy of the previous library (null if there was none).
     /// </summary>
-    public BackupResult Restore(string backupPath, string libraryPath, string backupFolder, int keep)
+    public BackupResult Restore(string backupPath, string libraryPath, string safetyFolder, int keep)
     {
         string text;
         try
@@ -141,7 +143,7 @@ public class BackupService(Func<DateTime> nowLocal)
         string? safetyCopy = null;
         if (File.Exists(libraryPath))
         {
-            var pre = BackupNow(libraryPath, backupFolder, keep);
+            var pre = BackupNow(libraryPath, safetyFolder, keep);
             if (!pre.Success) return Failure("Could not back up the current library first: " + pre.Error);
             safetyCopy = pre.BackupPath;
         }

@@ -356,13 +356,18 @@ public sealed class AppHost : IDisposable
     public IReadOnlyList<BackupInfo> ListBackups(string folder) => _backups.List(folder);
 
     /// <summary>
-    /// Restores <paramref name="backup"/> (the current library is backed up into <paramref name="folder"/> first)
-    /// and loads it. After startup the windows and quick menu are refreshed and the tray says
-    /// <c>Library restored from &lt;date&gt;.</c> Returns null on success, otherwise the error to show.
+    /// Restores <paramref name="backup"/> and loads it. The current library is saved first as a safety copy, in
+    /// the configured backup folder if it is set and available, otherwise in
+    /// <c>%APPDATA%\PromptLibrary\Safety backups</c> (kept to 10). The folder the backup came from is never written
+    /// to or pruned unless it is the configured one. After startup the windows and quick menu are refreshed and the
+    /// tray says <c>Library restored from &lt;date&gt;.</c> Returns null on success, otherwise the error to show.
     /// </summary>
-    public string? RestoreBackup(BackupInfo backup, string folder)
+    public string? RestoreBackup(BackupInfo backup)
     {
-        var result = _backups.Restore(backup.Path, Paths.LibraryFile, folder, Settings.BackupsToKeep);
+        var safetyFolder = BackupLocation.SafetyFolder(Settings.BackupFolder, Paths.SafetyBackupsFolder, Directory.Exists);
+        var keep = safetyFolder == Paths.SafetyBackupsFolder ? BackupLocation.SafetyBackupsToKeep : Settings.BackupsToKeep;
+
+        var result = _backups.Restore(backup.Path, Paths.LibraryFile, safetyFolder, keep);
         if (!result.Success)
             return result.Error;
 

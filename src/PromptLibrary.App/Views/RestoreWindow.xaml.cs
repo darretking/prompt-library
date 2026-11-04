@@ -120,7 +120,7 @@ public partial class RestoreWindow : Window
                        "Your current library will be backed up first.";
         if (!ConfirmDialog.Ask(this, question, "Restore", "Cancel")) return;
 
-        var error = _host.RestoreBackup(row.Info, _folder);
+        var error = _host.RestoreBackup(row.Info);
         if (error is null)
         {
             RestoredFrom = row.Info;
