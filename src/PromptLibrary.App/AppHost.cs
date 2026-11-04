@@ -91,9 +91,12 @@ public sealed class AppHost : IDisposable
     {
         var saved = WriteLibraryFile();
         LibraryChanged?.Invoke(this, EventArgs.Empty);
-        Tray.Rebuild(QuickMenuBuilder.Build(Library));
+        RefreshQuickMenu();
         return saved;
     }
+
+    /// <summary>Rebuilds the quick menu from the in-memory library (e.g. after an unsaved change was rolled back).</summary>
+    public void RefreshQuickMenu() => Tray.Rebuild(QuickMenuBuilder.Build(Library));
 
     /// <summary>Saves settings; if the file can't be written the user is told and false is returned.</summary>
     public bool SaveSettings()

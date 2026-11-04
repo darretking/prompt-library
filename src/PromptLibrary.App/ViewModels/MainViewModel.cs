@@ -36,6 +36,10 @@ public sealed class MainViewModel : ObservableObject
     // True while a deferred "Save changes?" is on screen.
     private bool _asking;
 
+    // The editor's prompt as it is on disk, while a change to it is in memory but failed to write.
+    // "Don't save" restores it, so the change is never written later by another save.
+    private PromptSnapshot? _unwritten;
+
     public MainViewModel(AppHost host, IDialogs dialogs)
     {
         _host = host;
@@ -190,10 +194,7 @@ public sealed class MainViewModel : ObservableObject
             case true:
                 return Save();
             case false:
-                if (editor.IsNew)
-                    Editor = null;
-                else
-                    editor.Revert();
+                DiscardChanges(editor);
                 return true;
             default:
                 return false;
@@ -384,17 +385,21 @@ public sealed class MainViewModel : ObservableObject
         if (!editor.Validate()) return false;
 
         Guid promptId;
+        PromptSnapshot onDisk;
         try
         {
             var library = NewLibraryEditor();
             if (editor.PromptId is { } existingId)
             {
+                // After an earlier failed write, the earlier snapshot is still what's on disk.
+                onDisk = _unwritten ?? PromptSnapshot.Capture(_host.Library, existingId);
                 library.UpdatePrompt(existingId, editor.Title, editor.Description, editor.CategoryId!.Value, editor.Text);
                 promptId = existingId;
             }
             else
             {
                 promptId = library.AddPrompt(editor.CategoryId!.Value, editor.Title, editor.Description, editor.Text).Id;
+                onDisk = PromptSnapshot.ForNewPrompt(promptId);
                 editor.MarkCreated(promptId); // a retry after a failed write must update, not add again
             }
         }
@@ -406,6 +411,7 @@ public sealed class MainViewModel : ObservableObject
         }
 
         var written = _host.SaveLibrary();
+        _unwritten = written ? null : onDisk;
         if (written)
             editor.LoadSaved(_host.Library.Prompts.First(p => p.Id == promptId));
 
@@ -449,6 +455,7 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
+        if (_unwritten?.PromptId == id) _unwritten = null;
         Editor = null;
         _host.SaveLibrary();
         RebuildCategories(_selectedCategory?.Id);
@@ -456,6 +463,35 @@ public sealed class MainViewModel : ObservableObject
     }
 
     // ---- Helpers -------------------------------------------------------------------------------
+
+    /// <summary>
+    /// "Don't save": the editor goes back to what is saved. If a change to this prompt reached
+    /// memory but not the disk, the library is rolled back too (a new prompt is removed).
+    /// </summary>
+    private void DiscardChanges(PromptEditorViewModel editor)
+    {
+        if (_unwritten is not { } snapshot || snapshot.PromptId != editor.PromptId)
+        {
+            if (editor.IsNew)
+                Editor = null;
+            else
+                editor.Revert();
+            return;
+        }
+
+        snapshot.Restore(_host.Library);
+        _unwritten = null;
+        _host.RefreshQuickMenu();
+
+        var restored = _host.Library.Prompts.FirstOrDefault(p => p.Id == snapshot.PromptId);
+        if (restored is null)
+            Editor = null;
+        else
+            editor.LoadSaved(restored);
+
+        RebuildCategories(_selectedCategory?.Id);
+        RefreshPrompts();
+    }
 
     // The host's Library object can be replaced (restore), so make an editor for the current one.
     private LibraryEditor NewLibraryEditor() => new(_host.Library, () => DateTimeOffset.Now);
