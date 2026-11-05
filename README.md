@@ -17,7 +17,7 @@ ChatGPT, Claude, Copilot, your terminal, your IDE: one library for all of them.
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-4338CA" alt="Windows 10 and 11" />
   <img src="https://img.shields.io/badge/no%20account-no%20tracking-F5A524" alt="No account, no tracking" />
   <img src="https://img.shields.io/badge/installs%20without-admin%20rights-1B2230" alt="Installs without admin rights" />
-  <img src="https://img.shields.io/badge/version-1.0.0-4338CA" alt="Version 1.0.0" />
+  <img src="https://img.shields.io/badge/version-1.0.1-4338CA" alt="Version 1.0.1" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-4338CA" alt="License: GPL-3.0" /></a>
 </p>
 
