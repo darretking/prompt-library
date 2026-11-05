@@ -8,6 +8,7 @@ using PromptLibrary.App.Tray;
 using PromptLibrary.App.Views;
 using PromptLibrary.Core.Backup;
 using PromptLibrary.Core.Clipboard;
+using PromptLibrary.Core.Editing;
 using PromptLibrary.Core.Hotkeys;
 using PromptLibrary.Core.Menu;
 using PromptLibrary.Core.Models;
@@ -49,6 +50,9 @@ public sealed class AppHost : IDisposable
     private bool _disposed;
     private bool _exiting;
 
+    // Set while the app exits without asking (installer, logoff): error messages are not shown then.
+    private bool _quietExit;
+
     // One backup (or restore) at a time. Scheduled backups skip if one is running; the others wait for it.
     private readonly SemaphoreSlim _backupGate = new(1, 1);
 
@@ -75,6 +79,15 @@ public sealed class AppHost : IDisposable
 
     /// <summary>True once Windows has said the session is ending; no questions may be asked then.</summary>
     public bool IsSessionEnding { get; private set; }
+
+    /// <summary>True once the app has started exiting; windows then close without their usual questions.</summary>
+    public bool IsExiting => _exiting;
+
+    /// <summary>True while nothing may be asked or shown: Windows is ending the session or the installer closes the app.</summary>
+    public bool AsksNothing => IsSessionEnding || _quietExit;
+
+    /// <summary>True once <see cref="Start"/> has set up the tray (an exit can only be handled from then on).</summary>
+    public bool IsRunning => _started;
 
     /// <summary>True when the shortcut in <see cref="Settings"/> is the one registered with Windows.</summary>
     public bool HotkeyRegistered => _activeGesture is not null && _activeGesture.ToString() == Settings.Hotkey;
@@ -121,7 +134,7 @@ public sealed class AppHost : IDisposable
 
         // The installer closes a running copy before an upgrade or uninstall by sending it WM_CLOSE.
         _closeRequestWindow = new CloseRequestWindow();
-        _closeRequestWindow.CloseRequested += (_, _) => ExitApp();
+        _closeRequestWindow.CloseRequested += (_, _) => ExitApp(ExitReason.External);
 
         var hotkeyRegistered = ApplyHotkey(Settings.Hotkey);
 
@@ -154,13 +167,20 @@ public sealed class AppHost : IDisposable
             SaveSettings();
         }
 
+        if (Settings.RecoveredEditsFile is { } recovered)
+        {
+            Tray.ShowMessage(AppName, $"Some unsaved changes were recovered to {recovered}.");
+            Settings.RecoveredEditsFile = null;
+            SaveSettings();
+        }
+
         return true;
     }
 
     /// <summary>The main window was closed (hidden): the first time ever, the tray says the app is still running.</summary>
     public void OnMainWindowHidden()
     {
-        if (Settings.HideToTrayNoticeShown || _exiting) return;
+        if (Settings.HideToTrayNoticeShown || _exiting || IsSessionEnding) return;
         Tray.ShowMessage(AppName, $"Still running. Press {Settings.Hotkey} or click the tray icon.");
         Settings.HideToTrayNoticeShown = true;
         SaveSettings();
@@ -612,14 +632,18 @@ public sealed class AppHost : IDisposable
     }
 
     /// <summary>
-    /// Quits the app. Unsaved edits in the main window are offered for saving first (Cancel stays); then the
-    /// windows close and the library is backed up if it changed, waiting at most 10 s. If the backup hasn't
+    /// Quits the app. For <see cref="ExitReason.User"/> unsaved edits in the main window are offered for saving first
+    /// (Cancel stays); for <see cref="ExitReason.External"/> nothing is asked (see <see cref="KeepUnsavedWorkWithoutAsking"/>).
+    /// Then the windows close and the library is backed up if it changed, waiting at most 10 s. If the backup hasn't
     /// finished by then the app exits anyway and the next start says <c>The last backup didn't finish.</c>
+    /// Only the first call counts.
     /// </summary>
-    public async void ExitApp()
+    public async void ExitApp(ExitReason reason = ExitReason.User)
     {
         if (_exiting) return;
-        if (_mainWindow is { IsVisible: true } && !_mainWindow.ViewModel.ConfirmDiscardOrSave())
+        if (reason == ExitReason.External)
+            KeepUnsavedWorkWithoutAsking();
+        else if (_mainWindow is { IsVisible: true } && !_mainWindow.ViewModel.ConfirmDiscardOrSave())
             return;
 
         // From here nothing can reopen a window or start a copy: the tray icon, shortcut and timers go first
@@ -645,6 +669,8 @@ public sealed class AppHost : IDisposable
     {
         if (IsSessionEnding) return;
         IsSessionEnding = true;
+        if (!_exiting && _started && !_disposed)
+            KeepUnsavedWorkWithoutAsking();
 
         if (!_exiting && _started && !_disposed && Settings.BackupFolder is { } folder)
         {
@@ -675,6 +701,33 @@ public sealed class AppHost : IDisposable
         }
 
         Dispose();
+    }
+
+    /// <summary>
+    /// For an exit nobody can be asked about (the installer closing the app, Windows logging off): unsaved edits in
+    /// the main window are saved when they are complete and can be written; otherwise they go to
+    /// <c>Recovered\recovered-&lt;time&gt;.txt</c> and the next start says where. An open setup wizard is left,
+    /// keeping the choices made so far. Error messages are not shown from here on.
+    /// </summary>
+    private void KeepUnsavedWorkWithoutAsking()
+    {
+        _quietExit = true;
+
+        if (_mainWindow?.ViewModel.SaveForExit() is { } unsaved)
+        {
+            try
+            {
+                Settings.RecoveredEditsFile = ExitEdits.WriteRecoveryFile(Paths.RecoveredFolder, unsaved, DateTime.Now);
+                SaveSettings();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Nothing more can be done without asking; the edits are lost.
+            }
+        }
+
+        if (_onboardingWindow is { ViewModel.IsFinished: false } wizard)
+            wizard.ViewModel.Leave();
     }
 
     /// <summary>Removes the tray icon, stops the backup timers and releases the global shortcut. Safe to call more than once.</summary>
@@ -879,7 +932,7 @@ public sealed class AppHost : IDisposable
 
     private void ShowError(string text)
     {
-        if (IsSessionEnding) return; // no questions while Windows is logging off
+        if (AsksNothing) return;
         ConfirmDialog.Inform(VisibleMainWindow, text);
     }
 

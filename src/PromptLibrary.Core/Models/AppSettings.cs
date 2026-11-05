@@ -22,4 +22,7 @@ public class AppSettings
 
     /// <summary>The backup at the last exit didn't finish in time; the next start says so once.</summary>
     public bool LastBackupUnfinished { get; set; }
+
+    /// <summary>Unsaved edits were written to this recovery file at the last exit; the next start says so once.</summary>
+    public string? RecoveredEditsFile { get; set; }
 }

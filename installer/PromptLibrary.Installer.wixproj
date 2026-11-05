@@ -9,8 +9,9 @@
     <AppPublishDir Condition="'$(AppPublishDir)' == ''">$(MSBuildThisFileDirectory)..\publish\</AppPublishDir>
     <DefineConstants>AppPublishDir=$([MSBuild]::EnsureTrailingSlash('$(AppPublishDir)'))</DefineConstants>
     <!-- ICE20: there is deliberately no FilesInUse dialog (the running app is closed for the user, see Package.wxs).
-         ICE91: files go to the user's profile on purpose; this package is per-user only. -->
-    <SuppressIces>ICE20;ICE91</SuppressIces>
+         ICE91: files go to the user's profile on purpose; this package is per-user only.
+         ICE61: MajorUpgrade AllowSameVersionUpgrades lets a same-version rebuild replace the installed copy. -->
+    <SuppressIces>ICE20;ICE61;ICE91</SuppressIces>
   </PropertyGroup>
 
   <ItemGroup>

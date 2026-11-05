@@ -15,11 +15,13 @@ namespace PromptLibrary.App.Views;
 public partial class MainWindow : Window, IDialogs
 {
     private readonly AppHost _host;
+    private readonly UserCloseTracker _closes;
     private bool _exiting;
 
     public MainWindow(AppHost host)
     {
         _host = host;
+        _closes = new UserCloseTracker(this, host);
         InitializeComponent();
         ViewModel = new MainViewModel(host, this);
         ViewModel.TitleFocusRequested += (_, _) => FocusLater(TitleBox);
@@ -47,8 +49,15 @@ public partial class MainWindow : Window, IDialogs
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        // When Windows is ending the session, close without asking: a question would block logoff,
-        // and unsaved edits are simply left unsaved.
+        // Another program (the installer) closing us: the app exits without asking anything instead.
+        if (_closes.CancelIfExternal(e))
+        {
+            base.OnClosing(e);
+            return;
+        }
+
+        // When Windows is ending the session, close without asking: a question would block logoff (the host has
+        // already saved or recovered unsaved edits).
         if (!_exiting && !_host.IsSessionEnding)
         {
             e.Cancel = true;
@@ -85,7 +94,11 @@ public partial class MainWindow : Window, IDialogs
         return dialog.ShowDialog() == true ? dialog.SelectedCategoryId : null;
     }
 
-    public void ShowMessage(string message) => ConfirmDialog.Inform(this, message);
+    public void ShowMessage(string message)
+    {
+        if (!_host.AsksNothing)
+            ConfirmDialog.Inform(this, message);
+    }
 
     // ---- Category rail -------------------------------------------------------------------------
 

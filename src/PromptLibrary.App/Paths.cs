@@ -12,6 +12,9 @@ public static class Paths
 
     public static string SettingsFile { get; } = Path.Combine(DataFolder, "settings.json");
 
+    /// <summary>Unsaved edits kept when the app was closed with nobody to ask (see <c>ExitEdits</c>).</summary>
+    public static string RecoveredFolder { get; } = Path.Combine(DataFolder, "Recovered");
+
     /// <summary>Safety copies made before a restore when no backup folder is set or it isn't available.</summary>
     public static string SafetyBackupsFolder { get; } = Path.Combine(DataFolder, "Safety backups");
 }

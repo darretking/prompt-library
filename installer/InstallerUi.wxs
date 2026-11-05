@@ -69,7 +69,8 @@
         <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
       </Dialog>
 
-      <!-- Shown while the install runs (modeless). -->
+      <!-- Shown while the install runs (modeless): the heading and a progress bar. No ActionText line: Windows
+           Installer fills it with raw templates such as "File: [1], Directory: [9]". -->
       <Dialog Id="ProgressDlg" Width="370" Height="270" Title="[ProductName]" Modeless="yes">
         <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Default="yes" Cancel="yes" Text="Cancel">
           <Publish Event="SpawnDialog" Value="CancelDlg" />
@@ -88,10 +89,7 @@
                  Hidden="yes" ShowCondition="Installed AND REMOVE=&quot;ALL&quot;"
                  Text="{\PL_Heading}Removing Prompt Library…" />
         <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
-        <Control Id="ActionText" Type="Text" X="20" Y="80" Width="330" Height="12" NoPrefix="yes">
-          <Subscribe Event="ActionText" Attribute="Text" />
-        </Control>
-        <Control Id="ProgressBar" Type="ProgressBar" X="20" Y="96" Width="330" Height="10" ProgressBlocks="yes" Text="Progress">
+        <Control Id="ProgressBar" Type="ProgressBar" X="20" Y="90" Width="330" Height="10" ProgressBlocks="yes" Text="Progress">
           <Subscribe Event="SetProgress" Attribute="Progress" />
         </Control>
         <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />

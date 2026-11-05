@@ -17,7 +17,10 @@
            Scope="perUser"
            Codepage="1252">
 
-    <MajorUpgrade DowngradeErrorMessage="A newer version of Prompt Library is already installed." />
+    <!-- AllowSameVersionUpgrades: a rebuild with the same version replaces the installed copy instead of adding a
+         second Settings > Apps entry. -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of Prompt Library is already installed." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <Icon Id="AppIcon.ico" SourceFile="..\src\PromptLibrary.App\Assets\app.ico" />

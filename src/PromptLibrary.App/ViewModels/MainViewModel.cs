@@ -64,7 +64,7 @@ public sealed class MainViewModel : ObservableObject
         RestoreCommand = new RelayCommand(_host.OpenRestore);
         OpenSettingsCommand = new RelayCommand(() => _host.OpenSettings());
         SetUpBackupsCommand = new RelayCommand(() => _host.OpenSettings(focusBackups: true));
-        ExitCommand = new RelayCommand(_host.ExitApp);
+        ExitCommand = new RelayCommand(() => _host.ExitApp());
         SetupGuideCommand = new RelayCommand(_host.OpenOnboarding);
         AboutCommand = new RelayCommand(_host.ShowAbout);
 
@@ -253,6 +253,19 @@ public sealed class MainViewModel : ObservableObject
             default:
                 return false;
         }
+    }
+
+    /// <summary>
+    /// For an exit nobody can be asked about (installer, logoff): saves unsaved edits that are complete and can be
+    /// written, as Save would. Otherwise returns them, for a recovery file. Null when nothing is left unsaved.
+    /// </summary>
+    public UnsavedEdit? SaveForExit()
+    {
+        if (_editor is not { IsDirty: true } editor) return null;
+
+        var categoryName = _host.Library.Categories.FirstOrDefault(c => c.Id == editor.CategoryId)?.Name;
+        var edit = new UnsavedEdit(editor.Title, editor.Description, editor.CategoryId, categoryName, editor.Text);
+        return ExitEdits.Choose(edit) == ExitEditAction.Save && Save() ? null : edit;
     }
 
     /// <summary>Rebuilds rail, list and choices from the library, keeping selections where they still exist.</summary>

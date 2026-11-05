@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -14,10 +15,12 @@ public partial class SettingsWindow : Window
     private static readonly int[] KeepChoices = [10, 30, 90, 365];
 
     private readonly AppHost _host;
+    private readonly UserCloseTracker _closes;
 
     public SettingsWindow(AppHost host)
     {
         _host = host;
+        _closes = new UserCloseTracker(this, host);
         InitializeComponent();
 
         ShortcutField.Shortcut = host.Settings.Hotkey;
@@ -101,5 +104,16 @@ public partial class SettingsWindow : Window
         _host.SaveSettings();
     }
 
-    private void Close_Click(object sender, RoutedEventArgs e) => Close();
+    private void Close_Click(object sender, RoutedEventArgs e)
+    {
+        _closes.MarkUserClose();
+        Close();
+    }
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        // Another program (the installer) closing us: the app exits without asking anything instead.
+        _closes.CancelIfExternal(e);
+        base.OnClosing(e);
+    }
 }

@@ -14,11 +14,13 @@ namespace PromptLibrary.App.Views;
 public partial class OnboardingWindow : Window
 {
     private readonly AppHost _host;
+    private readonly UserCloseTracker _closes;
     private bool _closingForExit;
 
     public OnboardingWindow(AppHost host)
     {
         _host = host;
+        _closes = new UserCloseTracker(this, host);
         InitializeComponent();
 
         ViewModel = new OnboardingViewModel(host);
@@ -31,7 +33,11 @@ public partial class OnboardingWindow : Window
             if (e.PropertyName == nameof(BackupLocationPickerViewModel.ResultText) && picker.ResultText is not null)
                 Dispatcher.BeginInvoke(DispatcherPriority.Loaded, ContentScroll.ScrollToEnd);
         };
-        ViewModel.CloseRequested += (_, _) => Close();
+        ViewModel.CloseRequested += (_, _) =>
+        {
+            _closes.MarkUserClose();
+            Close();
+        };
         ViewModel.ListenRequested += (_, _) => ListenForShortcut();
         ViewModel.PropertyChanged += (_, e) =>
         {
@@ -72,6 +78,7 @@ public partial class OnboardingWindow : Window
         if (e.Key == Key.Escape && Keyboard.Modifiers == ModifierKeys.None)
         {
             e.Handled = true;
+            _closes.MarkUserClose();
             Close();
             return;
         }
@@ -80,6 +87,13 @@ public partial class OnboardingWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
+        // Another program (the installer) closing us: the app exits without asking, leaving setup with its choices.
+        if (_closes.CancelIfExternal(e))
+        {
+            base.OnClosing(e);
+            return;
+        }
+
         if (!_closingForExit && !ViewModel.IsFinished)
         {
             // Not while a backup is running (its result decides what happens next); Esc and × wait for it.

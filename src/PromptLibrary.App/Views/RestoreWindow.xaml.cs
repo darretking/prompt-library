@@ -18,6 +18,7 @@ public partial class RestoreWindow : Window
     private const int FolderDisplayLength = 44;
 
     private readonly AppHost _host;
+    private readonly UserCloseTracker _closes;
     private readonly bool _isStartup;
     private string? _folder;
     private bool _restoring;
@@ -27,6 +28,7 @@ public partial class RestoreWindow : Window
     {
         _host = host;
         _isStartup = isStartup;
+        _closes = new UserCloseTracker(this, host);
         InitializeComponent();
         Loaded += async (_, _) =>
         {
@@ -45,6 +47,8 @@ public partial class RestoreWindow : Window
     {
         // The library file is being replaced; the window closes by itself when that's done.
         if (_restoring) e.Cancel = true;
+        // Another program (the installer) closing us: the app exits without asking anything instead.
+        else _closes.CancelIfExternal(e);
         base.OnClosing(e);
     }
 
@@ -139,6 +143,7 @@ public partial class RestoreWindow : Window
 
     private void SetUpBackups_Click(object sender, RoutedEventArgs e)
     {
+        _closes.MarkUserClose();
         Close();
         _host.OpenSettings(focusBackups: true);
     }
