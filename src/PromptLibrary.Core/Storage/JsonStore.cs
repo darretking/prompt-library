@@ -12,7 +12,7 @@ public record LoadResult<T>(LoadStatus Status, T? Value, string? Error);
 
 public static class JsonStore
 {
-    private static readonly JsonSerializerOptions Options = new()
+    internal static readonly JsonSerializerOptions Options = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
@@ -68,24 +68,7 @@ public static class JsonStore
                 || !version.TryGetInt32(out var v) || v != 1)
                 throw new InvalidDataException("Unsupported or missing schemaVersion (expected 1).");
 
-            // Missing properties keep the POCO defaults ("") after deserialising, so check the raw JSON.
-            RequireStrings(root, "categories", "name");
-            RequireStrings(root, "prompts", "title", "text");
-
-            var library = root.Deserialize<Library>(Options)
-                ?? throw new InvalidDataException("library.json is empty.");
-            library.Categories ??= [];
-            library.Prompts ??= [];
-
-            var categoryIds = library.Categories.Select(c => c.Id).ToHashSet();
-            foreach (var prompt in library.Prompts)
-            {
-                prompt.Description ??= "";
-                if (!categoryIds.Contains(prompt.CategoryId))
-                    throw new InvalidDataException($"Prompt '{prompt.Title}' references a missing category.");
-            }
-
-            return library;
+            return ValidateLibrary(root);
         }
         catch (JsonException ex)
         {
@@ -93,7 +76,33 @@ public static class JsonStore
         }
     }
 
-    private static string Serialize<T>(T value)
+    /// <summary>
+    /// Checks the categories and prompts of a library-shaped JSON object (required strings, every prompt's category
+    /// exists) and returns them. Does not check <c>schemaVersion</c>. Shared by library.json and team files.
+    /// </summary>
+    internal static Library ValidateLibrary(JsonElement root)
+    {
+        // Missing properties keep the POCO defaults ("") after deserialising, so check the raw JSON.
+        RequireStrings(root, "categories", "name");
+        RequireStrings(root, "prompts", "title", "text");
+
+        var library = root.Deserialize<Library>(Options)
+            ?? throw new InvalidDataException("library.json is empty.");
+        library.Categories ??= [];
+        library.Prompts ??= [];
+
+        var categoryIds = library.Categories.Select(c => c.Id).ToHashSet();
+        foreach (var prompt in library.Prompts)
+        {
+            prompt.Description ??= "";
+            if (!categoryIds.Contains(prompt.CategoryId))
+                throw new InvalidDataException($"Prompt '{prompt.Title}' references a missing category.");
+        }
+
+        return library;
+    }
+
+    internal static string Serialize<T>(T value)
         => EscapedSurrogatePair.Replace(JsonSerializer.Serialize(value, Options), m =>
             m.Groups[1].Value
             + new string([(char)Convert.ToInt32(m.Groups[2].Value, 16), (char)Convert.ToInt32(m.Groups[3].Value, 16)]));
