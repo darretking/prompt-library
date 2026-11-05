@@ -36,6 +36,15 @@ public sealed class TrayIcon : IDisposable
     public event EventHandler? ExitRequested;
     public event EventHandler? DoubleClicked;
 
+    /// <summary>The "Update to X…" item at the top of the menu was clicked.</summary>
+    public event EventHandler? UpdateRequested;
+
+    // What a click on the current balloon does (e.g. open the update dialog); null for a plain message.
+    private Action? _balloonClick;
+
+    // "Update to 1.0.2…" while an update is available; kept across Rebuild.
+    private string? _updateItemText;
+
     public TrayIcon(string tooltip)
     {
         _menuOwner.CreateHandle(new Forms.CreateParams());
@@ -43,6 +52,13 @@ public sealed class TrayIcon : IDisposable
 
         _icon = LoadAppIcon();
         _notifyIcon = new Forms.NotifyIcon { Icon = _icon, Visible = true };
+        _notifyIcon.BalloonTipClicked += (_, _) =>
+        {
+            var click = _balloonClick;
+            _balloonClick = null;
+            click?.Invoke();
+        };
+        _notifyIcon.BalloonTipClosed += (_, _) => _balloonClick = null;
         ToolTipText = tooltip;
         _notifyIcon.MouseClick += (_, e) =>
         {
@@ -118,6 +134,43 @@ public sealed class TrayIcon : IDisposable
                 () => ExitRequested?.Invoke(this, EventArgs.Empty));
         };
         _menu.Items.Add(exit);
+
+        AddUpdateItem();
+    }
+
+    /// <summary>Shows "Update to X…" (and a separator) at the top of the menu; null removes it.</summary>
+    public void SetUpdateItem(string? text)
+    {
+        if (text == _updateItemText) return;
+        RemoveUpdateItem();
+        _updateItemText = text;
+        AddUpdateItem();
+    }
+
+    private const string UpdateItemTag = "update";
+
+    private void AddUpdateItem()
+    {
+        if (_updateItemText is null) return;
+        var item = new Forms.ToolStripMenuItem(_updateItemText) { Tag = UpdateItemTag };
+        item.Click += (_, _) =>
+        {
+            _returnFocusTo = IntPtr.Zero; // the update dialog takes focus instead
+            // After this click handler has returned: the dialog is modal and must not run inside the menu's click.
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                () => UpdateRequested?.Invoke(this, EventArgs.Empty));
+        };
+        _menu.Items.Insert(0, item);
+        _menu.Items.Insert(1, new Forms.ToolStripSeparator { Tag = UpdateItemTag });
+    }
+
+    private void RemoveUpdateItem()
+    {
+        foreach (var item in _menu.Items.Cast<Forms.ToolStripItem>().Where(i => Equals(i.Tag, UpdateItemTag)).ToList())
+        {
+            _menu.Items.Remove(item);
+            item.Dispose();
+        }
     }
 
     /// <summary>
@@ -133,8 +186,12 @@ public sealed class TrayIcon : IDisposable
         _menu.Focus();
     }
 
-    public void ShowMessage(string title, string text, bool isError = false)
-        => _notifyIcon.ShowBalloonTip(3000, title, text, isError ? Forms.ToolTipIcon.Error : Forms.ToolTipIcon.None);
+    /// <summary>A notification; <paramref name="onClick"/> runs if the user clicks it (until the next one replaces it).</summary>
+    public void ShowMessage(string title, string text, bool isError = false, Action? onClick = null)
+    {
+        _balloonClick = onClick;
+        _notifyIcon.ShowBalloonTip(3000, title, text, isError ? Forms.ToolTipIcon.Error : Forms.ToolTipIcon.None);
+    }
 
     public void Dispose()
     {

@@ -1,0 +1,34 @@
+<Window x:Class="PromptLibrary.App.Views.UpdateDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Style="{StaticResource AppWindow}"
+        Title="Update available"
+        AutomationProperties.Name="Update available"
+        Icon="/Assets/app.ico"
+        Width="440" SizeToContent="Height"
+        ResizeMode="NoResize" ShowInTaskbar="False">
+    <!-- Ask: the new version, a "What's new" link, Not now / Update now.
+         Downloading: progress with Cancel; the window closes itself when the download ends. -->
+    <StackPanel Margin="16">
+        <TextBlock Text="Update available" FontSize="16" FontWeight="SemiBold" />
+        <TextBlock x:Name="MessageText" TextWrapping="Wrap" Margin="0,8,0,0" />
+        <Button x:Name="WhatsNewLink" Style="{StaticResource LinkButton}" Content="What's new"
+                HorizontalAlignment="Left" Margin="0,4,0,0" Click="WhatsNew_Click"
+                AutomationProperties.Name="What's new" />
+
+        <StackPanel x:Name="ProgressPanel" Margin="0,16,0,0" Visibility="Collapsed">
+            <TextBlock x:Name="ProgressText" Style="{StaticResource MutedText}" Text="Downloading update… 0%"
+                       AutomationProperties.LiveSetting="Polite" />
+            <ProgressBar x:Name="Progress" Height="6" Margin="0,6,0,0" Minimum="0" Maximum="1"
+                         Foreground="{StaticResource Brush.Brand}" Background="{StaticResource Brush.Line}"
+                         BorderThickness="0" AutomationProperties.Name="Download progress" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
+            <Button x:Name="NotNowButton" Content="Not now" IsCancel="True" Margin="0,0,8,0"
+                    AutomationProperties.Name="Not now" />
+            <Button x:Name="UpdateButton" Style="{StaticResource PrimaryButton}" Content="Update now" IsDefault="True"
+                    Click="Update_Click" AutomationProperties.Name="Update now" />
+        </StackPanel>
+    </StackPanel>
+</Window>

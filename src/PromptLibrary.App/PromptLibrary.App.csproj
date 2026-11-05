@@ -19,7 +19,21 @@
     <!-- The installer takes its version from this exe's file version; bump it for every release. -->
     <Version>1.0.1</Version>
     <Copyright>Copyright © 2026 Darret King. Licensed under GPL-3.0-or-later.</Copyright>
+    <!-- The GitHub repository whose releases the update checker asks about. A fork changes these two lines;
+         leaving either empty turns the checker off. -->
+    <UpdateRepositoryOwner>darretking</UpdateRepositoryOwner>
+    <UpdateRepositoryName>prompt-library</UpdateRepositoryName>
   </PropertyGroup>
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>UpdateRepositoryOwner</_Parameter1>
+      <_Parameter2>$(UpdateRepositoryOwner)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>UpdateRepositoryName</_Parameter1>
+      <_Parameter2>$(UpdateRepositoryName)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
 
   <!-- Single-file, self-contained publish (dotnet publish -c Release). Release only, so Debug builds and
        `dotnet run` keep the normal framework-dependent layout. -->

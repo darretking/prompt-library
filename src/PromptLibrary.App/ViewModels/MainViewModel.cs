@@ -69,6 +69,15 @@ public sealed class MainViewModel : ObservableObject
         ExitCommand = new RelayCommand(() => _host.ExitApp());
         SetupGuideCommand = new RelayCommand(_host.OpenOnboarding);
         AboutCommand = new RelayCommand(_host.ShowAbout);
+        OpenUpdateCommand = new RelayCommand(() => _host.Updates?.OpenDialog());
+        CheckForUpdatesCommand = new AsyncRelayCommand(CheckForUpdatesAsync, () => _host.Updates is not null);
+
+        if (_host.Updates is { } updates)
+            updates.ReminderChanged += (_, _) =>
+            {
+                OnPropertyChanged(nameof(UpdateReminder));
+                OnPropertyChanged(nameof(ShowUpdateReminder));
+            };
 
         _host.BackupStateChanged += (_, _) =>
         {
@@ -113,6 +122,35 @@ public sealed class MainViewModel : ObservableObject
     public IRelayCommand ExitCommand { get; }
     public IRelayCommand SetupGuideCommand { get; }
     public IRelayCommand AboutCommand { get; }
+
+    /// <summary>The rail's "Update available: v1.0.2" link: opens the update dialog.</summary>
+    public IRelayCommand OpenUpdateCommand { get; }
+
+    /// <summary><c>Help → Check for updates…</c>.</summary>
+    public IAsyncRelayCommand CheckForUpdatesCommand { get; }
+
+    /// <summary><c>Update available: v1.0.2</c> while a newer version is known; otherwise null.</summary>
+    public string? UpdateReminder => _host.Updates?.ReminderText;
+
+    public bool ShowUpdateReminder => UpdateReminder is not null;
+
+    private async Task CheckForUpdatesAsync()
+    {
+        if (_host.Updates is not { } updates) return;
+        ShowStatus("Checking for updates…", TimeSpan.FromSeconds(30));
+        try
+        {
+            await updates.CheckNowAsync();
+        }
+        finally
+        {
+            if (StatusText == "Checking for updates…")
+            {
+                _statusTimer.Stop();
+                StatusText = null;
+            }
+        }
+    }
 
     public CategoryItem? SelectedCategory
     {

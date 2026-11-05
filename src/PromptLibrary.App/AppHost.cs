@@ -4,7 +4,10 @@ using System.Windows;
 using System.Windows.Threading;
 using PromptLibrary.App.Hotkeys;
 using PromptLibrary.App.Startup;
+using System.Net.Http;
+using System.Reflection;
 using PromptLibrary.App.Tray;
+using PromptLibrary.App.Updates;
 using PromptLibrary.App.Views;
 using PromptLibrary.Core.Backup;
 using PromptLibrary.Core.Clipboard;
@@ -14,6 +17,7 @@ using PromptLibrary.Core.Menu;
 using PromptLibrary.Core.Models;
 using PromptLibrary.Core.Seed;
 using PromptLibrary.Core.Storage;
+using PromptLibrary.Core.Updates;
 
 namespace PromptLibrary.App;
 
@@ -69,6 +73,12 @@ public sealed class AppHost : IDisposable
     private bool _backupsPaused;
     private bool _pausedNoticeShown;
     private int _backupStateVersion;
+
+    // One client for the update check and download; each request sets its own time limit.
+    private readonly HttpClient _http = new() { Timeout = Timeout.InfiniteTimeSpan };
+
+    /// <summary>The update checker, or null when no GitHub repository is configured (see the App .csproj).</summary>
+    public UpdateCoordinator? Updates { get; private set; }
 
     public Library Library { get; private set; } = new();
     public AppSettings Settings { get; private set; } = new();
@@ -152,6 +162,7 @@ public sealed class AppHost : IDisposable
         Tray.SettingsRequested += (_, _) => OpenSettings();
         Tray.DoubleClicked += (_, _) => ShowMainWindow();
         Tray.ExitRequested += (_, _) => ExitApp();
+        Tray.UpdateRequested += (_, _) => Updates?.OpenDialog();
         Tray.Rebuild(QuickMenuBuilder.Build(Library));
         _started = true;
 
@@ -167,6 +178,7 @@ public sealed class AppHost : IDisposable
         ApplyStartupRegistration();
         RefreshBackupState();
         StartBackupSchedule();
+        StartUpdates(); // before any window opens, so the main window sees the update reminder
 
         if (restoredFrom is not null)
         {
@@ -209,6 +221,39 @@ public sealed class AppHost : IDisposable
 
         return true;
     }
+
+    /// <summary>Creates the update checker from the repository in the assembly's metadata (none configured: no checker).</summary>
+    private void StartUpdates()
+    {
+        try
+        {
+            var assembly = typeof(AppHost).Assembly;
+            string? Metadata(string key) => assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
+                .FirstOrDefault(a => a.Key == key)?.Value is { Length: > 0 } value ? value : null;
+            if (Metadata("UpdateRepositoryOwner") is not { } owner || Metadata("UpdateRepositoryName") is not { } repo)
+                return;
+
+            var running = AppVersion.FromSystemVersion(assembly.GetName().Version ?? new Version(0, 0, 0));
+            var service = new UpdateCheckService(_http, new UpdateOptions(owner, repo, running, Paths.UpdateStateFile),
+                () => DateTimeOffset.Now);
+            Updates = new UpdateCoordinator(this, service, new UpdateDownloader(_http));
+            Updates.Start();
+        }
+        catch (Exception ex)
+        {
+            // The app works without update checks; never let them stop it starting.
+            CrashLog.Append(Paths.CrashLogFile, ex, DateTime.Now);
+            Updates = null;
+        }
+    }
+
+    /// <summary>The window update questions belong to: the main window when it is showing, else none (centred on screen).</summary>
+    public Window? DialogOwner => VisibleMainWindow;
+
+    /// <summary>True when the main window is the active window, not minimized, with no dialog of its own open.</summary>
+    public bool MainWindowInFront => _mainWindow is { IsVisible: true, IsActive: true } window
+                                     && window.WindowState != WindowState.Minimized
+                                     && window.OwnedWindows.Count == 0;
 
     /// <summary>The main window was closed (hidden): the first time ever, the tray says the app is still running.</summary>
     public void OnMainWindowHidden()
@@ -327,6 +372,7 @@ public sealed class AppHost : IDisposable
         if (_mainWindow.WindowState == WindowState.Minimized)
             _mainWindow.WindowState = WindowState.Normal;
         _mainWindow.Activate();
+        Updates?.OnMainWindowShown();
     }
 
     /// <summary>
@@ -376,6 +422,7 @@ public sealed class AppHost : IDisposable
             {
                 var finished = _onboardingWindow?.ViewModel.IsFinished == true;
                 _onboardingWindow = null;
+                if (finished) Updates?.CheckSoon(); // the first update check waits for setup to finish
                 // Left before Finish (step 4 explains a missing shortcut): say why the shortcut doesn't work.
                 if (!finished && !_exiting && !IsSessionEnding && !HotkeyRegistered)
                     ShowHotkeyConflictMessage();
@@ -701,9 +748,16 @@ public sealed class AppHost : IDisposable
     /// finished by then the app exits anyway and the next start says <c>The last backup didn't finish.</c>
     /// Only the first call counts.
     /// </summary>
-    public async void ExitApp(ExitReason reason = ExitReason.User)
+    public void ExitApp(ExitReason reason = ExitReason.User) => TryExit(reason);
+
+    /// <summary>
+    /// <see cref="ExitApp"/> that says whether the exit went ahead: false when an open close question or Cancel at
+    /// "Save changes?" kept the app running. <paramref name="afterExit"/> (e.g. starting the update installer) runs
+    /// last, after the windows have closed and the exit backup has finished, just before the app shuts down.
+    /// </summary>
+    public bool TryExit(ExitReason reason = ExitReason.User, Action? afterExit = null)
     {
-        if (_exiting) return;
+        if (_exiting) return false;
         if (reason == ExitReason.External)
             KeepUnsavedWorkWithoutAsking();
         else
@@ -712,16 +766,23 @@ public sealed class AppHost : IDisposable
             if (_mainWindow?.IsAskingToClose == true)
             {
                 _mainWindow.ActivateCloseQuestion();
-                return;
+                return false;
             }
             if (_onboardingWindow?.IsAskingToClose == true)
             {
                 _onboardingWindow.ActivateCloseQuestion();
-                return;
+                return false;
             }
             if (_mainWindow is { IsVisible: true } && !_mainWindow.ViewModel.ConfirmDiscardOrSave())
-                return;
+                return false;
         }
+
+        _ = FinishExitAsync(afterExit);
+        return true;
+    }
+
+    private async Task FinishExitAsync(Action? afterExit)
+    {
 
         // From here nothing can reopen a window or start a copy: the tray icon, shortcut and timers go first
         // (the backup result is still recorded in settings; it just isn't announced).
@@ -735,6 +796,18 @@ public sealed class AppHost : IDisposable
         var backup = RunBackupAsync(BackupTrigger.OnExit);
         if (await Task.WhenAny(backup, Task.Delay(ExitBackupTimeout)) != backup)
             RecordUnfinishedBackup();
+
+        if (afterExit is not null)
+        {
+            try
+            {
+                afterExit();
+            }
+            catch (Exception ex)
+            {
+                CrashLog.Append(Paths.CrashLogFile, ex, DateTime.Now); // the exit itself must still finish
+            }
+        }
 
         Application.Current.Shutdown();
     }
@@ -858,6 +931,7 @@ public sealed class AppHost : IDisposable
 
         _backupTimer?.Stop();
         _firstBackupTimer?.Stop();
+        Updates?.Dispose();
         _hotkey?.Dispose();
         _hotkey = null;
         _closeRequestWindow?.Dispose();

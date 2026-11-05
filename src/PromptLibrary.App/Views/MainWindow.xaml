@@ -96,6 +96,7 @@
             </MenuItem>
             <MenuItem Header="_Help" AutomationProperties.Name="Help">
                 <MenuItem Header="_Setup guide…" Command="{Binding SetupGuideCommand}" />
+                <MenuItem Header="Check for _updates…" Command="{Binding CheckForUpdatesCommand}" />
                 <MenuItem Header="_About Prompt Library" Command="{Binding AboutCommand}" />
             </MenuItem>
         </Menu>
@@ -207,6 +208,12 @@
                         </ListBox>
 
                         <StackPanel Grid.Row="2" Margin="8,8,8,16">
+                            <!-- A newer version is known (the user said Not now): stays until they update. -->
+                            <Button Style="{StaticResource LinkButton}" Content="{Binding UpdateReminder}"
+                                    Command="{Binding OpenUpdateCommand}" HorizontalAlignment="Left"
+                                    Margin="8,0,8,8" ToolTip="Click to update"
+                                    AutomationProperties.Name="{Binding UpdateReminder}"
+                                    Visibility="{Binding ShowUpdateReminder, Converter={StaticResource BoolToVisibility}}" />
                             <TextBlock Text="{Binding StatusText}" Style="{StaticResource MutedWhenSet}"
                                        Margin="8,0,8,8" AutomationProperties.LiveSetting="Polite" />
                             <StackPanel Margin="8,0,8,8"
