@@ -1,6 +1,6 @@
 # Team prompts — design
 
-Date: 2026-11-05 · Status: **approved** (owner delegated all further decisions to Claude, 2026-11-05) · Target release: **v1.1.0** · Builds on v1.0.2
+Date: 2026-11-05 · Status: **approved**. The owner confirmed the brainstorm meets their 95 % bar and delegated all further decisions to Claude (2026-11-05). · Target release: **v1.1.0** · Builds on v1.0.2
 
 ## Why
 
