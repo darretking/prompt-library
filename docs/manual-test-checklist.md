@@ -67,6 +67,16 @@ Tip: to start clean, exit the app and delete `%APPDATA%\PromptLibrary`. Release 
 - [ ] Reboot (Release or installed build only). Expected: the app starts in the tray with no window, and the hotkey works.
 - [ ] Remove the `PromptLibrary` Run value afterwards if you don't want startup.
 
+## Updates
+
+Build an older version first (`dotnet build src/PromptLibrary.App -p:Version=1.0.0`) and delete `%APPDATA%\PromptLibrary\update-check.json`.
+
+- [ ] Start the app hidden and wait a minute. Expected: one notification "Prompt Library X is available. Click to update."; clicking it opens the update dialog.
+- [ ] Not now. Expected: "Update available: vX" in the category rail and "Update to X…" at the top of the tray menu; both open the dialog. Restart: no second notification, the reminder is still there.
+- [ ] Help → Check for updates… with the network off. Expected: "Couldn't check for updates…". With it on: the dialog, even after Not now.
+- [ ] Update now (installed build, with unsaved edits open). Expected: download progress, then "Save changes?"; Cancel keeps the app running. Save: the app closes, the installer opens, and after it finishes the new version starts.
+- [ ] Run the current version. Expected: no notification and no reminder.
+
 ## Scaling & accessibility
 - [ ] At 100%, 150% and 200% display scaling (sign out and in after changing): main window, quick menu, Settings, Restore and the wizard are sharp, nothing is clipped, and the minimum window size still works.
 - [ ] Keyboard only: every screen is usable without the mouse and the focus ring is always visible.

@@ -10,8 +10,7 @@
     <!-- Ask: the new version, a "What's new" link, Not now / Update now.
          Downloading: progress with Cancel; the window closes itself when the download ends. -->
     <StackPanel Margin="16">
-        <TextBlock Text="Update available" FontSize="16" FontWeight="SemiBold" />
-        <TextBlock x:Name="MessageText" TextWrapping="Wrap" Margin="0,8,0,0" />
+        <TextBlock x:Name="MessageText" TextWrapping="Wrap" />
         <Button x:Name="WhatsNewLink" Style="{StaticResource LinkButton}" Content="What's new"
                 HorizontalAlignment="Left" Margin="0,4,0,0" Click="WhatsNew_Click"
                 AutomationProperties.Name="What's new" />

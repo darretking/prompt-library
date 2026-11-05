@@ -89,7 +89,7 @@ You've written a prompt that works. Then it disappears into a notes app, a chat 
     </td>
     <td width="50%" valign="top">
       <h3>🔒 Private by default</h3>
-      <p>No account. No sign-in. No tracking. No servers. Your prompts live on your PC and in the backup folder you choose, and nowhere else.</p>
+      <p>No account. No sign-in. No tracking. Your prompts live on your PC and in the backup folder you choose, and nowhere else. Once a day the app asks GitHub whether a newer version exists; nothing about you or your prompts is sent.</p>
     </td>
   </tr>
   <tr>

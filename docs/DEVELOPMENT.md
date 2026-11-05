@@ -48,6 +48,18 @@ Debug builds never add themselves to Windows startup; Release builds do (when th
 
 `PROMPTLIBRARY_DEBUG_NO_CLOUDS=1` (Debug builds only) hides detected cloud folders, so testing never touches your real OneDrive, Google Drive, Dropbox or iCloud.
 
+`PROMPTLIBRARY_DEBUG_NO_INSTALL=1` makes the update dialog's **Update now** stop after downloading and verifying the installer and show it in Explorer, so testing never installs over your copy.
+
+### Update checks
+
+The app asks GitHub for the latest release (`GET /repos/{owner}/{repo}/releases/latest`, no token, a `PromptLibrary/<version>` User-Agent) about 30 s after start and then re-checks hourly whether a check is due: at most one answered check per 24 hours, and at most one attempt per hour while offline. Nothing is checked before setup is finished. **Help → Check for updates…** always checks.
+
+- **Repository:** `<UpdateRepositoryOwner>` and `<UpdateRepositoryName>` in `src/PromptLibrary.App/PromptLibrary.App.csproj` (baked into the exe as assembly metadata). A fork changes these; leaving one empty turns the checker off.
+- **Versions:** the release tag (`v1.0.2`) is compared with the exe's version (`<Version>`). Pre-releases and drafts are never offered.
+- **Flow:** a new version is announced once (tray notification, or the dialog if the main window is in front). **Not now** leaves "Update available" in the category rail and "Update to X…" at the top of the tray menu. **Update now** downloads `PromptLibrary-Setup.msi` to `%TEMP%\PromptLibrary\`, checks its size and SHA-256 against the release's `digest`, exits the app the normal way (save question, exit backup) and then starts the installer. Any failure opens the release page instead.
+- **Releases** therefore need the MSI attached as an asset; GitHub adds the `digest` automatically.
+- **To test against a real release,** build an older version: `dotnet build src/PromptLibrary.App -p:Version=1.0.0`, then run with both debug switches above and use Help → Check for updates…. Back up `%APPDATA%\PromptLibrary` first and delete `update-check.json` to start fresh.
+
 ### Manual checks
 
 Some things only a real desktop can show (auto-paste into other apps, notifications, display scaling). They're listed in [manual-test-checklist.md](manual-test-checklist.md) and [edge-cases.md](edge-cases.md).
@@ -82,6 +94,7 @@ The MSI installs per user (no admin prompt) to `%LOCALAPPDATA%\Programs\Prompt L
 | `Recovered\` | Unsaved edits rescued after an unexpected close |
 | `Safety backups\` | Copies made before a restore when backups are off |
 | `crash.log` | Details of any unexpected error |
+| `update-check.json` | When GitHub was last asked about updates, the newest release seen, and the version you said "Not now" to |
 
 ## Design
 
