@@ -61,7 +61,7 @@ You've written a prompt that works. Then it disappears into a notes app, a chat 
     </td>
     <td width="50%" valign="top">
       <h3>🔎 Find any prompt in a second</h3>
-      <p>Search across titles, descriptions and the prompt text itself. Organise prompts into your own categories: Coding, Marketing, Testing, whatever fits how you work.</p>
+      <p>Search across titles, descriptions and the prompt text itself. Organise prompts into your own categories: Marketing, Recipes, Travel, Coding, whatever fits your life and work.</p>
     </td>
   </tr>
   <tr>
@@ -102,7 +102,7 @@ You've written a prompt that works. Then it disappears into a notes app, a chat 
 
 ## Ready in under a minute
 
-Install it, and a short setup gets you going: try the shortcut, pick where backups go, and you're done. Twelve example prompts are included so you can start straight away.
+Install it, and a short setup gets you going: try the shortcut, pick where backups go, and you're done. You start with 39 ready-made prompts across 13 categories, from marketing and business to recipes, travel, kids' games and personal productivity, so it's useful from the first minute.
 
 <table>
   <tr>
@@ -126,9 +126,35 @@ Install it, and a short setup gets you going: try the shortcut, pick where backu
 
 ## Made for people who use AI every day
 
-- **Developers** with go-to prompts for code review, refactoring, tests and debugging, pasted straight into Claude Code, Copilot Chat or the terminal.
-- **Marketers and writers** reusing tone guides, briefs and templates across ChatGPT, Claude and Gemini.
+- **Business owners and marketers** planning content, writing ad copy, testing ideas and setting prices.
+- **Busy people and parents** planning the week, the meals, the trip and the kids' party.
+- **Students and lifelong learners** turning any topic into a plan, an explanation or a quiz.
+- **Job seekers** tailoring a CV, practising interviews and preparing to ask for a raise.
+- **Developers** pasting go-to prompts straight into Claude Code, Copilot Chat or the terminal.
 - **Anyone** who's tired of rewriting the same instructions from memory.
+
+<details>
+  <summary><b>See all 39 starter prompts</b></summary>
+  <br/>
+
+| Category | Prompts |
+| --- | --- |
+| Marketing | Social media content calendar · Ad copy in five angles · Ideal customer profile |
+| Website design | Plan a landing page · Review my homepage · Colours and fonts |
+| Productivity | Plan my week · Break down a big task · Turn notes into actions |
+| Kids & family | Party games for kids · Rainy-day activities · Personalised bedtime story |
+| Recipes & cooking | Cook with what I have · Weekly meal plan · Adapt a recipe |
+| Business | Test a business idea · SWOT analysis · Set my prices |
+| Writing & email | Reply to an email · Make this sound better · Summarise this |
+| Learning | Explain it simply · Make me a study plan · Quiz me |
+| Health & fitness | Beginner workout plan · Build a healthy habit · Desk stretch routine |
+| Travel | Plan a trip itinerary · Packing list · Local tips and phrases |
+| Money | Make a monthly budget · Savings goal plan · Help me decide on a purchase |
+| Career | Tailor my CV to a job · Interview practice · Ask for a raise |
+| Coding | Explain this code · Fix this error · Review my code |
+
+Each one fills in your details through `{placeholders}`, tells the AI exactly what to produce, and is yours to edit, rename or delete.
+</details>
 
 <br/>
 

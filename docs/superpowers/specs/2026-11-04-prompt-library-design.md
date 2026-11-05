@@ -174,95 +174,52 @@ Mockup: `.superpowers/brainstorm/*/content/main-window-layout.html`, option A (l
 
 ## Appendix A — Seed prompts
 
-Used for first-run seed data and as test fixtures. Several deliberately contain multi-line text, quotes, code fences, `{placeholders}`, emoji and an empty description.
+A new library starts with 39 example prompts in 13 everyday categories (3 each), revised on 2026-11-05 to be useful beyond software development: marketing, website design, productivity, kids and family, recipes, business, writing, learning, health, travel, money, career and coding.
+
+Every prompt follows the same pattern, based on Anthropic's and OpenAI's published prompting guidance: give the AI a role, put the user's details in `{placeholders}`, state the task and why, ask for a specific output format, say what to do (not only what to avoid), and let the AI ask questions when details are missing. Health and money prompts include a short safety note.
+
+The exact text of each prompt is the source of truth in `src/PromptLibrary.Core/Seed/SeedLibrary.cs`. For testing, the set deliberately includes multi-line text, quotes, a code fence (*Explain this code*), an emoji (*Party games for kids*) and one empty description (*Fix this error*).
 
 | # | Category | Title | Description |
 |---|----------|-------|-------------|
-| 1 | Coding | Explain this code | Plain-English walkthrough of unfamiliar code |
-| 2 | Coding | Refactor for readability | Clean up without changing behaviour |
-| 3 | Coding | Fix this error | *(empty)* |
-| 4 | Testing | Write unit tests | xUnit tests covering happy path + edge cases |
-| 5 | Testing | Find edge cases | Brainstorm what could break |
-| 6 | User interface | Critique this screen | Usability review of a screenshot |
-| 7 | User interface | Write empty-state copy | Friendly text for "nothing here yet" screens |
-| 8 | Marketing | Product announcement post | LinkedIn launch post |
-| 9 | Marketing | Landing page headline ideas | 10 headline + subheadline pairs |
-| 10 | Documentation | Write a README | Project README from scratch |
-| 11 | Documentation | Summarise changes for a release | Turn commit list into release notes |
-| 12 | Code review | Review my pull request | Thorough PR review with priorities |
+| 1 | Marketing | Social media content calendar | Two weeks of posts, ready to schedule |
+| 2 | Marketing | Ad copy in five angles | Headlines and body text to A/B test |
+| 3 | Marketing | Ideal customer profile | Who you're really selling to |
+| 4 | Website design | Plan a landing page | Section-by-section layout and copy |
+| 5 | Website design | Review my homepage | Clarity, trust and conversion check |
+| 6 | Website design | Colours and fonts | A brand palette and type pairing |
+| 7 | Productivity | Plan my week | Priorities, time blocks and what to drop |
+| 8 | Productivity | Break down a big task | From overwhelming to first step |
+| 9 | Productivity | Turn notes into actions | Messy notes to a clear to-do list |
+| 10 | Kids & family | Party games for kids | Games for the right age and space |
+| 11 | Kids & family | Rainy-day activities | Screen-free ideas with what's at home |
+| 12 | Kids & family | Personalised bedtime story | A calming story starring your child |
+| 13 | Recipes & cooking | Cook with what I have | Recipes from the ingredients in your kitchen |
+| 14 | Recipes & cooking | Weekly meal plan | Seven days of dinners plus a shopping list |
+| 15 | Recipes & cooking | Adapt a recipe | Change servings, diet or ingredients |
+| 16 | Business | Test a business idea | Honest pros, risks and next steps |
+| 17 | Business | SWOT analysis | Strengths, weaknesses, opportunities, threats |
+| 18 | Business | Set my prices | Pricing options with reasoning |
+| 19 | Writing & email | Reply to an email | A clear, polite reply in your voice |
+| 20 | Writing & email | Make this sound better | Rewrite for clarity and tone |
+| 21 | Writing & email | Summarise this | The key points from something long |
+| 22 | Learning | Explain it simply | Understand any topic step by step |
+| 23 | Learning | Make me a study plan | A realistic plan to learn something new |
+| 24 | Learning | Quiz me | Active practice with feedback |
+| 25 | Health & fitness | Beginner workout plan | A safe plan for your goal and schedule |
+| 26 | Health & fitness | Build a healthy habit | Small steps that actually stick |
+| 27 | Health & fitness | Desk stretch routine | Ten minutes for neck, back and wrists |
+| 28 | Travel | Plan a trip itinerary | Day by day, at your pace and budget |
+| 29 | Travel | Packing list | Everything you need, nothing you don't |
+| 30 | Travel | Local tips and phrases | Customs and words to know before you go |
+| 31 | Money | Make a monthly budget | See where your money goes |
+| 32 | Money | Savings goal plan | How to reach a target by a date |
+| 33 | Money | Help me decide on a purchase | Compare options side by side |
+| 34 | Career | Tailor my CV to a job | Match your CV to the job advert |
+| 35 | Career | Interview practice | A mock interview with feedback |
+| 36 | Career | Ask for a raise | Prepare the case and the conversation |
+| 37 | Coding | Explain this code | Plain-English walkthrough of unfamiliar code |
+| 38 | Coding | Fix this error | *(empty)* |
+| 39 | Coding | Review my code | A thorough review with priorities |
 
-Prompt texts:
-
-**1.**
-```
-Explain what the following code does, step by step, as if I'm a mid-level developer new to this codebase. Call out anything surprising, risky, or non-obvious. End with a one-sentence summary.
-```
-
-**2.**
-```
-Refactor the code below for readability. Rules:
-- Do NOT change behaviour or public signatures
-- Prefer small, well-named functions
-- Remove dead code and duplicated logic
-Show the refactored code, then a bullet list of what you changed and why.
-```
-
-**3.**
-```
-I'm getting this error:
-
-{paste error here}
-
-Find the most likely root cause before suggesting a fix. Ask me for the relevant file if you need it. Don't guess.
-```
-
-**4.**
-```
-Write xUnit tests for the class below. Cover: the happy path, null/empty inputs, boundary values, and at least one failure case. Use the Arrange / Act / Assert pattern and descriptive test names like Method_Scenario_ExpectedResult.
-```
-
-**5.**
-```
-List every edge case you can think of for this feature: "{feature description}". Group them by: input, timing/concurrency, permissions, and data size. Mark the 3 most likely to cause a real bug.
-```
-
-**6.**
-```
-Review the attached screenshot as a senior UX designer. Comment on: visual hierarchy, spacing, contrast/accessibility, and anything a first-time user would find confusing. Rank issues by impact — highest first.
-```
-
-**7.**
-```
-Write 3 options for empty-state text for a screen that shows "{what the list contains}". Each option: a short heading (max 6 words) + one helpful sentence + a button label. Tone: friendly, not cute. 🙂
-```
-
-**8.**
-```
-Write a LinkedIn post announcing "{product name}". Audience: developers and tech leads. Lead with the problem it solves, not the features. Max 150 words, no hashtag spam (2 max), end with a clear call to action.
-```
-
-**9.**
-```
-Give me 10 headline + subheadline pairs for a landing page for {product}. Mix styles: benefit-led, problem-led, curiosity, and "how it works". Keep headlines under 10 words.
-```
-
-**10.**
-````
-Write a README.md for this project. Sections: what it is (2 sentences), screenshot placeholder, install, quick start, configuration, FAQ, license. Use code blocks like:
-
-```bash
-dotnet run
-```
-
-Keep it scannable — short paragraphs, lots of headings.
-````
-
-**11.**
-```
-Turn the commit messages below into user-facing release notes. Group into "New", "Improved", "Fixed". Drop internal-only changes (refactors, CI tweaks). Write for end users, not developers.
-```
-
-**12.**
-```
-Review this diff like a strict but fair senior engineer. For each issue give: file + line, the problem, why it matters, and a suggested fix. Label each as "must fix", "should fix", or "nit". Don't comment on formatting — we have a linter for that. Check especially for: null handling, "off-by-one" errors, and anything that's 'clever' but hard to read.
-```
+Existing libraries are never changed: the seed is only used when no `library.json` exists.

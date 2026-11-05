@@ -27,8 +27,8 @@ A second, separate score per screen. **Target: 95% or more** on the main window 
 Method: a cognitive walkthrough of the core tasks below as a first-time user who has never seen the app (no docs, no tooltips read first), counting clicks/keystrokes and noting every hesitation ("where do I…?", "what does this do?"), plus a 5-second first-glance test from the screenshot.
 
 Core tasks (main window):
-1. Copy the prompt "Write unit tests" to the clipboard.
-2. Find a prompt that mentions "headline" without knowing its category.
+1. Copy the prompt "Plan my week" to the clipboard.
+2. Find a prompt that mentions "itinerary" without knowing its category.
 3. Add a new prompt to Marketing and save it.
 4. Fix a typo in an existing prompt's text and save.
 5. Rename a category.
