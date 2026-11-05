@@ -52,7 +52,7 @@ public class TeamCacheTests : IDisposable
         TeamReadResult Ok(string json) => new(TeamReadStatus.Ok, TeamFile.Parse(json), json, TeamFile.Hash(json), null);
         var now = DateTimeOffset.UtcNow;
         Assert.True(TeamRefresh.Apply(Ok(Good), path, s, now));
-        Assert.False(TeamRefresh.Apply(Ok(Good.Replace("\n", "\r\n")), path, s, now));
+        Assert.False(TeamRefresh.Apply(Ok(Good.ReplaceLineEndings("\r\n")), path, s, now));
         Assert.True(TeamRefresh.Apply(Ok(Good.Replace("Sales", "Ops")), path, s, now));
     }
 
