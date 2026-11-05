@@ -162,9 +162,12 @@ public class TeamReaderTests : IDisposable
     {
         protected override async Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context)
         {
+            // A valid team file followed by blank padding: only the size cap can reject it.
+            var head = Encoding.UTF8.GetBytes(Good);
+            await stream.WriteAsync(head);
             var chunk = new byte[64 * 1024];
             Array.Fill(chunk, (byte)' ');
-            for (long sent = 0; sent < size; sent += chunk.Length) await stream.WriteAsync(chunk);
+            for (long sent = head.Length; sent < size; sent += chunk.Length) await stream.WriteAsync(chunk);
         }
 
         protected override bool TryComputeLength(out long length)
@@ -172,6 +175,14 @@ public class TeamReaderTests : IDisposable
             length = 0;
             return false;
         }
+    }
+
+    [Fact]
+    public async Task Read_Url_Under2MB_NoContentLength_IsOk()
+    {
+        var h = new FakeHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new NoLengthContent(1024 * 1024) }));
+        var r = await Reader(h).ReadAsync(Url(), default);
+        Assert.Equal(TeamReadStatus.Ok, r.Status);
     }
 
     [Fact]
