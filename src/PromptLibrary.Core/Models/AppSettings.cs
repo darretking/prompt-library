@@ -31,4 +31,19 @@ public class AppSettings
 
     /// <summary>File names of the copies restores made of the library first (labelled in the Restore window).</summary>
     public List<string> PreRestoreBackupFiles { get; set; } = [];
+
+    /// <summary>Where this PC's team library lives (folder or link); null when not joined.</summary>
+    public string? TeamSource { get; set; }
+
+    /// <summary>Pinned prompts (personal or team), in pin order, newest last.</summary>
+    public List<Guid> PinnedPromptIds { get; set; } = [];
+
+    /// <summary>Team prompts this PC has hidden.</summary>
+    public List<Guid> HiddenTeamPromptIds { get; set; } = [];
+
+    /// <summary>Team prompt ID to the fingerprint of the copy this PC last saw (drives New / Updated markers).</summary>
+    public Dictionary<Guid, string> SeenTeamPrompts { get; set; } = [];
+
+    /// <summary>True once the first copy of the team library has been recorded as already seen.</summary>
+    public bool TeamBaselineTaken { get; set; }
 }
