@@ -24,6 +24,9 @@ public static class Paths
     /// <summary>When the app last asked GitHub for a newer version, and what it was told (see <c>UpdateStore</c>).</summary>
     public static string UpdateStateFile { get; } = Path.Combine(DataFolder, "update-check.json");
 
+    /// <summary>The offline copy of the joined team library (see <c>TeamCache</c>).</summary>
+    public static string TeamCacheFile { get; } = Path.Combine(DataFolder, "team-cache.json");
+
     /// <summary>Where a downloaded installer waits to be run: <c>%TEMP%\PromptLibrary\</c>.</summary>
     public static string UpdateDownloadFolder { get; } = Path.Combine(Path.GetTempPath(), "PromptLibrary");
 }

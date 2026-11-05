@@ -1,0 +1,259 @@
+using System.IO;
+using System.Net.Http;
+using PromptLibrary.App.Team;
+using PromptLibrary.Core.Models;
+using PromptLibrary.Core.Team;
+
+namespace PromptLibrary.App.Tests;
+
+public sealed class TeamLibraryServiceTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "pl-team-svc-" + Guid.NewGuid().ToString("N"));
+    private readonly HttpClient _http = new();
+    private readonly AppSettings _settings = new();
+    private int _settingsSaves;
+    private DateTimeOffset _now = new(2026, 11, 5, 9, 0, 0, TimeSpan.Zero);
+
+    public TeamLibraryServiceTests() => Directory.CreateDirectory(_root);
+
+    public void Dispose()
+    {
+        _http.Dispose();
+        try { Directory.Delete(_root, true); } catch (IOException) { }
+    }
+
+    private string Cache => Path.Combine(_root, "cache", "team-cache.json");
+
+    private TeamLibraryService NewService()
+        => new(_http, "1.0.0", Cache, _settings, () => new Library(), () => { _settingsSaves++; return true; },
+            () => _now, _ => { }, TimeSpan.FromMilliseconds(50));
+
+    private string MakeTeamFolder(string name, params string[] promptTitles)
+    {
+        var folder = Path.Combine(_root, name);
+        Directory.CreateDirectory(folder);
+        var cat = new Category { Id = Guid.NewGuid(), Name = "Sales" };
+        var team = new TeamLibrary { Name = name, UpdatedAt = _now };
+        team.Content.Categories.Add(cat);
+        foreach (var t in promptTitles)
+            team.Content.Prompts.Add(new Prompt { Id = Guid.NewGuid(), Title = t, Text = t, CategoryId = cat.Id });
+        File.WriteAllText(Path.Combine(folder, TeamFile.FileName), TeamFile.Serialize(team));
+        return folder;
+    }
+
+    private static T Wait<T>(Task<T> task) { Wait((Task)task); return task.Result; }
+
+    private static void Wait(Task task)
+    {
+        var until = DateTime.UtcNow.AddSeconds(10);
+        while (!task.IsCompleted && DateTime.UtcNow < until) Sta.DoEvents();
+        task.GetAwaiter().GetResult();
+    }
+
+    private static void PumpUntil(Func<bool> done)
+    {
+        var until = DateTime.UtcNow.AddSeconds(10);
+        while (!done() && DateTime.UtcNow < until) { Thread.Sleep(20); Sta.DoEvents(); }
+    }
+
+    [Fact]
+    public void Join_InvalidFile_DoesNotSaveSource() => Sta.Run(() =>
+    {
+        var folder = Path.Combine(_root, "bad");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, TeamFile.FileName), "not json");
+        using var svc = NewService();
+
+        var result = Wait(svc.JoinAsync(folder));
+
+        Assert.False(result.Success);
+        Assert.Null(_settings.TeamSource);
+        Assert.Null(svc.Source);
+        Assert.Equal(TeamStatus.NotConnected, svc.Status);
+        Assert.False(File.Exists(Cache));
+    });
+
+    [Fact]
+    public void Join_NotAFolderFileOrLink_Fails() => Sta.Run(() =>
+    {
+        using var svc = NewService();
+        var result = Wait(svc.JoinAsync("http://example.com/x.json"));
+        Assert.False(result.Success);
+        Assert.Equal("That isn't a folder, file or https link.", result.Message);
+    });
+
+    [Fact]
+    public void Join_Valid_SavesSourceTakesBaselineRaisesChanged() => Sta.Run(() =>
+    {
+        var folder = MakeTeamFolder("acme", "One", "Two");
+        using var svc = NewService();
+        var raised = 0;
+        svc.Changed += (_, _) => raised++;
+
+        var result = Wait(svc.JoinAsync(folder));
+
+        Assert.True(result.Success);
+        Assert.Equal(Path.Combine(folder, TeamFile.FileName), _settings.TeamSource);
+        Assert.True(_settings.TeamBaselineTaken);
+        Assert.Equal(2, _settings.SeenTeamPrompts.Count);
+        Assert.Equal(TeamStatus.Connected, svc.Status);
+        Assert.Equal("acme", svc.Team!.Name);
+        Assert.True(File.Exists(Cache));
+        Assert.True(svc.CanEdit);
+        Sta.DoEvents();
+        Assert.True(raised >= 1);
+        Assert.True(_settingsSaves >= 1);
+    });
+
+    [Fact]
+    public void Refresh_SourceGone_KeepsTeamStatusOffline() => Sta.Run(() =>
+    {
+        var folder = MakeTeamFolder("acme", "One");
+        using var svc = NewService();
+        Wait(svc.JoinAsync(folder));
+        File.Delete(Path.Combine(folder, TeamFile.FileName));
+
+        Wait(svc.RefreshAsync());
+
+        Assert.Equal(TeamStatus.Offline, svc.Status);
+        Assert.NotNull(svc.Team);
+        Assert.Single(svc.Team!.Content.Prompts);
+        Assert.False(svc.CanEdit);
+        Assert.NotNull(svc.StatusMessage);
+    });
+
+    [Fact]
+    public void Start_LoadsCacheAsOfflineThenRefreshes() => Sta.Run(() =>
+    {
+        var folder = MakeTeamFolder("acme", "One");
+        using (var first = NewService()) Wait(first.JoinAsync(folder));
+        using var svc = NewService();
+
+        svc.Start();
+        Assert.Equal(TeamStatus.Offline, svc.Status);
+        Assert.Equal("acme", svc.Team!.Name);
+
+        PumpUntil(() => svc.Status == TeamStatus.Connected);
+        Assert.Equal(TeamStatus.Connected, svc.Status);
+    });
+
+    [Fact]
+    public void HoldRefresh_DefersUntilReleased() => Sta.Run(() =>
+    {
+        var folder = MakeTeamFolder("acme", "One");
+        using var svc = NewService();
+        Wait(svc.JoinAsync(folder));
+        var path = Path.Combine(folder, TeamFile.FileName);
+        var edited = TeamFile.Parse(File.ReadAllText(path));
+        edited.Content.Prompts[0].Title = "Changed elsewhere";
+        File.WriteAllText(path, TeamFile.Serialize(edited));
+
+        svc.HoldRefresh(true);
+        Wait(svc.RequestRefreshAsync());
+        Assert.Equal("One", svc.Team!.Content.Prompts[0].Title);
+
+        svc.HoldRefresh(false);
+        PumpUntil(() => svc.Team!.Content.Prompts[0].Title == "Changed elsewhere");
+        Assert.Equal("Changed elsewhere", svc.Team!.Content.Prompts[0].Title);
+    });
+
+    [Fact]
+    public void Save_Saved_UpdatesHashAndOwnChangesNeverMark() => Sta.Run(() =>
+    {
+        var folder = MakeTeamFolder("acme", "One");
+        using var svc = NewService();
+        Wait(svc.JoinAsync(folder));
+        var oldHash = svc.CurrentHash;
+        var edited = svc.Team!;
+        edited.Content.Prompts[0].Text = "New text";
+        edited.Content.Prompts.Add(new Prompt { Id = Guid.NewGuid(), Title = "Added", CategoryId = edited.Content.Categories[0].Id });
+
+        var result = svc.Save(edited);
+
+        Assert.Equal(TeamSaveStatus.Saved, result.Status);
+        Assert.NotEqual(oldHash, svc.CurrentHash);
+        Assert.Equal(result.NewHash, svc.CurrentHash);
+        Assert.All(edited.Content.Prompts, p => Assert.Equal(TeamMarker.None, TeamUserState.MarkerFor(_settings, p)));
+    });
+
+    [Fact]
+    public void Save_ChangedByOther_Reloads() => Sta.Run(() =>
+    {
+        var folder = MakeTeamFolder("acme", "One");
+        using var svc = NewService();
+        Wait(svc.JoinAsync(folder));
+        var path = Path.Combine(folder, TeamFile.FileName);
+        var theirs = TeamFile.Parse(File.ReadAllText(path));
+        theirs.Content.Prompts[0].Title = "Theirs";
+        File.WriteAllText(path, TeamFile.Serialize(theirs));
+        var raised = 0;
+        svc.Changed += (_, _) => raised++;
+        var mine = TeamFile.Parse(File.ReadAllText(path));
+        mine.Content.Prompts[0].Title = "Mine";
+        svc.HoldRefresh(true);
+
+        var result = svc.Save(mine);
+
+        Assert.Equal(TeamSaveStatus.ChangedByOther, result.Status);
+        Assert.Equal("Theirs", svc.Team!.Content.Prompts[0].Title);
+        Sta.DoEvents();
+        Assert.True(raised >= 1);
+    });
+
+    [Fact]
+    public void Leave_ClearsCacheAndTeamState() => Sta.Run(() =>
+    {
+        var folder = MakeTeamFolder("acme", "One");
+        using var svc = NewService();
+        Wait(svc.JoinAsync(folder));
+        TeamUserState.Pin(_settings, svc.Team!.Content.Prompts[0].Id);
+        TeamUserState.Hide(_settings, Guid.NewGuid());
+
+        svc.Leave();
+
+        Assert.Null(_settings.TeamSource);
+        Assert.False(File.Exists(Cache));
+        Assert.Null(svc.Team);
+        Assert.Null(svc.Source);
+        Assert.Equal(TeamStatus.NotConnected, svc.Status);
+        Assert.Empty(_settings.PinnedPromptIds);
+        Assert.Empty(_settings.HiddenTeamPromptIds);
+        Assert.Empty(_settings.SeenTeamPrompts);
+        Assert.False(_settings.TeamBaselineTaken);
+    });
+
+    [Fact]
+    public void Join_DifferentSource_ClearsOldTeamState() => Sta.Run(() =>
+    {
+        var a = MakeTeamFolder("a", "A1");
+        var b = MakeTeamFolder("b", "B1");
+        using var svc = NewService();
+        Wait(svc.JoinAsync(a));
+        TeamUserState.Pin(_settings, svc.Team!.Content.Prompts[0].Id);
+
+        Wait(svc.JoinAsync(b));
+
+        Assert.Equal("b", svc.Team!.Name);
+        Assert.Empty(_settings.PinnedPromptIds);
+        Assert.Single(_settings.SeenTeamPrompts);
+        Assert.True(_settings.TeamBaselineTaken);
+    });
+
+    [Fact]
+    public void Start_CreatesAndJoins_OrReportsExisting() => Sta.Run(() =>
+    {
+        var folder = Path.Combine(_root, "new");
+        Directory.CreateDirectory(folder);
+        using var svc = NewService();
+
+        var created = svc.Start(folder, "Fresh", []);
+        Assert.True(created.Created);
+        Assert.Equal("Fresh", svc.Team!.Name);
+
+        svc.Leave();
+        var again = svc.Start(folder, "Other", []);
+        Assert.False(again.Created);
+        Assert.Equal("Fresh", again.ExistingName);
+        Assert.Null(svc.Source);
+    });
+}

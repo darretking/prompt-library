@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Threading;
 using PromptLibrary.App.Hotkeys;
 using PromptLibrary.App.Startup;
+using PromptLibrary.App.Team;
 using System.Net.Http;
 using System.Reflection;
 using PromptLibrary.App.Tray;
@@ -79,6 +80,9 @@ public sealed class AppHost : IDisposable
 
     /// <summary>The update checker, or null when no GitHub repository is configured (see the App .csproj).</summary>
     public UpdateCoordinator? Updates { get; private set; }
+
+    /// <summary>The team library (joined, offline copy, refresh, guarded saves); null until <see cref="Start"/> has run.</summary>
+    public TeamLibraryService Team { get; private set; } = null!;
 
     public Library Library { get; private set; } = new();
     public AppSettings Settings { get; private set; } = new();
@@ -179,6 +183,7 @@ public sealed class AppHost : IDisposable
         RefreshBackupState();
         StartBackupSchedule();
         StartUpdates(); // before any window opens, so the main window sees the update reminder
+        StartTeam();
 
         if (restoredFrom is not null)
         {
@@ -244,6 +249,23 @@ public sealed class AppHost : IDisposable
             // The app works without update checks; never let them stop it starting.
             CrashLog.Append(Paths.CrashLogFile, ex, DateTime.Now);
             Updates = null;
+        }
+    }
+
+    /// <summary>Creates the team library service, loads its offline copy and refreshes it in the background.</summary>
+    private void StartTeam()
+    {
+        try
+        {
+            var version = AppVersion.FromSystemVersion(typeof(AppHost).Assembly.GetName().Version ?? new Version(0, 0, 0));
+            Team = new TeamLibraryService(_http, version.ToString(), Paths.TeamCacheFile, Settings, () => Library,
+                SaveSettings, () => DateTimeOffset.Now, ex => CrashLog.Append(Paths.CrashLogFile, ex, DateTime.Now));
+            Team.Start();
+        }
+        catch (Exception ex)
+        {
+            // The app works without a team library; never let it stop the app starting.
+            CrashLog.Append(Paths.CrashLogFile, ex, DateTime.Now);
         }
     }
 
@@ -934,6 +956,7 @@ public sealed class AppHost : IDisposable
         _backupTimer?.Stop();
         _firstBackupTimer?.Stop();
         Updates?.Dispose();
+        Team?.Dispose();
         _hotkey?.Dispose();
         _hotkey = null;
         _closeRequestWindow?.Dispose();
