@@ -1,6 +1,6 @@
 # Team prompts — design
 
-Date: 2026-11-05 · Status: draft for owner approval · Target release: **v1.1.0** · Builds on v1.0.2
+Date: 2026-11-05 · Status: **approved** (owner delegated all further decisions to Claude, 2026-11-05) · Target release: **v1.1.0** · Builds on v1.0.2
 
 ## Why
 
@@ -117,7 +117,8 @@ automatically, can't change it, and can always tell it apart from their own prom
 - **Team side:** the same rail / list / editor layout. The editor is read-only with a lock note such as
   "Team prompt · Acme best practice · read only". Its buttons are **Copy prompt** (primary) and
   **Copy to your prompts**, which asks which of your categories, defaulting to one with the same name if it
-  exists. **Pin** and **Hide** live on the prompt row and in the editor.
+  exists. **Pin** and **Hide** are buttons in the editor's button row, with the same actions on the row's
+  right-click menu.
 - The **header line** on the Team side shows the library name and "updated …", or the offline note with Retry.
 - **Show hidden (n)** sits at the foot of the team list.
 - **Search** covers both libraries. Results from the other side show its icon, and opening one switches sides.
@@ -150,7 +151,7 @@ From top to bottom:
 
 | State | What it shows |
 |---|---|
-| Not connected | **Join a team library** (browse to the shared file or folder, or paste an https link) and **Start a team library** (choose folder, name, optional "copy these categories in"). |
+| Not connected | **Join a team library** (one box: shared folder, file or link, plus Browse…) and **Start a team library** (folder and name, plus an optional, collapsed "copy some of your categories in"). |
 | Connected | Library name, source, last updated, status, **Retry**, and **Leave team library** (confirm). |
 
 The **setup-guide step** is optional and skippable: "Does your team share prompts?" offers Join / Start /
@@ -189,8 +190,8 @@ your prompts", are untouched.
    - **Hiding unpins.** A hidden prompt can't be pinned.
    - The Pinned block is in **pin order**, newest last.
    - Team prompts in it carry the **team icon**, just as they do in search results and the team block.
-   - In the main window, pin and hide are a pin icon and a hide icon on each prompt row (and in the editor). Pinned
-     rows show a small pin.
+   - In the main window, Pin and Hide are buttons in the editor and on the row's right-click menu (see Simplicity
+     rule 2). Pinned rows show a small pin.
 5. **Start a team library.**
    - If the folder already contains `team-prompts.json`, the app **never overwrites it**. It says "This folder already
      has a team library (Name)" and offers **Join it** instead.
@@ -201,6 +202,64 @@ your prompts", are untouched.
      ("Can't reach that folder", "That isn't a Prompt Library team file") and nothing changes.
    - Joining a **different** source replaces the old one: the offline copy, team pins, hides and markers of the old
      library are cleared, as with Leave.
+
+## Design quality bar (owner: "simplicity, intuitiveness and design standards")
+
+### Standards it must meet
+
+- `docs/design/ui-style.md` covers the tokens, type, three-column layout and states. Particular rules apply here:
+  - **Copy prompt stays the only filled button** in the main window, on the Team side too. Copy to your prompts,
+    Pin and Hide are outline or link buttons.
+  - Keyboard: a visible focus ring, the tab order, and `AutomationProperties.Name` on every new control.
+  - Text contrast is at least 4.5:1.
+  - Scaling at 100 %, 150 % and 200 % shows no clipped text.
+- `docs/design/ui-review-rubric.md` sets two bars:
+  - The **quality score** must be **≥ 90 %** on every new or changed screen: the main window's Team side, its edit
+    mode, the Settings Team library section, the Join and Start dialogs, the setup-guide step and the shortcut menu.
+  - The **simplicity & intuitiveness score** must be **≥ 95 %** on the main window (both sides) and the setup guide,
+    and ≥ 90 % on the new dialogs.
+  - Results are recorded in `docs/design/ui-review-results.md`.
+- The rubric's core tasks gain these team tasks. The S2 limit is **≤ 3 actions** once the window is open.
+  - Copy the team prompt "Follow-up email".
+  - Find a team prompt by searching.
+  - Make your own editable copy of a team prompt.
+  - Pin a prompt.
+  - Hide a team prompt, and get it back.
+  - Tell, in 5 seconds, whether the open prompt is yours or the team's.
+  - Editor only: fix a typo in a team prompt and save.
+  - Joining a team library takes ≤ 3 actions from Settings → Team library.
+
+### Simplicity rules (Claude's calls, applied to the design above)
+
+1. **One way to tell team from yours, used everywhere.** One team icon (people) and the word "Team" mark team
+   items in search results, the Pinned block, the shortcut menu and the editor's lock note. No second colour
+   scheme and no extra badges.
+2. **Quiet rows.**
+   - Prompt rows stay as they are today (title + description).
+   - The only extras are a small pin glyph on pinned prompts, a "New" / "Updated" tag where it applies, and the team
+     icon in search results.
+   - **Pin** and **Hide** live as plain buttons in the editor's button row (and on the row's right-click menu as a
+     shortcut). They are not icons on every row.
+3. **Read-only looks read-only, not broken.** The Team-side editor shows title, description and prompt as normal
+   readable text on the slip (no greyed or disabled inputs). There's one lock line above it: "Team prompt ·
+   Acme best practice · read only".
+4. **One field to join.** The Join dialog has a single box, **"Shared folder, file or link"**, plus **Browse…**. The
+   app works out whether it's a folder, a file or an https link. There's no source-type choice.
+5. **Two fields to start.** The Start dialog asks for the folder and a name. "Copy some of your categories in" is
+   an optional checkbox list, collapsed by default.
+6. **Familiar patterns.**
+   - The switch is a standard two-part segmented control. **Ctrl+1** shows Your prompts and **Ctrl+2** Team prompts.
+   - The edit-mode banner reuses the existing quiet warning-bar style ("Editing team library: changes go to
+     everyone" + **Done**).
+   - The offline note reuses the muted header line. A "Two versions found" notice for editors reuses the same bar
+     with **Review**.
+7. **Nothing until needed.** Solo users see no switch, no team block and no Pinned block until they join, start or
+   pin. "Mark all as seen" and "Show hidden (n)" appear only when there's something to act on.
+8. **Words.**
+   - Sentence case, verbs first: Join a team library, Start a team library, Leave team library, Copy to your
+     prompts, Edit team library, Done.
+   - Errors say what happened and what to do: "Can't reach that folder. Is OneDrive running?", "That isn't a Prompt
+     Library team file."
 
 ## Constraints
 
