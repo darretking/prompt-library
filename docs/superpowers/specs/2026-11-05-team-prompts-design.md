@@ -116,9 +116,12 @@ automatically, can't change it, and can always tell it apart from their own prom
   appears once a team library is connected.
 - **Team side:** the same rail / list / editor layout. The editor is read-only with a lock note such as
   "Team prompt · Acme best practice · read only". Its buttons are **Copy prompt** (primary) and
-  **Copy to your prompts**, which asks which of your categories, defaulting to one with the same name if it
-  exists. **Pin** and **Hide** are buttons in the editor's button row, with the same actions on the row's
-  right-click menu.
+  **Copy to your prompts**.
+  - It works in **one click**, with no dialog. It copies the prompt into your category of the same name, creating
+    that category if needed, and switches to Your prompts with the copy open.
+  - The status line says "Copied to your prompts · Sales". The copy can be moved like any prompt (Category box).
+  - **Pin** and **Hide** are buttons in the editor's button row, with the same actions on the row's right-click
+    menu.
 - The **header line** on the Team side shows the library name and "updated …", or the offline note with Retry.
 - **Show hidden (n)** sits at the foot of the team list.
 - **Search** covers both libraries. Results from the other side show its icon, and opening one switches sides.
@@ -226,8 +229,10 @@ your prompts", are untouched.
   - Pin a prompt.
   - Hide a team prompt, and get it back.
   - Tell, in 5 seconds, whether the open prompt is yours or the team's.
-  - Editor only: fix a typo in a team prompt and save.
-  - Joining a team library takes ≤ 3 actions from Settings → Team library.
+  - Editor only: fix a typo in a team prompt and save. This takes ≤ 3 actions after **Edit team library**,
+    exactly as for a personal prompt, plus one action to unlock. The extra action is deliberate friction, since a
+    change goes to everyone.
+  - Joining a team library takes ≤ 3 actions from Settings → Team library: Join…, paste or Browse, Join.
 
 ### Simplicity rules (Claude's calls, applied to the design above)
 
