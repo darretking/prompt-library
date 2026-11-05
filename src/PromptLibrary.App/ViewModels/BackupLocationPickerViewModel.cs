@@ -10,6 +10,8 @@ namespace PromptLibrary.App.ViewModels;
 /// The shared "where do backups go" picker (Settings and the onboarding wizard). One card per detected cloud
 /// folder, plus the folder in use if it is somewhere else. Activating a card (or choosing a folder) backs up
 /// there straight away; only if that works does it become the backup folder. Results show inline.
+/// In select-only mode (the wizard) activating a card only selects it; the folder in use, else the first detected
+/// one, starts selected, and <see cref="BackUpSelectedAsync"/> (the wizard's Next) backs up there.
 /// </summary>
 public sealed class BackupLocationPickerViewModel : ObservableObject
 {
@@ -20,6 +22,7 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
 
     private readonly AppHost _host;
     private readonly Func<string?, string?> _chooseFolder;
+    private readonly bool _selectOnly;
 
     private IReadOnlyList<CloudFolder> _detected = [];
     private bool _detectedOnce;
@@ -31,15 +34,24 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
     private bool _resultIsError;
     private string? _noteText;
     private Func<Task>? _retry;
+    private string? _selectedFolder;
+    private bool _preselected;
 
     /// <param name="chooseFolder">Shows a folder dialog starting at the given folder; returns the choice or null.</param>
-    public BackupLocationPickerViewModel(AppHost host, Func<string?, string?> chooseFolder)
+    /// <param name="selectOnly">Activating a card selects it instead of backing up there.</param>
+    public BackupLocationPickerViewModel(AppHost host, Func<string?, string?> chooseFolder, bool selectOnly = false)
     {
         _host = host;
         _chooseFolder = chooseFolder;
+        _selectOnly = selectOnly;
 
         PickCommand = new AsyncRelayCommand<BackupFolderCard?>(card =>
-            card is null ? Task.CompletedTask : BackUpToAsync(card.Folder, card.ProviderName, card.Name));
+        {
+            if (card is null) return Task.CompletedTask;
+            if (!_selectOnly) return BackUpToAsync(card.Folder, card.ProviderName, card.Name);
+            Select(card.Folder);
+            return Task.CompletedTask;
+        });
         ChooseFolderCommand = new AsyncRelayCommand(ChooseFolderAsync, () => !_isBusy);
         RefreshCommand = new AsyncRelayCommand(() => RefreshAsync(showProgress: true));
         // Not while a timed-out copy to the folder is still running.
@@ -51,6 +63,15 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
     }
 
     public ObservableCollection<BackupFolderCard> Cards { get; } = new();
+
+    /// <summary>Select-only mode: the card the wizard's Next backs up to, or null.</summary>
+    public BackupFolderCard? SelectedCard => Cards.FirstOrDefault(c => c.IsSelected);
+
+    /// <summary>A backup is running (cards and "Choose another folder…" are disabled).</summary>
+    public bool IsBusy => _isBusy;
+
+    /// <summary>The "Restore from a backup…" link; not in the wizard (there is nothing to restore yet).</summary>
+    public bool ShowRestoreLink => !_selectOnly;
 
     public IAsyncRelayCommand<BackupFolderCard?> PickCommand { get; }
     public IAsyncRelayCommand ChooseFolderCommand { get; }
@@ -138,6 +159,24 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
             RebuildCards();
     }
 
+    /// <summary>
+    /// Select-only mode: backs up to the selected card's folder unless it is already the one in use. True when
+    /// backups now go there (or nothing needed doing); false when the backup failed (the failure shows inline).
+    /// </summary>
+    public async Task<bool> BackUpSelectedAsync()
+    {
+        if (SelectedCard is not { } card || card.IsInUse) return true;
+        return await BackUpToAsync(card.Folder, card.ProviderName, card.Name);
+    }
+
+    private void Select(string? folder)
+    {
+        _selectedFolder = folder;
+        foreach (var card in Cards)
+            card.IsSelected = folder is not null && BackupLocation.SameFolder(card.Folder, folder);
+        OnPropertyChanged(nameof(SelectedCard));
+    }
+
     private async Task ChooseFolderAsync()
     {
         var folder = _chooseFolder(_host.Settings.BackupFolder);
@@ -145,10 +184,13 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
         await BackUpToAsync(folder, BackupLocation.ProviderFor(folder, _detected), folder);
     }
 
-    /// <summary>Backs up to the folder; on success it becomes the backup folder, on failure nothing changes.</summary>
-    private async Task BackUpToAsync(string folder, string? providerName, string where)
+    /// <summary>
+    /// Backs up to the folder; on success it becomes the backup folder (and, in select-only mode, the selection),
+    /// on failure nothing changes. True on success.
+    /// </summary>
+    private async Task<bool> BackUpToAsync(string folder, string? providerName, string where)
     {
-        if (_isBusy) return;
+        if (_isBusy) return false;
         SetBusy(true);
         ResultText = null;
         NoteText = null;
@@ -173,6 +215,8 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
             SetBusy(false);
         }
 
+        if (result.Success && _selectOnly)
+            _selectedFolder = folder;
         RebuildCards();
         if (result.Success)
         {
@@ -190,6 +234,7 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
         }
         OnPropertyChanged(nameof(ShowTryAgain));
         OnPropertyChanged(nameof(LastBackupText));
+        return result.Success;
     }
 
     /// <summary>Try again stays disabled until the copy that timed out has really finished.</summary>
@@ -213,6 +258,7 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
         foreach (var card in Cards)
             card.IsEnabled = !busy;
         ChooseFolderCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(IsBusy));
     }
 
     private void RebuildCards()
@@ -220,14 +266,14 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
         var current = _host.Settings.BackupFolder;
 
         var wanted = _detected
-            .Select(cloud => new BackupFolderCard(cloud.DisplayName, CloudFolderDetector.BackupFolderFor(cloud), cloud.DisplayName))
+            .Select(cloud => new BackupFolderCard(cloud.DisplayName, CloudFolderDetector.BackupFolderFor(cloud), cloud.DisplayName, _selectOnly))
             .ToList();
 
         // The folder in use is always shown, even when it isn't (or is no longer) a detected cloud folder.
         if (current is not null && !wanted.Any(c => BackupLocation.SameFolder(c.Folder, current)))
         {
             var provider = _host.Settings.BackupProviderName ?? BackupLocation.ProviderFor(current, _detected);
-            wanted.Add(new BackupFolderCard(provider ?? CustomFolderName, current, provider));
+            wanted.Add(new BackupFolderCard(provider ?? CustomFolderName, current, provider, _selectOnly));
         }
 
         // Only replace the cards when they changed, so re-detecting on activation doesn't take the keyboard focus away.
@@ -242,6 +288,17 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
         foreach (var card in Cards)
             card.IsInUse = BackupLocation.SameFolder(card.Folder, current);
 
+        if (_selectOnly)
+        {
+            // The folder in use starts selected, else the first detected one (once detection has answered).
+            if (!_preselected && (current is not null || _detectedOnce))
+            {
+                _preselected = true;
+                _selectedFolder = current ?? Cards.FirstOrDefault()?.Folder;
+            }
+            Select(_selectedFolder);
+        }
+
         OnPropertyChanged(nameof(NothingFound));
         OnPropertyChanged(nameof(LastBackupText));
     }
@@ -254,9 +311,12 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
     }
 
     /// <summary>One card: provider name, the folder backups go to (middle-shortened), and its state.</summary>
-    public sealed class BackupFolderCard(string name, string folder, string? providerName) : ObservableObject
+    /// <param name="selectOnly">The wizard's mode: the highlight shows the selection rather than the folder in use.</param>
+    public sealed class BackupFolderCard(string name, string folder, string? providerName, bool selectOnly = false)
+        : ObservableObject
     {
         private bool _isInUse;
+        private bool _isSelected;
         private bool _isBackingUp;
         private bool _isEnabled = true;
 
@@ -264,17 +324,42 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
         public string Folder { get; } = folder;
         public string? ProviderName { get; } = providerName;
         public string FolderText { get; } = BackupLocation.ShortenMiddle(folder, PathDisplayLength);
-        public string AutomationName => $"Back up to {Name}, {Folder}" + (_isInUse ? ", in use" : "");
+        public string AutomationName
+            => $"Back up to {Name}, {Folder}" + (IsHighlighted ? $", {BadgeText.ToLowerInvariant()}" : "");
 
-        /// <summary>Backups go here now: BrandSoft fill, Brand edge and "✓ In use".</summary>
+        /// <summary>Backups go here now: BrandSoft fill, Brand edge and "✓ In use" (outside select-only mode).</summary>
         public bool IsInUse
         {
             get => _isInUse;
             set
             {
                 if (SetProperty(ref _isInUse, value))
-                    OnPropertyChanged(nameof(AutomationName));
+                    OnStateChanged();
             }
+        }
+
+        /// <summary>Select-only mode: the wizard's Next backs up here.</summary>
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set
+            {
+                if (SetProperty(ref _isSelected, value))
+                    OnStateChanged();
+            }
+        }
+
+        /// <summary>Shows the highlight (BrandSoft fill, Brand edge, ✓ and <see cref="BadgeText"/>).</summary>
+        public bool IsHighlighted => selectOnly ? _isSelected : _isInUse;
+
+        /// <summary><c>In use</c>, or <c>Selected</c> for a selected card that backups don't go to yet.</summary>
+        public string BadgeText => _isInUse ? "In use" : "Selected";
+
+        private void OnStateChanged()
+        {
+            OnPropertyChanged(nameof(IsHighlighted));
+            OnPropertyChanged(nameof(BadgeText));
+            OnPropertyChanged(nameof(AutomationName));
         }
 
         /// <summary>A backup to this card's folder is running ("Backing up…").</summary>

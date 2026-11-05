@@ -65,6 +65,8 @@ public sealed class MainViewModel : ObservableObject
         OpenSettingsCommand = new RelayCommand(() => _host.OpenSettings());
         SetUpBackupsCommand = new RelayCommand(() => _host.OpenSettings(focusBackups: true));
         ExitCommand = new RelayCommand(_host.ExitApp);
+        SetupGuideCommand = new RelayCommand(_host.OpenOnboarding);
+        AboutCommand = new RelayCommand(_host.ShowAbout);
 
         _host.BackupStateChanged += (_, _) =>
         {
@@ -102,6 +104,8 @@ public sealed class MainViewModel : ObservableObject
     public IRelayCommand OpenSettingsCommand { get; }
     public IRelayCommand SetUpBackupsCommand { get; }
     public IRelayCommand ExitCommand { get; }
+    public IRelayCommand SetupGuideCommand { get; }
+    public IRelayCommand AboutCommand { get; }
 
     public CategoryItem? SelectedCategory
     {

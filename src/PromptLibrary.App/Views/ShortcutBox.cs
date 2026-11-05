@@ -12,7 +12,8 @@ namespace PromptLibrary.App.Views;
 /// in listening mode: the border turns Brand and it says <c>Press the new shortcut… Esc to cancel</c>.
 /// While listening:
 /// <list type="bullet">
-/// <item>Tab and Shift+Tab are not captured: they leave the box and stop listening.</item>
+/// <item>Tab and Shift+Tab are not captured: they leave the box and stop listening. Alt+F4 isn't either: it
+/// still closes the window.</item>
 /// <item>Esc stops listening and keeps the old shortcut (it doesn't close the window).</item>
 /// <item>A combination that can't be a shortcut raises <see cref="Rejected"/> and keeps listening.</item>
 /// <item>A valid combination stops listening and raises <see cref="ShortcutPressed"/>; the owner registers it and
@@ -101,7 +102,13 @@ public sealed class ShortcutBox : TextBox
 
     private void OnHookCombination(string text)
     {
-        if (!_isListening || !HotkeyGesture.TryParse(text, out var gesture)) return;
+        if (!_isListening) return;
+        if (!HotkeyGesture.TryParse(text, out var gesture))
+        {
+            ShowCurrent();
+            Rejected?.Invoke(this, RejectedHint);
+            return;
+        }
         StopListening();
         ShortcutPressed?.Invoke(this, gesture!.ToString());
     }
@@ -122,9 +129,10 @@ public sealed class ShortcutBox : TextBox
             return;
         }
 
-        if (key == Key.Tab && modifiers is ModifierKeys.None or ModifierKeys.Shift)
+        if ((key == Key.Tab && modifiers is ModifierKeys.None or ModifierKeys.Shift)
+            || (key == Key.F4 && modifiers == ModifierKeys.Alt))
         {
-            StopListening(); // focus moves on as usual
+            StopListening(); // focus moves on (Tab) or the window closes (Alt+F4) as usual
             base.OnPreviewKeyDown(e);
             return;
         }

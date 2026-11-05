@@ -41,6 +41,7 @@ public sealed class AppHost : IDisposable
     private HotkeyGesture? _activeGesture;
     private MainWindow? _mainWindow;
     private SettingsWindow? _settingsWindow;
+    private OnboardingWindow? _onboardingWindow;
     private DispatcherTimer? _backupTimer;
     private DispatcherTimer? _firstBackupTimer;
     private bool _started;
@@ -115,7 +116,7 @@ public sealed class AppHost : IDisposable
         _started = true;
 
         _hotkey = new GlobalHotkey();
-        _hotkey.Pressed += (_, _) => Tray.ShowMenuAtCursor(returnFocusAfterwards: true);
+        _hotkey.Pressed += (_, _) => OnHotkeyPressed();
         var hotkeyRegistered = ApplyHotkey(Settings.Hotkey);
 
         ApplyStartupRegistration();
@@ -128,18 +129,16 @@ public sealed class AppHost : IDisposable
             Tray.ShowMessage(AppName, $"Library restored from {restoredFrom}.");
         }
 
-        if (!hotkeyRegistered)
+        if (!Settings.FirstRunDone)
+        {
+            // The wizard replaces the first-run tray message; if the shortcut is taken, its step 2 says so (so the
+            // tray message and Settings stay out of the way).
+            OpenOnboarding();
+        }
+        else if (!hotkeyRegistered)
         {
             Tray.ShowMessage(AppName, $"Shortcut {Settings.Hotkey} is in use by another app. Pick another in Settings.", isError: true);
             OpenSettings();
-        }
-        else if (!Settings.FirstRunDone)
-        {
-            // If the shortcut is taken, the conflict message is the one that matters; the welcome waits
-            // for a start where the shortcut works.
-            Tray.ShowMessage(AppName, $"Prompt Library is running. Press {Settings.Hotkey} or click this icon.");
-            Settings.FirstRunDone = true;
-            SaveSettings();
         }
 
         if (Settings.LastBackupUnfinished)
@@ -275,6 +274,39 @@ public sealed class AppHost : IDisposable
         _settingsWindow.Activate();
         if (focusBackups)
             _settingsWindow.FocusBackups();
+    }
+
+    /// <summary>
+    /// Opens the onboarding wizard (first run, or <c>Help → Setup guide…</c>), or brings it to the front if it is
+    /// already open. Over the main window when that is showing; otherwise centred on the screen, in the taskbar.
+    /// </summary>
+    public void OpenOnboarding()
+    {
+        if (_exiting) return;
+        if (_onboardingWindow is null)
+        {
+            var owner = VisibleMainWindow;
+            _onboardingWindow = new OnboardingWindow(this)
+            {
+                Owner = owner,
+                ShowInTaskbar = owner is null,
+                WindowStartupLocation = owner is null ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner,
+            };
+            _onboardingWindow.Closed += (_, _) => _onboardingWindow = null;
+            _onboardingWindow.Show();
+        }
+        else if (_onboardingWindow.WindowState == WindowState.Minimized)
+            _onboardingWindow.WindowState = WindowState.Normal;
+
+        _onboardingWindow.Activate();
+    }
+
+    /// <summary><c>Help → About Prompt Library</c>: the name, version and where the prompts are stored.</summary>
+    public void ShowAbout()
+    {
+        var version = typeof(AppHost).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
+        ConfirmDialog.Inform(VisibleMainWindow,
+            $"{AppName}\nVersion {version}\n\nYour prompts are stored in {Paths.DataFolder}.");
     }
 
     /// <summary>Opens the Restore window (over Settings or the main window when one is open).</summary>
@@ -574,6 +606,7 @@ public sealed class AppHost : IDisposable
         _exiting = true;
         Dispose();
         _settingsWindow?.Close();
+        _onboardingWindow?.CloseForExit();
         _mainWindow?.CloseForExit();
 
         var backup = RunBackupAsync(BackupTrigger.OnExit);
@@ -637,6 +670,20 @@ public sealed class AppHost : IDisposable
     }
 
     private Window? VisibleMainWindow => _mainWindow is { IsVisible: true } ? _mainWindow : null;
+
+    /// <summary>
+    /// The global shortcut was pressed: the quick menu opens, except while the wizard shows its shortcut step,
+    /// which takes the press as the user trying it out.
+    /// </summary>
+    private void OnHotkeyPressed()
+    {
+        if (_onboardingWindow?.ViewModel.OnShortcutPressed() == true)
+        {
+            _onboardingWindow.Activate();
+            return;
+        }
+        Tray.ShowMenuAtCursor(returnFocusAfterwards: true);
+    }
 
     private static string TooltipFor(string hotkey) => $"{AppName} ({hotkey})";
 

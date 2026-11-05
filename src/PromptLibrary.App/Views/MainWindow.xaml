@@ -91,6 +91,10 @@
                 <Separator />
                 <MenuItem Header="E_xit" Command="{Binding ExitCommand}" />
             </MenuItem>
+            <MenuItem Header="_Help" AutomationProperties.Name="Help">
+                <MenuItem Header="_Setup guide…" Command="{Binding SetupGuideCommand}" />
+                <MenuItem Header="_About Prompt Library" Command="{Binding AboutCommand}" />
+            </MenuItem>
         </Menu>
 
         <Grid>

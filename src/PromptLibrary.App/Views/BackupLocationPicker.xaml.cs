@@ -30,10 +30,16 @@ public partial class BackupLocationPicker : UserControl
 
     public BackupLocationPickerViewModel? ViewModel { get; private set; }
 
+    /// <summary>
+    /// Clicking a card only selects it; the host backs up later (the wizard's Next). Default false: a click backs up
+    /// there at once. Set before <see cref="Attach"/>.
+    /// </summary>
+    public bool SelectsWithoutBackingUp { get; set; }
+
     /// <summary>Creates the view model for <paramref name="host"/> and starts looking for cloud folders.</summary>
     public BackupLocationPickerViewModel Attach(AppHost host)
     {
-        ViewModel = new BackupLocationPickerViewModel(host, ChooseFolder);
+        ViewModel = new BackupLocationPickerViewModel(host, ChooseFolder, SelectsWithoutBackingUp);
         DataContext = ViewModel;
         _ = ViewModel.RefreshAsync(showProgress: true);
         return ViewModel;

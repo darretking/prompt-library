@@ -7,8 +7,8 @@ namespace PromptLibrary.App.Hotkeys;
 /// another app has registered as its hotkey never reaches our window as a key press, so the box couldn't see it;
 /// the hook can. It only looks at keys while our window is the foreground window, and only takes
 /// Ctrl/Alt + letter, digit or F-key presses (reported as text such as <c>Ctrl+Alt+K</c> and not passed on, so the
-/// other app's hotkey doesn't fire). Everything else goes through untouched. Install on the UI thread; dispose to
-/// remove it.
+/// other app's hotkey doesn't fire). Everything else goes through untouched, including Alt+F4 (it still closes the
+/// window). Install on the UI thread; dispose to remove it.
 /// </summary>
 public sealed class ShortcutKeyHook : IDisposable
 {
@@ -20,6 +20,7 @@ public sealed class ShortcutKeyHook : IDisposable
     private const int VK_MENU = 0x12;
     private const int VK_LWIN = 0x5B;
     private const int VK_RWIN = 0x5C;
+    private const int VK_F4 = 0x73;
 
     private readonly IntPtr _window;
     private readonly Action<string> _pressed;
@@ -65,6 +66,7 @@ public sealed class ShortcutKeyHook : IDisposable
         var ctrl = IsDown(VK_CONTROL);
         var alt = IsDown(VK_MENU);
         if (!ctrl && !alt) return null;
+        if (alt && !ctrl && virtualKey == VK_F4) return null; // Alt+F4 still closes the window
 
         string? key = virtualKey switch
         {

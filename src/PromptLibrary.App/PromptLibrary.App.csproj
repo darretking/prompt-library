@@ -28,6 +28,8 @@
   <ItemGroup>
     <!-- Embedded as a WPF resource so the tray and window icons work from a single-file publish. -->
     <Resource Include="Assets\app.ico" />
+    <!-- The onboarding wizard's welcome illustration. -->
+    <Resource Include="Assets\app-icon.png" />
   </ItemGroup>
 
   <ItemGroup>
