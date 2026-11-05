@@ -23,7 +23,7 @@ public static class AtomicFile
         var directory = Path.GetDirectoryName(Path.GetFullPath(path));
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
 
-        var tmp = path + ".tmp";
+        var tmp = TempPath(path);
         try
         {
             WriteThrough(tmp, Utf8NoBom.GetBytes(contents));
@@ -35,6 +35,9 @@ public static class AtomicFile
             throw;
         }
     }
+
+    /// <summary>The file a save is written to first, before it replaces <paramref name="path"/>.</summary>
+    public static string TempPath(string path) => path + ".tmp";
 
     // NTFS journals the rename but not the file's contents: without this, a power cut just after a save can leave
     // the renamed file empty or zero-filled.

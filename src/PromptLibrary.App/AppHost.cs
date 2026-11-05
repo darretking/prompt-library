@@ -115,6 +115,27 @@ public sealed class AppHost : IDisposable
                 Library = libraryResult.Value!;
                 break;
             case LoadStatus.Missing:
+                // A save interrupted between its two renames leaves library.json missing but its copies intact:
+                // put those back rather than seeding over them.
+                InterruptedSaveSource putBack;
+                try
+                {
+                    putBack = InterruptedSave.Recover(Paths.LibraryFile);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    ConfirmDialog.Inform(null,
+                        $"Prompt Library couldn't put back your last save: {WithoutFinalPeriod(ex.Message)}. Nothing was changed.");
+                    Application.Current.Shutdown();
+                    return false;
+                }
+                if (putBack != InterruptedSaveSource.None
+                    && JsonStore.LoadLibrary(Paths.LibraryFile) is { Status: LoadStatus.Ok, Value: { } putBackLibrary })
+                {
+                    Library = putBackLibrary;
+                    restoredFrom = putBack == InterruptedSaveSource.NewSave ? "your last save" : "the previous save";
+                    break;
+                }
                 Library = SeedLibrary.Create(DateTimeOffset.Now);
                 WriteLibraryFile(); // on failure the message is shown and the app runs on in memory
                 break;

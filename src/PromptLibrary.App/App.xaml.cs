@@ -109,7 +109,14 @@ public partial class App : Application
         {
             while (true)
             {
-                signal.WaitOne();
+                try
+                {
+                    signal.WaitOne();
+                }
+                catch (ObjectDisposedException)
+                {
+                    return; // OnExit disposed the handle: the app is closing, so stop listening.
+                }
                 Dispatcher.BeginInvoke(host.ShowMainWindow);
             }
         })
