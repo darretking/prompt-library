@@ -29,6 +29,14 @@ public static class PasteDecision
     public static bool ShouldPaste(bool pasteAfterCopy, bool fromShortcutMenu, bool hasTargetWindow, bool targetIsOurs)
         => pasteAfterCopy && fromShortcutMenu && hasTargetWindow && !targetIsOurs;
 
+    /// <summary>
+    /// After waiting for the shortcut keys to be let go and the app to come back to the front: null when Ctrl+V can
+    /// be sent, otherwise <see cref="PasteOutcome.Failed"/>. A modifier still held would turn Ctrl+V into another
+    /// shortcut (Ctrl+Alt+V, Ctrl+Shift+V, Win+Ctrl+V…), so nothing is sent then.
+    /// </summary>
+    public static PasteOutcome? OutcomeAfterWait(bool modifiersStillDown, bool foregroundMatched)
+        => modifiersStillDown || !foregroundMatched ? PasteOutcome.Failed : null;
+
     /// <summary>Pasted only if Windows accepted every key event that was sent (UIPI silently drops some).</summary>
     public static PasteOutcome OutcomeOfSend(int sent, int accepted)
         => accepted >= sent ? PasteOutcome.Pasted : PasteOutcome.Failed;

@@ -24,6 +24,11 @@ public sealed class TrayIcon : IDisposable
     // so Ctrl+V pastes into it.
     private IntPtr _returnFocusTo;
 
+    // The same window, kept for the whole time the shortcut menu is open (zero for a tray click). It travels with a
+    // picked prompt, so pasting never depends on whether the menu's Closed event (which gives focus back and clears
+    // _returnFocusTo) runs before or after the item's Click. Both give focus to this same window, so they never disagree.
+    private IntPtr _pasteTarget;
+
     /// <summary>A prompt was picked; <see cref="PromptPick.ReturnTo"/> is set when the menu came from the global shortcut.</summary>
     public event EventHandler<PromptPick>? PromptClicked;
     public event EventHandler? OpenRequested;
@@ -78,7 +83,7 @@ public sealed class TrayIcon : IDisposable
                 var promptItem = new Forms.ToolStripMenuItem(MenuText.ForMenu(prompt.Title));
                 promptItem.Click += (_, _) =>
                 {
-                    PromptClicked?.Invoke(this, new PromptPick(id, _returnFocusTo));
+                    PromptClicked?.Invoke(this, new PromptPick(id, _pasteTarget));
                     ReturnFocus();
                 };
                 categoryItem.DropDownItems.Add(promptItem);
@@ -120,6 +125,7 @@ public sealed class TrayIcon : IDisposable
     public void ShowMenuAtCursor(bool returnFocusAfterwards = false)
     {
         _returnFocusTo = returnFocusAfterwards ? GetForegroundWindow() : IntPtr.Zero;
+        _pasteTarget = _returnFocusTo;
         SetForegroundWindow(_menuOwner.Handle);
         _menu.Show(Forms.Cursor.Position);
         _menu.Focus();

@@ -198,6 +198,7 @@ public sealed class AppHost : IDisposable
     /// </summary>
     private async void OnPromptPicked(PromptPick pick)
     {
+        if (_exiting) return;
         var prompt = Library.Prompts.FirstOrDefault(p => p.Id == pick.Id);
         if (prompt is null) return;
         if (!_clipboard.TryCopy(prompt.Text))
@@ -209,7 +210,9 @@ public sealed class AppHost : IDisposable
         var hasTarget = AutoPaster.IsOtherAppWindow(pick.ReturnTo, out var isOurs);
         var outcome = PasteDecision.ShouldPaste(Settings.PasteAfterCopy, fromShortcutMenu: pick.ReturnTo != IntPtr.Zero,
             hasTarget, isOurs)
-            ? await AutoPaster.PasteAsync(pick.ReturnTo) // the tray has already given the window its focus back
+            // The tray gives that window its focus back as the menu closes; the paster waits until it is really in
+            // front (asking again itself) before it sends Ctrl+V.
+            ? await AutoPaster.PasteAsync(pick.ReturnTo)
             : PasteOutcome.NotAttempted;
 
         if (!_disposed && PasteDecision.CopiedMessage(prompt.Title, outcome) is { } message)
@@ -235,6 +238,7 @@ public sealed class AppHost : IDisposable
     /// <summary>Shows the one main window, creating it the first time.</summary>
     public void ShowMainWindow()
     {
+        if (_exiting) return; // the window is closed and the app is waiting for its exit backup
         if (_mainWindow is null)
             _mainWindow = new MainWindow(this);
         else if (!_mainWindow.IsVisible)
@@ -252,6 +256,7 @@ public sealed class AppHost : IDisposable
     /// </summary>
     public void OpenSettings(bool focusBackups = false)
     {
+        if (_exiting) return;
         if (_settingsWindow is null)
         {
             var owner = VisibleMainWindow;
@@ -275,6 +280,7 @@ public sealed class AppHost : IDisposable
     /// <summary>Opens the Restore window (over Settings or the main window when one is open).</summary>
     public void OpenRestore()
     {
+        if (_exiting) return;
         Window? owner = _settingsWindow is { IsVisible: true } ? _settingsWindow : VisibleMainWindow;
         var window = new RestoreWindow(this, isStartup: false)
         {
@@ -563,7 +569,10 @@ public sealed class AppHost : IDisposable
         if (_mainWindow is { IsVisible: true } && !_mainWindow.ViewModel.ConfirmDiscardOrSave())
             return;
 
+        // From here nothing can reopen a window or start a copy: the tray icon, shortcut and timers go first
+        // (the backup result is still recorded in settings; it just isn't announced).
         _exiting = true;
+        Dispose();
         _settingsWindow?.Close();
         _mainWindow?.CloseForExit();
 
@@ -571,7 +580,6 @@ public sealed class AppHost : IDisposable
         if (await Task.WhenAny(backup, Task.Delay(ExitBackupTimeout)) != backup)
             RecordUnfinishedBackup();
 
-        Dispose();
         Application.Current.Shutdown();
     }
 
@@ -588,12 +596,28 @@ public sealed class AppHost : IDisposable
         {
             // Blocking on purpose: the session may end as soon as this returns. The job needs nothing from the UI
             // thread, so waiting here can't deadlock.
-            var job = NewBackupJob(BackupTrigger.OnExit, folder);
-            var work = Task.Run(() => RunBackupJob(job));
-            if (work.Wait(SessionEndBackupTimeout))
-                ApplyBackupOutcome(job, work.Result, showInTray: false);
-            else
+            // One copy at a time, also here. (A scheduled backup that is running can't hand the gate back while this
+            // thread is blocked, as it finishes on this thread; it then counts as unfinished.)
+            var waited = System.Diagnostics.Stopwatch.StartNew();
+            if (!_backupGate.Wait(SessionEndBackupTimeout))
                 RecordUnfinishedBackup();
+            else
+            {
+                try
+                {
+                    var job = NewBackupJob(BackupTrigger.OnExit, folder);
+                    var work = Task.Run(() => RunBackupJob(job));
+                    var left = SessionEndBackupTimeout - waited.Elapsed;
+                    if (left > TimeSpan.Zero && work.Wait(left))
+                        ApplyBackupOutcome(job, work.Result, showInTray: false);
+                    else
+                        RecordUnfinishedBackup();
+                }
+                finally
+                {
+                    _backupGate.Release();
+                }
+            }
         }
 
         Dispose();

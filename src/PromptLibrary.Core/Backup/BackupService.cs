@@ -57,7 +57,9 @@ public class BackupService(Func<DateTime> nowLocal)
             }
 
             target = UniqueTargetPath(backupFolder);
-            File.Copy(libraryPath, target, overwrite: false);
+            using var source = OpenLibraryForCopy(libraryPath);
+            using var copy = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            source.CopyTo(copy);
         }
         catch (Exception ex) when (IsIoProblem(ex))
         {
@@ -79,6 +81,13 @@ public class BackupService(Func<DateTime> nowLocal)
 
         return new BackupResult(true, target, hash, null);
     }
+
+    /// <summary>
+    /// Opens the library for reading in a way that never blocks a save: sharing read, write and delete lets
+    /// <see cref="AtomicFile"/> replace the file while a backup is still reading it.
+    /// </summary>
+    public static FileStream OpenLibraryForCopy(string libraryPath)
+        => new(libraryPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
 
     /// <summary>
     /// Deletes the oldest backups beyond <paramref name="keep"/> (values below 1 count as 1, so the newest backup is never deleted).

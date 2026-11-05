@@ -38,9 +38,9 @@ public static class AutoPaster
     }
 
     /// <summary>
-    /// Sends Ctrl+V to <paramref name="target"/> once it is the foreground window again (the caller has already
-    /// asked for that). Waits up to 800 ms for Ctrl, Alt, Shift and Win to be let go (the user may still hold the
-    /// shortcut), then up to 300 ms for the window to be in front.
+    /// Sends Ctrl+V to <paramref name="target"/>. Waits up to 800 ms for Ctrl, Alt, Shift and Win to be let go (the
+    /// user may still hold the shortcut), then up to 300 ms for the window to be in front (asking for it again if
+    /// needed). If a modifier is still held or the window isn't in front, nothing is sent (Failed).
     /// </summary>
     public static async Task<PasteOutcome> PasteAsync(IntPtr target)
     {
@@ -50,14 +50,21 @@ public static class AutoPaster
         var waited = Stopwatch.StartNew();
         while (AnyModifierDown() && waited.Elapsed < ModifierReleaseTimeout)
             await Task.Delay(PollInterval);
+        var modifiersStillDown = AnyModifierDown();
 
-        waited.Restart();
-        while (GetForegroundWindow() != target)
+        var foregroundMatched = false;
+        if (!modifiersStillDown)
         {
-            if (waited.Elapsed >= ForegroundTimeout) return PasteOutcome.Failed;
-            SetForegroundWindow(target);
-            await Task.Delay(PollInterval);
+            waited.Restart();
+            while (!(foregroundMatched = GetForegroundWindow() == target) && waited.Elapsed < ForegroundTimeout)
+            {
+                SetForegroundWindow(target); // same window the tray gives focus back to, so the two never disagree
+                await Task.Delay(PollInterval);
+            }
         }
+
+        if (PasteDecision.OutcomeAfterWait(modifiersStillDown, foregroundMatched) is { } notSent)
+            return notSent;
 
         INPUT[] keys =
         [

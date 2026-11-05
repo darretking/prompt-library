@@ -49,6 +49,15 @@ public class PasteDecisionTests
             "Copied: Explain this code. Press Ctrl+V to paste — Windows doesn't allow pasting into apps running as administrator.",
             PasteDecision.CopiedMessage("Explain this code", PasteOutcome.Elevated));
 
+    [Theory]
+    [InlineData(false, true, null)]
+    [InlineData(true, true, PasteOutcome.Failed)]   // a modifier still held would turn Ctrl+V into e.g. Ctrl+Alt+V
+    [InlineData(false, false, PasteOutcome.Failed)] // the app didn't come back to the front
+    [InlineData(true, false, PasteOutcome.Failed)]
+    public void OutcomeAfterWait_SendsOnlyWhenModifiersUpAndTargetInFront(
+        bool modifiersStillDown, bool foregroundMatched, PasteOutcome? expected)
+        => Assert.Equal(expected, PasteDecision.OutcomeAfterWait(modifiersStillDown, foregroundMatched));
+
     [Fact]
     public void Settings_WithoutPasteAfterCopy_DefaultsToOn()
     {
