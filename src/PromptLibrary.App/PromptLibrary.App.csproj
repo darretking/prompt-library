@@ -18,6 +18,18 @@
     <Company>Prompt Library</Company>
   </PropertyGroup>
 
+  <!-- Single-file, self-contained publish (dotnet publish -c Release). Release only, so Debug builds and
+       `dotnet run` keep the normal framework-dependent layout. -->
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>embedded</DebugType>
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
   <!-- WPF and WinForms share type names (Application, Clipboard, MessageBox...). Keep WPF as the
        default and write WinForms/System.Drawing types fully qualified (only the tray uses them). -->
   <ItemGroup>

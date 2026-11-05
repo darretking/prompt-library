@@ -433,3 +433,5 @@ FodyWeavers.xsd
 
 # Core backup feature folder (overrides Backup*/ above)
 !src/PromptLibrary.Core/Backup/
+
+publish/
