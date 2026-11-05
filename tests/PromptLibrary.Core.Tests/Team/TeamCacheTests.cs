@@ -55,4 +55,14 @@ public class TeamCacheTests : IDisposable
         Assert.False(TeamRefresh.Apply(Ok(Good.Replace("\n", "\r\n")), path, s, now));
         Assert.True(TeamRefresh.Apply(Ok(Good.Replace("Sales", "Ops")), path, s, now));
     }
+
+    [Fact]
+    public void Apply_CacheWriteFails_ReturnsFalseWithoutThrowing()
+    {
+        var path = Path.Combine(_dir, "cache.json");
+        Directory.CreateDirectory(path);
+        var s = new TeamSource(TeamSourceKind.File, "x");
+        var r = new TeamReadResult(TeamReadStatus.Ok, TeamFile.Parse(Good), Good, TeamFile.Hash(Good), null);
+        Assert.False(TeamRefresh.Apply(r, path, s, DateTimeOffset.UtcNow));
+    }
 }

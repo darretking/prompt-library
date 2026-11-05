@@ -51,14 +51,21 @@ public static class TeamRefresh
 {
     /// <summary>
     /// Saves the copy only when the read was <see cref="TeamReadStatus.Ok"/>, so a bad or missing read keeps the last
-    /// good copy. Returns true when the library changed (its hash differs from the saved copy, or there was none).
+    /// good copy. A cache that can't be written is left as it was and counts as no change. Returns true when the library changed (its hash differs from the saved copy, or there was none).
     /// </summary>
     public static bool Apply(TeamReadResult r, string cachePath, TeamSource s, DateTimeOffset now)
     {
         if (r.Status != TeamReadStatus.Ok || r.Json is null) return false;
         var before = TeamCache.Load(cachePath);
         var changed = before is null || TeamFile.Hash(before.Value.Json) != r.Hash;
-        TeamCache.Save(cachePath, s, r.Json, now);
+        try
+        {
+            TeamCache.Save(cachePath, s, r.Json, now);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
         return changed;
     }
 }

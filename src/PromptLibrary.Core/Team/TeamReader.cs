@@ -24,7 +24,7 @@ public enum TeamReadStatus
 public sealed record TeamReadResult(TeamReadStatus Status, TeamLibrary? Team, string? Json, string? Hash, string? Message);
 
 /// <summary>Reads a team library from a file or an https link. Never throws for a bad source.</summary>
-public sealed class TeamReader(HttpClient http)
+public sealed class TeamReader(HttpClient http, string appVersion)
 {
     /// <summary>The largest file read from a link.</summary>
     public const int MaxBytes = 2 * 1024 * 1024;
@@ -88,12 +88,15 @@ public sealed class TeamReader(HttpClient http)
 
     private async Task<TeamReadResult> ReadUrlAsync(string url, CancellationToken ct)
     {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+            return Fail(TeamReadStatus.Unreachable, NoLinkMessage);
+
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(Timeout);
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.UserAgent.Add(new ProductInfoHeaderValue("PromptLibrary", "1.0"));
+            request.Headers.UserAgent.Add(new ProductInfoHeaderValue("PromptLibrary", appVersion));
             using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
             if (!response.IsSuccessStatusCode || response.RequestMessage?.RequestUri?.Scheme == Uri.UriSchemeHttp)
                 return Fail(TeamReadStatus.Unreachable, NoLinkMessage);

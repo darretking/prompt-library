@@ -16,7 +16,7 @@ public class TeamReaderTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dir, true);
 
-    private static TeamReader Reader(FakeHandler? h = null) => new(new HttpClient(h ?? FakeHandler.Json(Good))) { RetryDelay = TimeSpan.Zero };
+    private static TeamReader Reader(FakeHandler? h = null) => new(new HttpClient(h ?? FakeHandler.Json(Good)), "2.3.4") { RetryDelay = TimeSpan.Zero };
 
     private static TeamSource Url(string u = "https://example.com/t.json") => new(TeamSourceKind.Url, u);
 
@@ -99,7 +99,7 @@ public class TeamReaderTests : IDisposable
         var h = FakeHandler.Json(Good);
         var r = await Reader(h).ReadAsync(Url(), default);
         Assert.Equal(TeamReadStatus.Ok, r.Status);
-        Assert.Contains("PromptLibrary", h.Requests.Single().Headers.UserAgent.ToString());
+        Assert.Equal("PromptLibrary/2.3.4", h.Requests.Single().Headers.UserAgent.ToString());
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public class TeamReaderTests : IDisposable
             await Task.Delay(Timeout.Infinite, ct);
             return new HttpResponseMessage();
         });
-        var reader = new TeamReader(new HttpClient(h)) { Timeout = TimeSpan.FromMilliseconds(50) };
+        var reader = new TeamReader(new HttpClient(h), "2.3.4") { Timeout = TimeSpan.FromMilliseconds(50) };
         var r = await reader.ReadAsync(Url(), default);
         Assert.Equal(TeamReadStatus.Unreachable, r.Status);
     }
@@ -156,5 +156,60 @@ public class TeamReaderTests : IDisposable
         }));
         var r = await Reader(h).ReadAsync(Url(), default);
         Assert.Equal(TeamReadStatus.Unreachable, r.Status);
+    }
+
+    private sealed class NoLengthContent(long size) : HttpContent
+    {
+        protected override async Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context)
+        {
+            var chunk = new byte[64 * 1024];
+            Array.Fill(chunk, (byte)' ');
+            for (long sent = 0; sent < size; sent += chunk.Length) await stream.WriteAsync(chunk);
+        }
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+    }
+
+    [Fact]
+    public async Task Read_Url_Over2MB_NoContentLength_StopsAtCap()
+    {
+        var h = new FakeHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new NoLengthContent(3 * 1024 * 1024) }));
+        var r = await Reader(h).ReadAsync(Url(), default);
+        Assert.Equal(TeamReadStatus.NotATeamFile, r.Status);
+    }
+
+    [Fact]
+    public async Task Read_File_LockedThenReleased_RetriesAndIsOk()
+    {
+        var path = Path.Combine(_dir, "t.json");
+        File.WriteAllText(path, Good);
+        var reader = new TeamReader(new HttpClient(FakeHandler.Json(Good)), "2.3.4") { RetryDelay = TimeSpan.FromMilliseconds(400) };
+        var gate = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+        _ = Task.Run(async () => { await Task.Delay(100); gate.Dispose(); });
+        var r = await reader.ReadAsync(new TeamSource(TeamSourceKind.File, path), default);
+        Assert.Equal(TeamReadStatus.Ok, r.Status);
+    }
+
+    [Fact]
+    public async Task Read_File_StaysLocked_Unreachable()
+    {
+        var path = Path.Combine(_dir, "t.json");
+        File.WriteAllText(path, Good);
+        using var gate = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+        var r = await Reader().ReadAsync(new TeamSource(TeamSourceKind.File, path), default);
+        Assert.Equal(TeamReadStatus.Unreachable, r.Status);
+    }
+
+    [Fact]
+    public async Task Read_Url_Http_RefusedWithoutARequest()
+    {
+        var h = FakeHandler.Json(Good);
+        var r = await Reader(h).ReadAsync(new TeamSource(TeamSourceKind.Url, "http://example.com/t.json"), default);
+        Assert.Equal(TeamReadStatus.Unreachable, r.Status);
+        Assert.Empty(h.Requests);
     }
 }
