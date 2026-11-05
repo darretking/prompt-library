@@ -266,6 +266,94 @@ your prompts", are untouched.
    - Errors say what happened and what to do: "Can't reach that folder. Is OneDrive running?", "That isn't a Prompt
      Library team file."
 
+## Additions after independent scoring (Claude's calls)
+
+The independent projected score was below 95 %: requirements 92 %, build-readiness about 84 %, and screens 85–89 %.
+These additions close each gap it named.
+
+1. **Links.**
+   - A link must return the **file itself**: a GitHub raw link, any web server, or a Dropbox link. The app rewrites
+     Dropbox `dl=0` to `dl=1`, and GitHub `/blob/` links to raw.
+   - If a link returns a web page, Join says: "That link opens a web page, not the file. Use the shared folder
+     instead, or a direct download link." This happens with OneDrive and Google Drive share pages.
+   - DEVELOPMENT.md and the Join dialog's help line say which links work.
+2. **Join and Start are small modal dialogs** opened from Settings → **Team prompts** (the Settings heading uses
+   the same name as the switch).
+   - Join shows "Checking…" with a progress bar while it reads.
+   - To change library you **Leave first**. While connected, Settings shows only the connected state, so there's
+     no silent replacement.
+3. **Write access** is found by a probe: open the file for writing without changing it. It runs at connect, on
+   each refresh and on Retry.
+   - Non-writers see a muted "Read only" in the Team header, where "Edit team library" would be, with the tooltip
+     "You can't change files in this folder".
+   - **Change detection uses the content hash** (SHA-256 of the file text).
+   - **Conflict copies** are siblings named `team-prompts*.json` other than the file itself (OneDrive's
+     `team-prompts-PCNAME.json`, Dropbox's `team-prompts (… conflicted copy …).json`).
+4. **Restore and Review** use one dialog in the Restore window's style, opened from the Team header's **⋯** menu
+   ("Restore an older version…").
+   - Entries read "{date, time} · {n} prompts", newest first.
+   - Conflict copies are listed first as "Other version from sync · {date, time} · {n} prompts".
+   - Restoring makes a history copy of the current version first.
+5. **Button rows by side and mode** (the left group is outline, the right group ends with the one filled button):
+
+   | Where | Left | Right |
+   |---|---|---|
+   | Your prompts | Delete · Pin | Save · **Copy prompt** |
+   | Team prompts (member) | Pin · Hide from menu | Make my copy · **Copy prompt** |
+   | Team prompts (editing) | Delete · Pin | Save · **Copy prompt** |
+
+   - "Copy to your prompts" is renamed **Make my copy**, and "Hide" is renamed **Hide from menu**. Pin becomes
+     **Unpin** when pinned, and Hide from menu becomes **Unhide**.
+   - The **Team header line** at the top of the Team side's middle column reads "{Name} · updated {when}", with
+     at most two items on its right: **Edit team library** (or the muted "Read only"), plus **Mark all as seen**
+     only while something is unseen, and the **⋯** menu.
+   - **Show hidden ({n})** sits under the search box, only while something is hidden.
+6. **States on the Team side:**
+   - Loading on first read: "Loading team prompts…".
+   - Empty: "No team prompts yet." Editors also see "Choose Edit team library to add some."
+   - All hidden: "All team prompts are hidden." + Show hidden ({n}).
+   - Offline: the header line in muted text with Retry.
+   - Selection is **remembered per side**.
+   - **Search across both:** the rail shows "All" while searching. Opening a result from the other library switches
+     the side and keeps the search text.
+7. **Feedback** appears on the status line for 4 s: "Pinned", "Unpinned", "Hidden from the menu", "Unhidden",
+   "Saved for everyone", "Copied to your prompts · {Category}". Leaving edit mode with refreshes held says
+   "Team prompts updated".
+8. **Shortcut menu:**
+   - When a team library is connected, small disabled headings **"Team prompts"** and **"Your prompts"** label the
+     two blocks, which puts the word on screen as well as the icon.
+   - With **more than 6 team categories**, the team block becomes one **"Team prompts ▸"** submenu at the same
+     place, so a big team never pushes your prompts off the menu.
+   - **Pins are capped at 10.** Pinning an 11th says "You can pin up to 10 prompts."
+   - Same-named categories stay separate, and the team one carries the team icon.
+9. **Setup guide:** a new **step 3 of 5** between Shortcut and Backups.
+   - Heading "Does your team share prompts?". Body: "Connect to your team's shared prompts, or start a library for
+     your team."
+   - Two outline buttons, **Join a team library** and **Start a team library** (the same dialogs). **Next**
+     continues without one, which is the default.
+
+10. **Business examples (owner: "team prompt examples should be business orientated").**
+    - **Start a team library** offers a checkbox, **"Add example business prompts"**, on by default when you don't
+      copy any of your own categories in.
+    - It seeds a ready-made, business-oriented best-practice set of **24 prompts in 6 categories, 4 each**. Each
+      prompt follows the same pattern as the personal starter set: role, {placeholders}, the task and why, output
+      format, and an invitation to ask clarifying questions.
+      - **Sales:** discovery questions, follow-up email after a meeting, objection handling, proposal summary.
+      - **Customer support:** empathetic reply to a complaint, troubleshooting steps, refund/escalation response,
+        FAQ answer from policy.
+      - **Marketing:** campaign brief, product launch announcement, case study draft, brand-voice rewrite.
+      - **Meetings & management:** meeting agenda, minutes and action items, one-to-one prep, project status update.
+      - **HR & people:** job description, interview questions with scoring guide, onboarding plan, policy summary
+        for staff.
+      - **Operations & finance:** SOP/process write-up, supplier comparison, budget variance explanation, risk
+        register entry.
+    - The set is written for a **generic company**: no real brands, no legal or financial advice. HR, finance and
+      policy prompts carry a short "check with your HR / finance / legal team before acting" note.
+    - The owner can edit or delete any of them.
+    - Business examples are also used throughout: the **demo team library** for live tests and README screenshots
+      ("Acme best practice"), the docs, and the rubric's team core tasks (e.g. copy the team prompt "Follow-up email
+      after a meeting").
+
 ## Constraints
 
 - Must follow `docs/design/ui-style.md` and pass the UI review rubric (≥ 90 %) for every new or changed screen
