@@ -15,6 +15,9 @@
         <SolidColorBrush x:Key="Brush.Line" Color="#D6DBE3" />
         <SolidColorBrush x:Key="Brush.Brand" Color="#4338CA" />
         <SolidColorBrush x:Key="Brush.BrandSoft" Color="#E8E7FB" />
+        <!-- Hover and pressed fills of Brand and Danger buttons (one step darker). -->
+        <SolidColorBrush x:Key="Brush.BrandHover" Color="#3730A3" />
+        <SolidColorBrush x:Key="Brush.DangerHover" Color="#912018" />
         <!-- Bookmark amber from the icon: onboarding illustration only, never text. -->
         <SolidColorBrush x:Key="Brush.Accent" Color="#F5A524" />
         <SolidColorBrush x:Key="Brush.Danger" Color="#B42318" />
@@ -26,6 +29,8 @@
         <!-- Type -->
         <FontFamily x:Key="Font.UI">Segoe UI Variable Text, Segoe UI</FontFamily>
         <FontFamily x:Key="Font.Prompt">Cascadia Mono, Consolas</FontFamily>
+        <!-- Windows 11 icon font, with the Windows 10 one as fallback (same code points). -->
+        <FontFamily x:Key="Font.Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
 
         <CornerRadius x:Key="Radius">4</CornerRadius>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
@@ -137,15 +142,61 @@
             <Setter Property="FontWeight" Value="SemiBold" />
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{StaticResource Brush.Brand}" />
-                    <Setter Property="Opacity" Value="0.9" />
+                    <Setter Property="Background" Value="{StaticResource Brush.BrandHover}" />
+                    <Setter Property="BorderBrush" Value="{StaticResource Brush.BrandHover}" />
                 </Trigger>
                 <Trigger Property="IsPressed" Value="True">
-                    <Setter Property="Background" Value="{StaticResource Brush.Brand}" />
-                    <Setter Property="Opacity" Value="0.8" />
+                    <Setter Property="Background" Value="{StaticResource Brush.BrandHover}" />
+                    <Setter Property="BorderBrush" Value="{StaticResource Brush.BrandHover}" />
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
                     <Setter Property="Opacity" Value="0.5" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Filled Danger: the main button of a dialog that deletes something. -->
+        <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource OutlineButton}">
+            <Setter Property="Background" Value="{StaticResource Brush.Danger}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Brush.Danger}" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.OnBrand}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource Brush.DangerHover}" />
+                    <Setter Property="BorderBrush" Value="{StaticResource Brush.DangerHover}" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="{StaticResource Brush.DangerHover}" />
+                    <Setter Property="BorderBrush" Value="{StaticResource Brush.DangerHover}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Small square icon button (24 px) for row actions such as Rename and Delete; label goes in the tooltip
+             and the automation name. -->
+        <Style x:Key="IconButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource Brush.Muted}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="FontFamily" Value="{StaticResource Font.Icons}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="{StaticResource Radius}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource Brush.Line}" />
+                    <Setter Property="Foreground" Value="{StaticResource Brush.Ink}" />
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -182,6 +233,12 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.5" />
+                    <Setter Property="Cursor" Value="Arrow" />
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <!-- Text boxes: white field, 1 px Line border, 2 px Brand ring while focused. -->
@@ -223,8 +280,8 @@
             <Setter Property="Template" Value="{StaticResource FieldTemplate}" />
         </Style>
 
-        <!-- Search box: a field with a muted placeholder (taken from Tag) while empty. -->
-        <Style x:Key="SearchBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+        <!-- A field with a muted placeholder (taken from Tag) while empty: the search box, the Title box. -->
+        <Style x:Key="PlaceholderBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
@@ -235,7 +292,7 @@
                                     CornerRadius="{StaticResource Radius}"
                                     SnapsToDevicePixels="True">
                                 <Grid>
-                                    <TextBlock x:Name="Placeholder" Text="{TemplateBinding Tag}"
+                                    <TextBlock x:Name="Placeholder" Text="{TemplateBinding Tag}" FontWeight="Normal"
                                                Foreground="{StaticResource Brush.Muted}"
                                                Margin="8,0" VerticalAlignment="Center"
                                                IsHitTestVisible="False" Visibility="Collapsed" />
@@ -271,7 +328,8 @@
             <Setter Property="Padding" Value="8" />
             <Setter Property="VerticalContentAlignment" Value="Top" />
             <Setter Property="AcceptsReturn" Value="True" />
-            <Setter Property="AcceptsTab" Value="True" />
+            <!-- Tab moves on like in any other field; Ctrl+Tab inserts a tab (handled by MainWindow). -->
+            <Setter Property="AcceptsTab" Value="False" />
             <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />

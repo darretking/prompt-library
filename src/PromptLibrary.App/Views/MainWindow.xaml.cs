@@ -14,8 +14,6 @@ namespace PromptLibrary.App.Views;
 /// </summary>
 public partial class MainWindow : Window, IDialogs
 {
-    private const string AppName = "Prompt Library";
-
     private readonly AppHost _host;
     private bool _exiting;
 
@@ -29,6 +27,13 @@ public partial class MainWindow : Window, IDialogs
 
         // Coming back to the window re-checks a paused backup folder (e.g. Google Drive signed in again).
         Activated += (_, _) => _host.RecheckBackups();
+
+        // An empty library: the one thing to do is "New prompt", so it starts with the focus.
+        IsVisibleChanged += (_, e) =>
+        {
+            if (e.NewValue is true && ViewModel.ShowNoPromptsYet)
+                Dispatcher.BeginInvoke(DispatcherPriority.Input, () => EmptyNewPromptButton.Focus());
+        };
     }
 
     public MainViewModel ViewModel { get; }
@@ -48,7 +53,10 @@ public partial class MainWindow : Window, IDialogs
         {
             e.Cancel = true;
             if (ViewModel.ConfirmDiscardOrSave())
+            {
                 Hide();
+                _host.OnMainWindowHidden(); // says once that the app is still running in the tray
+            }
         }
         base.OnClosing(e);
     }
@@ -66,17 +74,10 @@ public partial class MainWindow : Window, IDialogs
 
     // ---- IDialogs ------------------------------------------------------------------------------
 
-    public bool? AskSaveChanges()
-        => MessageBox.Show(this, "Save changes?", AppName, MessageBoxButton.YesNoCancel, MessageBoxImage.Question) switch
-        {
-            MessageBoxResult.Yes => true,
-            MessageBoxResult.No => false,
-            _ => null,
-        };
+    public bool? AskSaveChanges(string title) => ConfirmDialog.AskSaveChanges(this, title);
 
-    public bool Confirm(string message)
-        => MessageBox.Show(this, message, AppName, MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No)
-           == MessageBoxResult.Yes;
+    public bool ConfirmDestructive(string message, string action)
+        => ConfirmDialog.Ask(this, message, action, "Cancel", danger: true);
 
     public Guid? ChooseMoveTarget(string categoryName, int promptCount, IReadOnlyList<Category> targets)
     {
@@ -84,16 +85,22 @@ public partial class MainWindow : Window, IDialogs
         return dialog.ShowDialog() == true ? dialog.SelectedCategoryId : null;
     }
 
-    public void ShowMessage(string message)
-        => MessageBox.Show(this, message, AppName, MessageBoxButton.OK, MessageBoxImage.Information);
+    public void ShowMessage(string message) => ConfirmDialog.Inform(this, message);
 
     // ---- Category rail -------------------------------------------------------------------------
 
     private void RailList_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.F2 && e.OriginalSource is not TextBox)
+        if (e.OriginalSource is TextBox) return; // keys typed into the rename box
+
+        if (e.Key == Key.F2)
         {
             ViewModel.StartRename(RailList.SelectedItem as CategoryItem);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Delete && RailList.SelectedItem is CategoryItem { IsAll: false } item)
+        {
+            ViewModel.DeleteCategory(item);
             e.Handled = true;
         }
     }
@@ -174,6 +181,20 @@ public partial class MainWindow : Window, IDialogs
             ViewModel.SearchText = "";
             e.Handled = true;
         }
+    }
+
+    /// <summary>
+    /// Tab and Shift+Tab leave the prompt box like any other field; Ctrl+Tab types a tab character
+    /// (replacing any selected text).
+    /// </summary>
+    private void PromptBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Tab || Keyboard.Modifiers != ModifierKeys.Control) return;
+
+        var start = PromptBox.SelectionStart;
+        PromptBox.SelectedText = "\t";
+        PromptBox.Select(start + 1, 0);
+        e.Handled = true;
     }
 
     private void PromptList_KeyDown(object sender, KeyEventArgs e)

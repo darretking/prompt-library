@@ -6,7 +6,7 @@
         Title="Settings"
         AutomationProperties.Name="Settings"
         Icon="/Assets/app.ico"
-        Width="560" Height="640"
+        Width="560" Height="680"
         ResizeMode="NoResize">
     <!-- Every setting applies as soon as it changes; Close (or Esc, or ×) just closes. -->
     <Grid>
@@ -29,8 +29,14 @@
                 </StackPanel>
                 <TextBlock x:Name="ShortcutStatus" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,4,0,0" />
 
+                <CheckBox x:Name="PasteBox" Margin="0,12,0,0" Content="Paste into the app I was using"
+                          AutomationProperties.Name="Paste into the app I was using"
+                          AutomationProperties.HelpText="After you pick a prompt from the shortcut menu, it's pasted where you were typing. Turn off to only copy." />
+                <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="24,2,0,0"
+                           Text="After you pick a prompt from the shortcut menu, it's pasted where you were typing. Turn off to only copy." />
+
                 <!-- Backups -->
-                <TextBlock Text="Back up to" Style="{StaticResource FieldLabel}" Margin="0,24,0,4" />
+                <TextBlock Text="Back up to" Style="{StaticResource FieldLabel}" Margin="0,16,0,4" />
                 <TextBlock Text="Your library is copied here once a day and when you exit."
                            Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,8" />
                 <views:BackupLocationPicker x:Name="Picker" />
@@ -43,7 +49,7 @@
                 </StackPanel>
 
                 <!-- Startup -->
-                <CheckBox x:Name="StartupBox" Margin="0,24,0,0"
+                <CheckBox x:Name="StartupBox" Margin="0,16,0,0"
                           Content="Start Prompt Library when Windows starts"
                           AutomationProperties.Name="Start Prompt Library when Windows starts" />
             </StackPanel>

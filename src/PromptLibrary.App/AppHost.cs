@@ -29,6 +29,8 @@ public sealed class AppHost : IDisposable
     private static readonly TimeSpan BackupCheckInterval = TimeSpan.FromMinutes(60);
     private static readonly TimeSpan FirstBackupCheckDelay = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan PickedFolderBackupTimeout = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan ExitBackupTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan SessionEndBackupTimeout = TimeSpan.FromSeconds(5);
 
     private readonly ClipboardWriter _clipboard =
         new(text => System.Windows.Clipboard.SetText(text, TextDataFormat.UnicodeText), Thread.Sleep);
@@ -43,6 +45,13 @@ public sealed class AppHost : IDisposable
     private DispatcherTimer? _firstBackupTimer;
     private bool _started;
     private bool _disposed;
+    private bool _exiting;
+
+    // One backup (or restore) at a time. Scheduled backups skip if one is running; the others wait for it.
+    private readonly SemaphoreSlim _backupGate = new(1, 1);
+
+    // A backup to a newly picked folder that outlived its 15 s timeout and is still running.
+    private Task? _slowPickedFolderBackup;
 
     // Backups paused: the folder (and its parent) can't be reached. Scheduled and exit backups skip quietly;
     // the tray says so at most once per run.
@@ -97,7 +106,7 @@ public sealed class AppHost : IDisposable
         }
 
         Tray = new TrayIcon(TooltipFor(Settings.Hotkey));
-        Tray.PromptClicked += (_, id) => CopyPrompt(id);
+        Tray.PromptClicked += (_, pick) => OnPromptPicked(pick);
         Tray.OpenRequested += (_, _) => ShowMainWindow();
         Tray.SettingsRequested += (_, _) => OpenSettings();
         Tray.DoubleClicked += (_, _) => ShowMainWindow();
@@ -133,7 +142,23 @@ public sealed class AppHost : IDisposable
             SaveSettings();
         }
 
+        if (Settings.LastBackupUnfinished)
+        {
+            Tray.ShowMessage(AppName, "The last backup didn't finish.");
+            Settings.LastBackupUnfinished = false;
+            SaveSettings();
+        }
+
         return true;
+    }
+
+    /// <summary>The main window was closed (hidden): the first time ever, the tray says the app is still running.</summary>
+    public void OnMainWindowHidden()
+    {
+        if (Settings.HideToTrayNoticeShown || _exiting) return;
+        Tray.ShowMessage(AppName, $"Still running. Press {Settings.Hotkey} or click the tray icon.");
+        Settings.HideToTrayNoticeShown = true;
+        SaveSettings();
     }
 
     /// <summary>
@@ -166,11 +191,29 @@ public sealed class AppHost : IDisposable
         }
     }
 
-    /// <summary>Copies the prompt's text and confirms in the tray. False if the clipboard stayed busy.</summary>
-    public bool CopyPrompt(Guid promptId)
+    /// <summary>
+    /// A prompt was picked from the quick menu: it is copied, and when the menu came from the global shortcut (and
+    /// <see cref="AppSettings.PasteAfterCopy"/> is on) it is also pasted into the app the user was typing in. The
+    /// tray confirms the copy unless the paste worked; if pasting wasn't possible it says to press Ctrl+V.
+    /// </summary>
+    private async void OnPromptPicked(PromptPick pick)
     {
-        var prompt = Library.Prompts.FirstOrDefault(p => p.Id == promptId);
-        return prompt is not null && CopyText(prompt.Text, prompt.Title);
+        var prompt = Library.Prompts.FirstOrDefault(p => p.Id == pick.Id);
+        if (prompt is null) return;
+        if (!_clipboard.TryCopy(prompt.Text))
+        {
+            Tray.ShowMessage(AppName, "Couldn't copy — clipboard busy. Try again.", isError: true);
+            return;
+        }
+
+        var hasTarget = AutoPaster.IsOtherAppWindow(pick.ReturnTo, out var isOurs);
+        var outcome = PasteDecision.ShouldPaste(Settings.PasteAfterCopy, fromShortcutMenu: pick.ReturnTo != IntPtr.Zero,
+            hasTarget, isOurs)
+            ? await AutoPaster.PasteAsync(pick.ReturnTo) // the tray has already given the window its focus back
+            : PasteOutcome.NotAttempted;
+
+        if (!_disposed && PasteDecision.CopiedMessage(prompt.Title, outcome) is { } message)
+            Tray.ShowMessage(AppName, message);
     }
 
     /// <summary>
@@ -181,7 +224,7 @@ public sealed class AppHost : IDisposable
     {
         if (_clipboard.TryCopy(text))
         {
-            Tray.ShowMessage(AppName, $"Copied: {title}");
+            Tray.ShowMessage(AppName, PasteDecision.CopiedMessage(title, PasteOutcome.NotAttempted)!);
             return true;
         }
 
@@ -244,32 +287,33 @@ public sealed class AppHost : IDisposable
     }
 
     /// <summary>
-    /// Before a restore replaces the library: offers to save unsaved edits in the main window.
-    /// False if the user cancelled.
+    /// Before a restore replaces the library: offers to save unsaved edits in the main window and warns about
+    /// changes that couldn't be written. False if the user cancelled.
     /// </summary>
     public bool ConfirmUnsavedChangesBeforeRestore()
-        => _mainWindow is not { IsVisible: true } || _mainWindow.ViewModel.ConfirmDiscardOrSave();
+        => _mainWindow is null || _mainWindow.ViewModel.ConfirmBeforeRestore();
 
     /// <summary>
-    /// Re-checks whether the backup folder can be reached (main window activated). When a paused folder is
-    /// back, the bar clears and the skipped backup runs.
+    /// Re-checks (off the UI thread) whether the backup folder can be reached (main window activated). When a
+    /// paused folder is back, the bar clears and the skipped backup runs.
     /// </summary>
-    public void RecheckBackups()
+    public async void RecheckBackups()
     {
         if (!_started || _disposed) return;
         var wasPaused = _backupsPaused;
-        RefreshBackupState();
-        if (wasPaused && !_backupsPaused)
-            RunBackup(BackupTrigger.Daily);
+        var paused = await RefreshBackupStateAsync();
+        if (wasPaused && !paused && !_disposed)
+            await RunBackupAsync(BackupTrigger.Daily);
     }
 
     /// <summary>
-    /// Backs up library.json to the backup folder if <paramref name="trigger"/> calls for it.
-    /// Success records the time and hash in settings; Manual says <c>Backup saved.</c> in the tray and a
-    /// failure says <c>Backup failed: …</c> (unless <paramref name="showInTray"/> is false because the caller
-    /// shows the result itself). Returns the result, or null when no backup was attempted.
+    /// Backs up library.json to the backup folder if <paramref name="trigger"/> calls for it. The file work runs off
+    /// the UI thread; the result is applied back on it. Success records the time and hash in settings; Manual says
+    /// <c>Backup saved.</c> in the tray and a failure says <c>Backup failed: …</c> (unless
+    /// <paramref name="showInTray"/> is false because the caller shows the result itself). Returns the result, or
+    /// null when no backup was attempted. A scheduled backup is skipped while another backup is running.
     /// </summary>
-    public BackupResult? RunBackup(BackupTrigger trigger, bool showInTray = true)
+    public async Task<BackupResult?> RunBackupAsync(BackupTrigger trigger, bool showInTray = true)
     {
         var folder = Settings.BackupFolder;
         if (folder is null)
@@ -280,60 +324,53 @@ public sealed class AppHost : IDisposable
             return null;
         }
 
-        RefreshBackupState();
-        if (_backupsPaused && trigger != BackupTrigger.Manual)
+        if (trigger == BackupTrigger.Daily)
         {
-            if (trigger == BackupTrigger.Daily && !_pausedNoticeShown && BackupWarning is { } paused)
-            {
-                _pausedNoticeShown = true;
-                Tray.ShowMessage(AppName, paused);
-            }
-            return null;
-        }
-
-        var hash = TryHashLibrary();
-        if (hash is null && trigger != BackupTrigger.Manual)
-            return null;
-        if (hash is not null && !_backups.ShouldBackup(trigger, hash, Settings))
-            return null;
-
-        var result = _backups.BackupNow(Paths.LibraryFile, folder, Settings.BackupsToKeep);
-        if (result.Success)
-        {
-            Settings.LastBackupAt = DateTimeOffset.Now;
-            Settings.LastBackedUpLibraryHash = result.Hash;
-            SaveSettings();
-            RefreshBackupState();
-            if (trigger == BackupTrigger.Manual && showInTray)
-                Tray.ShowMessage(AppName, "Backup saved.");
+            if (!await _backupGate.WaitAsync(0)) return null;
         }
         else
-        {
-            if (_backupsPaused)
-                result = result with { Error = BackupLocation.UnavailableText(folder, PausedProvider(folder)) };
-            if (showInTray && trigger != BackupTrigger.OnExit)
-                Tray.ShowMessage(AppName, $"Backup failed: {result.Error}", isError: true);
-        }
+            await _backupGate.WaitAsync();
 
-        return result;
+        try
+        {
+            var job = NewBackupJob(trigger, folder);
+            var outcome = await Task.Run(() => RunBackupJob(job));
+            return ApplyBackupOutcome(job, outcome, showInTray);
+        }
+        finally
+        {
+            _backupGate.Release();
+        }
     }
 
     /// <summary>
     /// Backs up to <paramref name="folder"/> (off the UI thread, at most 15 s) and only if that works makes it the
-    /// backup folder; on failure the previous folder stays. Used by the backup location picker.
+    /// backup folder; on failure the previous folder stays. Used by the backup location picker. If the folder
+    /// doesn't answer in time the copy goes on in the background (see <see cref="SlowPickedFolderBackup"/>).
     /// </summary>
     public async Task<BackupResult> BackUpToNewFolderAsync(string folder, string? providerName)
     {
         var keep = Settings.BackupsToKeep;
-        var backup = Task.Run(() => _backups.BackupNow(Paths.LibraryFile, folder, keep));
+        var backup = Task.Run(() =>
+        {
+            var result = _backups.BackupNow(Paths.LibraryFile, folder, keep);
+            // A technical "not available" error becomes the friendly one (e.g. "Is Google Drive signed in?").
+            return !result.Success && BackupLocation.IsUnavailable(folder, Directory.Exists)
+                ? result with { Error = BackupLocation.UnavailableText(folder, providerName) }
+                : result;
+        });
         var finished = await Task.WhenAny(backup, Task.Delay(PickedFolderBackupTimeout));
 
         BackupResult result;
         try
         {
-            result = finished == backup
-                ? await backup
-                : new BackupResult(false, null, null, "The folder didn't respond within 15 seconds.");
+            if (finished == backup)
+                result = await backup;
+            else
+            {
+                _slowPickedFolderBackup = backup;
+                result = new BackupResult(false, null, null, "The folder didn't respond within 15 seconds.");
+            }
         }
         catch (Exception ex)
         {
@@ -352,26 +389,47 @@ public sealed class AppHost : IDisposable
         return result;
     }
 
+    /// <summary>
+    /// The backup to a newly picked folder that timed out but is still running, or null. Its "Try again" waits
+    /// for it, so two copies to the same folder don't run at once.
+    /// </summary>
+    public Task? SlowPickedFolderBackup => _slowPickedFolderBackup is { IsCompleted: false } running ? running : null;
+
     /// <summary>Backups in <paramref name="folder"/>, newest first (empty if the folder can't be read).</summary>
     public IReadOnlyList<BackupInfo> ListBackups(string folder) => _backups.List(folder);
 
     /// <summary>
-    /// Restores <paramref name="backup"/> and loads it. The current library is saved first as a safety copy, in
-    /// the configured backup folder if it is set and available, otherwise in
+    /// Restores <paramref name="backup"/> and loads it (the file work runs off the UI thread). The current library is
+    /// saved first as a safety copy, in the configured backup folder if it is set and available, otherwise in
     /// <c>%APPDATA%\PromptLibrary\Safety backups</c> (kept to 10). The folder the backup came from is never written
     /// to or pruned unless it is the configured one. After startup the windows and quick menu are refreshed and the
     /// tray says <c>Library restored from &lt;date&gt;.</c> Returns null on success, otherwise the error to show.
     /// </summary>
-    public string? RestoreBackup(BackupInfo backup)
+    public async Task<string?> RestoreBackupAsync(BackupInfo backup)
     {
-        var safetyFolder = BackupLocation.SafetyFolder(Settings.BackupFolder, Paths.SafetyBackupsFolder, Directory.Exists);
-        var keep = safetyFolder == Paths.SafetyBackupsFolder ? BackupLocation.SafetyBackupsToKeep : Settings.BackupsToKeep;
+        var configured = Settings.BackupFolder;
+        var keepConfigured = Settings.BackupsToKeep;
 
-        var result = _backups.Restore(backup.Path, Paths.LibraryFile, safetyFolder, keep);
-        if (!result.Success)
-            return result.Error;
+        await _backupGate.WaitAsync(); // not while a backup is copying library.json
+        (BackupResult Result, LoadResult<Library>? Loaded) outcome;
+        try
+        {
+            outcome = await Task.Run(() =>
+            {
+                var safetyFolder = BackupLocation.SafetyFolder(configured, Paths.SafetyBackupsFolder, Directory.Exists);
+                var keep = safetyFolder == Paths.SafetyBackupsFolder ? BackupLocation.SafetyBackupsToKeep : keepConfigured;
+                var result = _backups.Restore(backup.Path, Paths.LibraryFile, safetyFolder, keep);
+                return (result, result.Success ? JsonStore.LoadLibrary(Paths.LibraryFile) : null);
+            });
+        }
+        finally
+        {
+            _backupGate.Release();
+        }
 
-        var loaded = JsonStore.LoadLibrary(Paths.LibraryFile);
+        if (!outcome.Result.Success)
+            return outcome.Result.Error;
+        var loaded = outcome.Loaded!;
         if (loaded.Status != LoadStatus.Ok)
             return $"The backup was restored but can't be read: {loaded.Error}";
 
@@ -440,9 +498,13 @@ public sealed class AppHost : IDisposable
 
     /// <summary>
     /// Works out the backup warning (off / paused / none) from the current settings and tells listeners if it
-    /// changed. When paused, the cloud provider is looked up in the background to complete the message.
+    /// changed. Whether the folder can be reached is checked off the UI thread (a signed-out cloud drive or a
+    /// network folder can be slow to answer).
     /// </summary>
-    public void RefreshBackupState()
+    public void RefreshBackupState() => _ = RefreshBackupStateAsync();
+
+    /// <summary>As <see cref="RefreshBackupState"/>; the result is true when backups are paused.</summary>
+    private async Task<bool> RefreshBackupStateAsync()
     {
         var version = ++_backupStateVersion;
         var folder = Settings.BackupFolder;
@@ -451,18 +513,32 @@ public sealed class AppHost : IDisposable
         {
             _backupsPaused = false;
             SetBackupWarning(BackupsOffText, null);
-            return;
+            return false;
         }
 
-        _backupsPaused = BackupLocation.IsUnavailable(folder, Directory.Exists);
-        if (!_backupsPaused)
+        var unavailable = await Task.Run(() => BackupLocation.IsUnavailable(folder, Directory.Exists));
+        if (version != _backupStateVersion) return _backupsPaused; // a newer check has taken over
+        ApplyAvailability(folder, unavailable);
+        return unavailable;
+    }
+
+    /// <summary>
+    /// Sets the paused state and bar for <paramref name="folder"/>. When paused, the cloud provider is looked up in
+    /// the background to complete the message.
+    /// </summary>
+    private void ApplyAvailability(string folder, bool unavailable)
+    {
+        if (!BackupLocation.SameFolder(folder, Settings.BackupFolder)) return; // the folder changed meanwhile
+
+        _backupsPaused = unavailable;
+        if (!unavailable)
         {
             SetBackupWarning(null, null);
             return;
         }
 
         SetBackupWarning(BackupLocation.PausedMessage(folder, Settings.BackupProviderName), folder);
-        _ = CompletePausedMessageAsync(folder, version);
+        _ = CompletePausedMessageAsync(folder, _backupStateVersion);
     }
 
     /// <summary>Detected cloud folders (OneDrive, Google Drive, …). Slow-ish: call it off the UI thread.</summary>
@@ -477,25 +553,49 @@ public sealed class AppHost : IDisposable
     }
 
     /// <summary>
-    /// Quits the app. Unsaved edits in the main window are offered for saving first (Cancel stays);
-    /// then the library is backed up if it changed.
+    /// Quits the app. Unsaved edits in the main window are offered for saving first (Cancel stays); then the
+    /// windows close and the library is backed up if it changed, waiting at most 10 s. If the backup hasn't
+    /// finished by then the app exits anyway and the next start says <c>The last backup didn't finish.</c>
     /// </summary>
-    public void ExitApp()
+    public async void ExitApp()
     {
+        if (_exiting) return;
         if (_mainWindow is { IsVisible: true } && !_mainWindow.ViewModel.ConfirmDiscardOrSave())
             return;
 
-        RunBackup(BackupTrigger.OnExit);
-        Dispose();
+        _exiting = true;
         _settingsWindow?.Close();
         _mainWindow?.CloseForExit();
+
+        var backup = RunBackupAsync(BackupTrigger.OnExit);
+        if (await Task.WhenAny(backup, Task.Delay(ExitBackupTimeout)) != backup)
+            RecordUnfinishedBackup();
+
+        Dispose();
         Application.Current.Shutdown();
     }
 
-    /// <summary>Windows is logging off or shutting down: ask nothing more and clean up now.</summary>
+    /// <summary>
+    /// Windows is logging off or shutting down: ask nothing more, try the exit backup (at most 5 s, as Windows
+    /// won't wait long) and clean up now.
+    /// </summary>
     public void OnSessionEnding()
     {
+        if (IsSessionEnding) return;
         IsSessionEnding = true;
+
+        if (!_exiting && _started && !_disposed && Settings.BackupFolder is { } folder)
+        {
+            // Blocking on purpose: the session may end as soon as this returns. The job needs nothing from the UI
+            // thread, so waiting here can't deadlock.
+            var job = NewBackupJob(BackupTrigger.OnExit, folder);
+            var work = Task.Run(() => RunBackupJob(job));
+            if (work.Wait(SessionEndBackupTimeout))
+                ApplyBackupOutcome(job, work.Result, showInTray: false);
+            else
+                RecordUnfinishedBackup();
+        }
+
         Dispose();
     }
 
@@ -520,16 +620,111 @@ public sealed class AppHost : IDisposable
     private void StartBackupSchedule()
     {
         _backupTimer = new DispatcherTimer { Interval = BackupCheckInterval };
-        _backupTimer.Tick += (_, _) => RunBackup(BackupTrigger.Daily);
+        _backupTimer.Tick += (_, _) => _ = RunBackupAsync(BackupTrigger.Daily);
         _backupTimer.Start();
 
         _firstBackupTimer = new DispatcherTimer { Interval = FirstBackupCheckDelay };
         _firstBackupTimer.Tick += (_, _) =>
         {
             _firstBackupTimer.Stop();
-            RunBackup(BackupTrigger.Daily);
+            _ = RunBackupAsync(BackupTrigger.Daily);
         };
         _firstBackupTimer.Start();
+    }
+
+    /// <summary>What a backup needs from settings, read on the UI thread before the work moves off it.</summary>
+    private sealed record BackupJob(BackupTrigger Trigger, string Folder, int Keep, AppSettings Decision);
+
+    /// <summary>
+    /// What happened off the UI thread: whether the folder could be reached, and the backup result (null when no
+    /// backup was needed or the folder is paused).
+    /// </summary>
+    private sealed record BackupOutcome(bool Unavailable, BackupResult? Result);
+
+    private BackupJob NewBackupJob(BackupTrigger trigger, string folder)
+        => new(trigger, folder, Settings.BackupsToKeep, new AppSettings
+        {
+            LastBackupAt = Settings.LastBackupAt,
+            LastBackedUpLibraryHash = Settings.LastBackedUpLibraryHash,
+        });
+
+    /// <summary>The file work of a backup. Runs off the UI thread and touches no UI or shared state.</summary>
+    private BackupOutcome RunBackupJob(BackupJob job)
+    {
+        try
+        {
+            var unavailable = BackupLocation.IsUnavailable(job.Folder, Directory.Exists);
+            if (unavailable && job.Trigger != BackupTrigger.Manual)
+                return new BackupOutcome(true, null);
+
+            var hash = TryHashLibrary();
+            if (hash is null && job.Trigger != BackupTrigger.Manual)
+                return new BackupOutcome(unavailable, null);
+            if (hash is not null && !_backups.ShouldBackup(job.Trigger, hash, job.Decision))
+                return new BackupOutcome(unavailable, null);
+
+            return new BackupOutcome(unavailable, _backups.BackupNow(Paths.LibraryFile, job.Folder, job.Keep));
+        }
+        catch (Exception ex)
+        {
+            return new BackupOutcome(false, new BackupResult(false, null, null, ex.Message));
+        }
+    }
+
+    /// <summary>Back on the UI thread: records a successful backup, updates the bar and tells the user.</summary>
+    private BackupResult? ApplyBackupOutcome(BackupJob job, BackupOutcome outcome, bool showInTray)
+    {
+        var folder = job.Folder;
+        var sameFolder = BackupLocation.SameFolder(folder, Settings.BackupFolder);
+        if (!_disposed)
+            ApplyAvailability(folder, outcome.Unavailable);
+
+        if (outcome.Result is not { } result)
+        {
+            if (outcome.Unavailable && job.Trigger == BackupTrigger.Daily && !_pausedNoticeShown && !_disposed
+                && BackupWarning is { } paused)
+            {
+                _pausedNoticeShown = true;
+                Tray.ShowMessage(AppName, paused);
+            }
+            return null;
+        }
+
+        if (result.Success)
+        {
+            if (sameFolder) // the user may have picked another folder meanwhile
+            {
+                Settings.LastBackupAt = DateTimeOffset.Now;
+                Settings.LastBackedUpLibraryHash = result.Hash;
+                Settings.LastBackupUnfinished = false; // it did finish, just after the exit stopped waiting
+                SaveSettings();
+            }
+            if (job.Trigger == BackupTrigger.Manual && showInTray && !_disposed)
+                Tray.ShowMessage(AppName, "Backup saved.");
+        }
+        else
+        {
+            if (outcome.Unavailable)
+                result = result with { Error = BackupLocation.UnavailableText(folder, PausedProvider(folder)) };
+            if (showInTray && job.Trigger != BackupTrigger.OnExit && !_disposed)
+                Tray.ShowMessage(AppName, $"Backup failed: {result.Error}", isError: true);
+        }
+
+        return result;
+    }
+
+    /// <summary>The exit backup ran out of time: remember it so the next start can say so.</summary>
+    private void RecordUnfinishedBackup()
+    {
+        Settings.LastBackupUnfinished = true;
+        try
+        {
+            JsonStore.SaveSettings(Paths.SettingsFile, Settings);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Exiting anyway; there's no one left to tell.
+        }
     }
 
     private void SetBackupWarning(string? text, string? detail)
@@ -590,10 +785,8 @@ public sealed class AppHost : IDisposable
 
     private void ShowError(string text)
     {
-        if (_mainWindow is { IsVisible: true })
-            MessageBox.Show(_mainWindow, text, AppName, MessageBoxButton.OK, MessageBoxImage.Warning);
-        else
-            MessageBox.Show(text, AppName, MessageBoxButton.OK, MessageBoxImage.Warning);
+        if (IsSessionEnding) return; // no questions while Windows is logging off
+        ConfirmDialog.Inform(VisibleMainWindow, text);
     }
 
     private static string WithoutFinalPeriod(string message) => message.Trim().TrimEnd('.');

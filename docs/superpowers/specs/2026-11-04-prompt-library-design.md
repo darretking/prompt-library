@@ -23,7 +23,7 @@ The owner is a C# developer with no Rust experience. They want to be able to rea
 ## 3. Non-goals (v1)
 
 - **Right-click integration inside other apps.** Windows does not let an app add items to other programs' right-click menus (browsers, terminals, Electron apps draw their own). The shortcut + tray menu replaces this. The owner agreed the quick menu is what matters, not the right-click itself.
-- **Auto-pasting** into the target app. Copy only; the user presses Ctrl+V.
+- ~~Auto-pasting~~ → now in scope (§9): **auto-paste from the shortcut menu** (on by default, can be turned off); the tray menu copies only.
 - **Importing** existing prompts from other files/tools. Deferred to later.
 - Placeholder/variable filling (e.g. prompting for `{product}` before copy). Placeholders are plain text in v1.
 - Multi-user, sharing, multi-machine sync, cloud accounts, Google sign-in inside the app.
@@ -41,7 +41,7 @@ The owner is a C# developer with no Rust experience. They want to be able to rea
 
 ### Decided with the owner
 - **Quick menu** opened by global shortcut **and** by tray-icon click. Categories as submenus, prompts inside. Click = copy to clipboard.
-- **Copy only**, no auto-paste.
+- **Copy only**, no auto-paste. *(Changed 2026-11-04: the shortcut menu also pastes; see §9.)*
 - **Main window layout: three columns** (chosen from mockups): Categories | Prompts in category | Editor.
 - **Backup via Google Drive for desktop.** Owner currently uses Drive in the browser only and agreed to install Google Drive for desktop. The app writes backup files into a folder that Drive for desktop syncs; the app contains no Google API code or sign-in.
 - **Import of existing prompts: later**, not v1.
@@ -170,6 +170,7 @@ Mockup: `.superpowers/brainstorm/*/content/main-window-layout.html`, option A (l
 - **Microsoft Store** distribution via MSIX (see `docs/store-readiness.md`); start-with-Windows uses the package startup task when packaged.
 - **UI quality bar:** every screen scores ≥ 90% on `docs/design/ui-review-rubric.md`, built to `docs/design/ui-style.md`.
 - **Edge cases:** an explicit edge-case test sweep plus a manual edge checklist (`docs/edge-cases.md`).
+- **Auto-paste from the shortcut menu** (on by default; Settings → `Paste into the app I was using`). After a pick from the menu opened by the global shortcut, the prompt is copied, focus returns to the app the user was typing in and Ctrl+V is sent once the shortcut keys are released. Not for the tray menu (copy only), never into Prompt Library's own windows, and not into apps running as administrator (Windows blocks it): then the tray says `Copied: <title>. Press Ctrl+V to paste.` (plus why, for administrator apps). A successful paste shows no "Copied" message. Replaces "Copy only, no auto-paste" in §3 and §5.
 
 ## Appendix A — Seed prompts
 
@@ -182,13 +183,13 @@ Used for first-run seed data and as test fixtures. Several deliberately contain 
 | 3 | Coding | Fix this error | *(empty)* |
 | 4 | Testing | Write unit tests | xUnit tests covering happy path + edge cases |
 | 5 | Testing | Find edge cases | Brainstorm what could break |
-| 6 | User Interface | Critique this screen | Usability review of a screenshot |
-| 7 | User Interface | Write empty-state copy | Friendly text for "nothing here yet" screens |
+| 6 | User interface | Critique this screen | Usability review of a screenshot |
+| 7 | User interface | Write empty-state copy | Friendly text for "nothing here yet" screens |
 | 8 | Marketing | Product announcement post | LinkedIn launch post |
 | 9 | Marketing | Landing page headline ideas | 10 headline + subheadline pairs |
 | 10 | Documentation | Write a README | Project README from scratch |
 | 11 | Documentation | Summarise changes for a release | Turn commit list into release notes |
-| 12 | Code Review | Review my pull request | Thorough PR review with priorities |
+| 12 | Code review | Review my pull request | Thorough PR review with priorities |
 
 Prompt texts:
 

@@ -13,9 +13,46 @@
             <Setter Property="AutomationProperties.Name" Value="{Binding Text}" />
             <EventSetter Event="MouseDoubleClick" Handler="Row_MouseDoubleClick" />
         </Style>
+
+        <DataTemplate x:Key="BackupRowTemplate">
+            <TextBlock Text="{Binding Text}" TextTrimming="CharacterEllipsis">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsReadable}" Value="False">
+                                <Setter Property="Foreground" Value="{StaticResource Brush.Muted}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </DataTemplate>
+
+        <!-- A quiet show/hide header: chevron (right when closed, down when open) and a semibold label. -->
+        <Style x:Key="DisclosureToggle" TargetType="ToggleButton">
+            <Setter Property="Foreground" Value="{StaticResource Brush.Ink}" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <StackPanel Orientation="Horizontal" Background="Transparent">
+                            <TextBlock x:Name="Chevron" Text="&#xE76C;" FontFamily="{StaticResource Font.Icons}"
+                                       FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Chevron" Property="Text" Value="&#xE70D;" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
-    <StackPanel Margin="16">
+    <StackPanel x:Name="Root" Margin="16">
         <TextBlock Text="Backups in" Style="{StaticResource FieldLabel}" />
         <Grid>
             <Grid.ColumnDefinitions>
@@ -35,24 +72,9 @@
             <Grid>
                 <ListBox x:Name="BackupList" Style="{StaticResource PlainList}" Margin="0,4"
                          ItemContainerStyle="{StaticResource BackupRow}"
+                         ItemTemplate="{StaticResource BackupRowTemplate}"
                          SelectionChanged="BackupList_SelectionChanged"
-                         AutomationProperties.Name="Backups">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding Text}" TextTrimming="CharacterEllipsis">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsReadable}" Value="False">
-                                                <Setter Property="Foreground" Value="{StaticResource Brush.Muted}" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
+                         AutomationProperties.Name="Backups" />
                 <StackPanel x:Name="EmptyPanel" Margin="16" Visibility="Collapsed">
                     <TextBlock x:Name="EmptyText" Style="{StaticResource MutedText}" TextWrapping="Wrap" />
                     <Button x:Name="SetUpBackupsLink" Style="{StaticResource LinkButton}" Content="Set up backups"
@@ -60,6 +82,23 @@
                             Click="SetUpBackups_Click" AutomationProperties.Name="Set up backups" />
                 </StackPanel>
             </Grid>
+        </Border>
+
+        <!-- Copies of the library made just before earlier restores, kept in %APPDATA%\PromptLibrary\Safety backups.
+             Only shown when there are some. -->
+        <ToggleButton x:Name="SafetyToggle" Style="{StaticResource DisclosureToggle}" Margin="0,16,0,0"
+                      HorizontalAlignment="Left" Visibility="Collapsed"
+                      Content="Safety copies (made before a restore)"
+                      ToolTip="Your library as it was just before each earlier restore"
+                      AutomationProperties.Name="Safety copies (made before a restore)" />
+        <Border x:Name="SafetyFrame" Margin="0,8,0,0" Height="120" Background="{StaticResource Brush.Surface}"
+                BorderBrush="{StaticResource Brush.Line}" BorderThickness="1" CornerRadius="{StaticResource Radius}"
+                Visibility="{Binding IsChecked, ElementName=SafetyToggle, Converter={StaticResource BoolToVisibility}}">
+            <ListBox x:Name="SafetyList" Style="{StaticResource PlainList}" Margin="0,4"
+                     ItemContainerStyle="{StaticResource BackupRow}"
+                     ItemTemplate="{StaticResource BackupRowTemplate}"
+                     SelectionChanged="SafetyList_SelectionChanged"
+                     AutomationProperties.Name="Safety copies" />
         </Border>
 
         <TextBlock x:Name="ErrorText" Style="{StaticResource ErrorText}" />

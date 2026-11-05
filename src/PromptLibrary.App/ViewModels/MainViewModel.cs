@@ -18,9 +18,16 @@ public sealed class MainViewModel : ObservableObject
 {
     private const string AppTitle = "Prompt Library";
     private static readonly StringComparer NameOrder = StringComparer.CurrentCultureIgnoreCase;
+    private static readonly TimeSpan StatusDuration = TimeSpan.FromSeconds(6);
 
     private readonly AppHost _host;
     private readonly IDialogs _dialogs;
+    private readonly DispatcherTimer _statusTimer;
+    private string? _statusText;
+
+    // The user answered Cancel to "Save changes?" while the search was hiding the open prompt: the editor stays
+    // and the search doesn't ask again until the editor changes or the search is cleared.
+    private bool _searchKeepsEditor;
 
     private CategoryItem? _selectedCategory;
     private Prompt? _selectedPrompt;
@@ -53,7 +60,7 @@ public sealed class MainViewModel : ObservableObject
         CopyCommand = new RelayCommand(Copy);
         DeleteCommand = new RelayCommand(Delete);
         ClearSearchCommand = new RelayCommand(() => SearchText = "");
-        BackupNowCommand = new RelayCommand(() => _host.RunBackup(BackupTrigger.Manual));
+        BackupNowCommand = new RelayCommand(() => _ = _host.RunBackupAsync(BackupTrigger.Manual));
         RestoreCommand = new RelayCommand(_host.OpenRestore);
         OpenSettingsCommand = new RelayCommand(() => _host.OpenSettings());
         SetUpBackupsCommand = new RelayCommand(() => _host.OpenSettings(focusBackups: true));
@@ -65,6 +72,9 @@ public sealed class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(BackupWarningDetail));
             OnPropertyChanged(nameof(ShowBackupWarning));
         };
+
+        _statusTimer = new DispatcherTimer { Interval = StatusDuration };
+        _statusTimer.Tick += (_, _) => StatusText = null;
 
         RefreshAll();
     }
@@ -136,8 +146,13 @@ public sealed class MainViewModel : ObservableObject
         {
             if (!SetProperty(ref _searchText, value ?? "")) return;
             RefreshPrompts();
+            OnPropertyChanged(nameof(HasSearchText));
+            FollowSearch();
         }
     }
+
+    /// <summary>Shows the search box's clear (×) button.</summary>
+    public bool HasSearchText => _searchText.Length > 0;
 
     public PromptEditorViewModel? Editor
     {
@@ -151,6 +166,7 @@ public sealed class MainViewModel : ObservableObject
                 _editor.StopTimers();
             }
             _editor = value;
+            _searchKeepsEditor = false;
             if (_editor is not null) _editor.PropertyChanged += OnEditorChanged;
             OnPropertyChanged();
             OnPropertyChanged(nameof(HasEditor));
@@ -166,8 +182,24 @@ public sealed class MainViewModel : ObservableObject
     public string WindowTitle => _editor is { IsDirty: true } ? "• " + AppTitle : AppTitle;
 
     public bool ShowNoPromptsYet => Prompts.Count == 0 && string.IsNullOrWhiteSpace(_searchText);
+
+    /// <summary>The list's "+ New prompt" footer; hidden while the empty state shows its own New prompt button.</summary>
+    public bool ShowNewPromptFooter => !ShowNoPromptsYet;
+
     public bool ShowNoMatches => Prompts.Count == 0 && !string.IsNullOrWhiteSpace(_searchText);
     public string NoMatchesText => $"No prompts match \"{_searchText.Trim()}\".";
+
+    /// <summary>What the editor area says when no prompt is open.</summary>
+    public string NoEditorText => _host.Library.Prompts.Count == 0
+        ? "No prompts yet. Press Ctrl+N or choose New prompt."
+        : "Select a prompt, or create one.";
+
+    /// <summary>A short muted confirmation under the categories, e.g. <c>Moved 2 prompts to Code review.</c>; null when none.</summary>
+    public string? StatusText
+    {
+        get => _statusText;
+        private set => SetProperty(ref _statusText, value);
+    }
 
     /// <summary>The warning bar's text ("Backups are off…" or "Backups paused…"), or null when backups are fine.</summary>
     public string? BackupWarning => _host.BackupWarning;
@@ -200,14 +232,14 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// If the editor has unsaved changes, asks "Save changes?": Yes saves (false if that fails),
-    /// No throws the changes away, Cancel returns false. True when it's fine to move on.
+    /// If the editor has unsaved changes, asks <c>Save changes to "title"?</c>: Save saves (false if that fails),
+    /// Don't save throws the changes away, Cancel returns false. True when it's fine to move on.
     /// </summary>
     public bool ConfirmDiscardOrSave()
     {
         if (_editor is not { IsDirty: true } editor) return true;
 
-        switch (_dialogs.AskSaveChanges())
+        switch (_dialogs.AskSaveChanges(editor.DisplayTitle))
         {
             case true:
                 return Save();
@@ -230,6 +262,17 @@ public sealed class MainViewModel : ObservableObject
         RefreshPrompts();
         OnPropertyChanged(nameof(BackupWarning));
         OnPropertyChanged(nameof(ShowBackupWarning));
+    }
+
+    /// <summary>
+    /// Before a restore replaces the library: offers to save unsaved edits, then, if a change is still only in
+    /// memory because writing it failed, warns that the restore will lose it. False if the user cancelled.
+    /// </summary>
+    public bool ConfirmBeforeRestore()
+    {
+        if (!ConfirmDiscardOrSave()) return false;
+        return _unwritten is null || _dialogs.ConfirmDestructive(
+            "Some of your changes couldn't be saved to disk. Restoring now will lose them.", "Restore anyway");
     }
 
     /// <summary>
@@ -340,7 +383,7 @@ public sealed class MainViewModel : ObservableObject
 
         if (promptCount == 0)
         {
-            if (!_dialogs.Confirm($"Delete the category \"{item.Name}\"?")) return;
+            if (!_dialogs.ConfirmDestructive($"Delete the category \"{item.Name}\"?", "Delete")) return;
         }
         else
         {
@@ -377,6 +420,9 @@ public sealed class MainViewModel : ObservableObject
         var selectId = _selectedCategory?.Id == id ? moveTo : _selectedCategory?.Id;
         RebuildCategories(selectId);
         RefreshPrompts();
+
+        if (moveTo is { } targetId && _host.Library.Categories.FirstOrDefault(c => c.Id == targetId) is { } target)
+            ShowStatus($"Moved {Count(promptCount, "prompt")} to {target.Name}.");
     }
 
     // ---- Prompts -------------------------------------------------------------------------------
@@ -443,7 +489,10 @@ public sealed class MainViewModel : ObservableObject
         var written = _host.SaveLibrary();
         _unwritten = written ? null : onDisk;
         if (written)
+        {
             editor.LoadSaved(_host.Library.Prompts.First(p => p.Id == promptId));
+            editor.ShowSavedFeedback();
+        }
 
         // If the prompt moved out of the category being shown, follow it to its new category.
         var showCategory = _selectedCategory?.Id is { } shown && shown != editor.CategoryId
@@ -471,13 +520,13 @@ public sealed class MainViewModel : ObservableObject
 
         if (editor.PromptId is not { } id)
         {
-            if (!editor.IsDirty || _dialogs.Confirm($"Delete \"{editor.DisplayTitle}\"?"))
+            if (!editor.IsDirty || _dialogs.ConfirmDestructive($"Delete \"{editor.DisplayTitle}\"?", "Delete"))
                 Editor = null;
             return;
         }
 
         var title = _host.Library.Prompts.FirstOrDefault(p => p.Id == id)?.Title ?? editor.DisplayTitle;
-        if (!_dialogs.Confirm($"Delete \"{title}\"?")) return;
+        if (!_dialogs.ConfirmDestructive($"Delete \"{title}\"?", "Delete")) return;
 
         try
         {
@@ -561,6 +610,70 @@ public sealed class MainViewModel : ObservableObject
                 _asking = false;
             }
         });
+    }
+
+    /// <summary>
+    /// After the search text changed: if the search hides the open prompt, open the first match instead (or close
+    /// the editor when nothing matches). Unsaved changes are offered for saving first; if the user cancels, the
+    /// editor and the search text stay as they are.
+    /// </summary>
+    private void FollowSearch()
+    {
+        if (string.IsNullOrWhiteSpace(_searchText))
+        {
+            _searchKeepsEditor = false;
+            return;
+        }
+        if (!SearchHidesEditor()) return;
+
+        if (_editor is not { IsDirty: true })
+        {
+            OpenFirstMatch();
+            return;
+        }
+        if (_searchKeepsEditor || _asking) return;
+
+        // Deferred so the question isn't shown from inside the search box's text change.
+        Dispatcher.CurrentDispatcher.BeginInvoke(() =>
+        {
+            if (_asking || !SearchHidesEditor()) return;
+            _asking = true;
+            try
+            {
+                if (!ConfirmDiscardOrSave())
+                    _searchKeepsEditor = true;
+                else if (SearchHidesEditor()) // saving may have made the prompt match
+                    OpenFirstMatch();
+            }
+            finally
+            {
+                _asking = false;
+            }
+        });
+    }
+
+    /// <summary>True when the list shows search results that don't include the editor's prompt (or there's no editor).</summary>
+    private bool SearchHidesEditor()
+        => !string.IsNullOrWhiteSpace(_searchText)
+           && (_editor is null ? Prompts.Count > 0 : _editor.PromptId is not { } id || Prompts.All(p => p.Id != id));
+
+    private void OpenFirstMatch()
+    {
+        if (Prompts.FirstOrDefault() is { } first)
+        {
+            OpenPrompt(first);
+            return;
+        }
+        Editor = null;
+        _selectedPrompt = null;
+        OnPropertyChanged(nameof(SelectedPrompt));
+    }
+
+    private void ShowStatus(string text)
+    {
+        StatusText = text;
+        _statusTimer.Stop();
+        _statusTimer.Start();
     }
 
     /// <summary>
@@ -678,8 +791,10 @@ public sealed class MainViewModel : ObservableObject
 
         OnPropertyChanged(nameof(SelectedPrompt));
         OnPropertyChanged(nameof(ShowNoPromptsYet));
+        OnPropertyChanged(nameof(ShowNewPromptFooter));
         OnPropertyChanged(nameof(ShowNoMatches));
         OnPropertyChanged(nameof(NoMatchesText));
+        OnPropertyChanged(nameof(NoEditorText));
     }
 
     private void OnEditorChanged(object? sender, PropertyChangedEventArgs e)

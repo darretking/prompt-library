@@ -24,7 +24,8 @@ public sealed class TrayIcon : IDisposable
     // so Ctrl+V pastes into it.
     private IntPtr _returnFocusTo;
 
-    public event EventHandler<Guid>? PromptClicked;
+    /// <summary>A prompt was picked; <see cref="PromptPick.ReturnTo"/> is set when the menu came from the global shortcut.</summary>
+    public event EventHandler<PromptPick>? PromptClicked;
     public event EventHandler? OpenRequested;
     public event EventHandler? SettingsRequested;
     public event EventHandler? ExitRequested;
@@ -77,7 +78,7 @@ public sealed class TrayIcon : IDisposable
                 var promptItem = new Forms.ToolStripMenuItem(MenuText.ForMenu(prompt.Title));
                 promptItem.Click += (_, _) =>
                 {
-                    PromptClicked?.Invoke(this, id);
+                    PromptClicked?.Invoke(this, new PromptPick(id, _returnFocusTo));
                     ReturnFocus();
                 };
                 categoryItem.DropDownItems.Add(promptItem);
@@ -176,3 +177,7 @@ public sealed class TrayIcon : IDisposable
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsWindow(IntPtr hWnd);
 }
+
+/// <summary>A prompt picked from the quick menu. <paramref name="ReturnTo"/> is the window that was in front when the
+/// global shortcut opened the menu (zero for a tray click); focus goes back there and the prompt may be pasted into it.</summary>
+public sealed record PromptPick(Guid Id, IntPtr ReturnTo);

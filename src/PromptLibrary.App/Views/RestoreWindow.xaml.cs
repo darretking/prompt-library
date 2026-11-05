@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -9,7 +10,8 @@ namespace PromptLibrary.App.Views;
 
 /// <summary>
 /// Lists the backups in the backup folder, newest first with the newest readable one selected, and restores
-/// the chosen one after a confirm. Also opened at startup when library.json can't be read.
+/// the chosen one after a confirm. When there are safety copies (made before earlier restores), a collapsed
+/// "Safety copies" group lists them too. Also opened at startup when library.json can't be read.
 /// </summary>
 public partial class RestoreWindow : Window
 {
@@ -18,6 +20,7 @@ public partial class RestoreWindow : Window
     private readonly AppHost _host;
     private readonly bool _isStartup;
     private string? _folder;
+    private bool _restoring;
 
     /// <param name="isStartup">True when opened because library.json couldn't be read (Settings isn't available yet).</param>
     public RestoreWindow(AppHost host, bool isStartup)
@@ -25,11 +28,25 @@ public partial class RestoreWindow : Window
         _host = host;
         _isStartup = isStartup;
         InitializeComponent();
-        Loaded += async (_, _) => await ShowBackupsAsync(host.Settings.BackupFolder);
+        Loaded += async (_, _) =>
+        {
+            var safetyCopies = ShowSafetyCopiesAsync();
+            await ShowBackupsAsync(host.Settings.BackupFolder);
+            await safetyCopies;
+        };
     }
 
     /// <summary>The backup that was restored (set when the window closes with success).</summary>
     public BackupInfo? RestoredFrom { get; private set; }
+
+    private BackupRow? SelectedRow => (BackupList.SelectedItem ?? SafetyList.SelectedItem) as BackupRow;
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        // The library file is being replaced; the window closes by itself when that's done.
+        if (_restoring) e.Cancel = true;
+        base.OnClosing(e);
+    }
 
     private async Task ShowBackupsAsync(string? folder)
     {
@@ -37,7 +54,7 @@ public partial class RestoreWindow : Window
         FolderText.Text = folder is null ? "No backup folder chosen" : BackupLocation.ShortenMiddle(folder, FolderDisplayLength);
         FolderText.ToolTip = folder;
         BackupList.ItemsSource = null;
-        RestoreButton.IsEnabled = false;
+        UpdateRestoreButton();
 
         if (folder is null)
         {
@@ -60,12 +77,26 @@ public partial class RestoreWindow : Window
         else
         {
             EmptyPanel.Visibility = Visibility.Collapsed;
-            var now = DateTime.Now;
-            var rows = backups.Select(b => new BackupRow(b, BackupLocation.BackupRowText(b, now))).ToList();
+            var rows = ToRows(backups);
             BackupList.ItemsSource = rows;
             BackupList.SelectedItem = rows.FirstOrDefault(r => r.IsReadable);
             FocusSelectedRow();
         }
+    }
+
+    /// <summary>Lists <c>%APPDATA%\PromptLibrary\Safety backups</c>; the group shows only when it has copies.</summary>
+    private async Task ShowSafetyCopiesAsync()
+    {
+        var copies = await Task.Run(() => _host.ListBackups(Paths.SafetyBackupsFolder));
+        SafetyList.ItemsSource = ToRows(copies);
+        SafetyToggle.Visibility = copies.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (copies.Count == 0) SafetyToggle.IsChecked = false;
+    }
+
+    private static List<BackupRow> ToRows(IReadOnlyList<BackupInfo> backups)
+    {
+        var now = DateTime.Now;
+        return backups.Select(b => new BackupRow(b, BackupLocation.BackupRowText(b, now))).ToList();
     }
 
     private void ShowEmpty(string text, bool offerSetUp = false)
@@ -83,9 +114,22 @@ public partial class RestoreWindow : Window
                 row.Focus();
         });
 
+    // One selection across both lists: picking a row in one clears the other.
     private void BackupList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        RestoreButton.IsEnabled = BackupList.SelectedItem is BackupRow { IsReadable: true };
+        if (BackupList.SelectedItem is not null) SafetyList.SelectedItem = null;
+        UpdateRestoreButton();
+    }
+
+    private void SafetyList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (SafetyList.SelectedItem is not null) BackupList.SelectedItem = null;
+        UpdateRestoreButton();
+    }
+
+    private void UpdateRestoreButton()
+    {
+        RestoreButton.IsEnabled = SelectedRow is { IsReadable: true };
         ErrorText.Text = null;
     }
 
@@ -110,7 +154,7 @@ public partial class RestoreWindow : Window
 
     private async void Restore()
     {
-        if (BackupList.SelectedItem is not BackupRow { IsReadable: true } row || _folder is null) return;
+        if (_restoring || SelectedRow is not { IsReadable: true } row) return;
 
         // Unsaved edits in the main window first (they would otherwise be lost or written over the restore).
         if (!_host.ConfirmUnsavedChangesBeforeRestore()) return;
@@ -120,7 +164,19 @@ public partial class RestoreWindow : Window
                        "Your current library will be backed up first.";
         if (!ConfirmDialog.Ask(this, question, "Restore", "Cancel")) return;
 
-        var error = _host.RestoreBackup(row.Info);
+        _restoring = true;
+        Root.IsEnabled = false;
+        string? error;
+        try
+        {
+            error = await _host.RestoreBackupAsync(row.Info);
+        }
+        finally
+        {
+            _restoring = false;
+            Root.IsEnabled = true;
+        }
+
         if (error is null)
         {
             RestoredFrom = row.Info;
@@ -129,7 +185,7 @@ public partial class RestoreWindow : Window
         }
 
         // The safety backup may have been written even if the restore failed, so list again.
-        await ShowBackupsAsync(_folder);
+        await Task.WhenAll(ShowBackupsAsync(_folder), ShowSafetyCopiesAsync());
         ErrorText.Text = error;
     }
 

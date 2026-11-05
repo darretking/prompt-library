@@ -10,9 +10,10 @@ namespace PromptLibrary.App.ViewModels;
 /// </summary>
 public sealed class PromptEditorViewModel : ObservableObject
 {
-    private static readonly TimeSpan CopiedLabelDuration = TimeSpan.FromSeconds(1.5);
+    private static readonly TimeSpan FeedbackDuration = TimeSpan.FromSeconds(1.5);
 
     private readonly DispatcherTimer _copiedTimer;
+    private readonly DispatcherTimer _savedTimer;
 
     private string _title = "";
     private string _description = "";
@@ -28,15 +29,22 @@ public sealed class PromptEditorViewModel : ObservableObject
     private string? _textError;
     private string? _categoryError;
     private bool _showCopied;
+    private bool _showSaved;
 
     private PromptEditorViewModel(Guid? promptId)
     {
         PromptId = promptId;
-        _copiedTimer = new DispatcherTimer { Interval = CopiedLabelDuration };
+        _copiedTimer = new DispatcherTimer { Interval = FeedbackDuration };
         _copiedTimer.Tick += (_, _) =>
         {
             _copiedTimer.Stop();
             ShowCopied = false;
+        };
+        _savedTimer = new DispatcherTimer { Interval = FeedbackDuration };
+        _savedTimer.Tick += (_, _) =>
+        {
+            _savedTimer.Stop();
+            ShowSaved = false;
         };
     }
 
@@ -162,6 +170,22 @@ public sealed class PromptEditorViewModel : ObservableObject
         }
     }
 
+    /// <summary>"Save", or "Saved" for 1.5 s after a successful save.</summary>
+    public string SaveLabel => IsShowingSaved ? "Saved" : "Save";
+
+    /// <summary>True while the Save button says "Saved" (it is shown at full strength although it is disabled).</summary>
+    public bool IsShowingSaved => _showSaved && !IsDirty;
+
+    private bool ShowSaved
+    {
+        set
+        {
+            _showSaved = value;
+            OnPropertyChanged(nameof(SaveLabel));
+            OnPropertyChanged(nameof(IsShowingSaved));
+        }
+    }
+
     /// <summary>The title to show in messages, even when the field is still blank.</summary>
     public string DisplayTitle => string.IsNullOrWhiteSpace(_title) ? "Untitled prompt" : _title.Trim();
 
@@ -243,13 +267,35 @@ public sealed class PromptEditorViewModel : ObservableObject
     public void RefreshCategoryChoice() => OnPropertyChanged(nameof(CategoryId));
 
     /// <summary>Stops the "Copied" timer; called when this editor is replaced or closed.</summary>
-    public void StopTimers() => _copiedTimer.Stop();
+    public void StopTimers()
+    {
+        _copiedTimer.Stop();
+        _savedTimer.Stop();
+    }
+
+    public void ShowSavedFeedback()
+    {
+        ShowSaved = true;
+        _savedTimer.Stop();
+        _savedTimer.Start();
+    }
 
     public void ShowCopiedFeedback()
     {
         ShowCopied = true;
         _copiedTimer.Stop();
         _copiedTimer.Start();
+    }
+
+    protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        // An edit straight after saving turns "Saved" back into "Save".
+        if (e.PropertyName == nameof(IsDirty) && _showSaved)
+        {
+            base.OnPropertyChanged(new System.ComponentModel.PropertyChangedEventArgs(nameof(SaveLabel)));
+            base.OnPropertyChanged(new System.ComponentModel.PropertyChangedEventArgs(nameof(IsShowingSaved)));
+        }
     }
 
     private static string Plural(int count, string noun) => $"{count:N0} {noun}{(count == 1 ? "" : "s")}";

@@ -14,7 +14,8 @@ public partial class MoveCategoryDialog : Window
         InitializeComponent();
 
         var prompts = promptCount == 1 ? "1 prompt" : $"{promptCount} prompts";
-        MessageText.Text = $"\"{categoryName}\" has {prompts}. Choose where to move them; then the category is deleted.";
+        var them = promptCount == 1 ? "it" : "them";
+        MessageText.Text = $"\"{categoryName}\" has {prompts}. Move {them} to another category, then \"{categoryName}\" is deleted.";
         TargetBox.ItemsSource = targets;
         TargetBox.SelectedIndex = 0;
 

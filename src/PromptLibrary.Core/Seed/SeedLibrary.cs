@@ -9,10 +9,10 @@ public static class SeedLibrary
     {
         var cCoding = new Category { Id = Guid.NewGuid(), Name = "Coding" };
         var cTesting = new Category { Id = Guid.NewGuid(), Name = "Testing" };
-        var cUserInterface = new Category { Id = Guid.NewGuid(), Name = "User Interface" };
+        var cUserInterface = new Category { Id = Guid.NewGuid(), Name = "User interface" };
         var cMarketing = new Category { Id = Guid.NewGuid(), Name = "Marketing" };
         var cDocumentation = new Category { Id = Guid.NewGuid(), Name = "Documentation" };
-        var cCodeReview = new Category { Id = Guid.NewGuid(), Name = "Code Review" };
+        var cCodeReview = new Category { Id = Guid.NewGuid(), Name = "Code review" };
 
         Prompt P(string title, string description, Category category, string text) => new()
         {

@@ -9,6 +9,13 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <RootNamespace>PromptLibrary.App</RootNamespace>
+    <!-- The exe is PromptLibrary.exe. Windows shows the file description (AssemblyTitle) as the app name in
+         notifications of an unpackaged app, so these say "Prompt Library". No AppUserModelID is set in code:
+         without a matching Start-menu shortcut Windows would show the raw ID instead. -->
+    <AssemblyName>PromptLibrary</AssemblyName>
+    <AssemblyTitle>Prompt Library</AssemblyTitle>
+    <Product>Prompt Library</Product>
+    <Company>Prompt Library</Company>
   </PropertyGroup>
 
   <!-- WPF and WinForms share type names (Application, Clipboard, MessageBox...). Keep WPF as the

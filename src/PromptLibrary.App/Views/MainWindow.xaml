@@ -18,7 +18,7 @@
     <Window.Resources>
         <ContextMenu x:Key="CategoryMenu" x:Shared="False">
             <MenuItem Header="_Rename" InputGestureText="F2" Click="RenameCategory_Click" />
-            <MenuItem Header="_Delete" Click="DeleteCategory_Click" />
+            <MenuItem Header="_Delete" InputGestureText="Del" Click="DeleteCategory_Click" />
         </ContextMenu>
 
         <Style x:Key="CategoryRow" TargetType="ListBoxItem" BasedOn="{StaticResource RowItem}">
@@ -58,6 +58,27 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+
+        <Style x:Key="MutedWhenSet" TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Style.Triggers>
+                <Trigger Property="Text" Value="">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </Trigger>
+                <Trigger Property="Text" Value="{x:Null}">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Save: says "Saved" for 1.5 s after saving, at full strength although there's nothing left to save. -->
+        <Style x:Key="SaveButton" TargetType="Button" BasedOn="{StaticResource OutlineButton}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Editor.IsShowingSaved}" Value="True">
+                    <Setter Property="Opacity" Value="1" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
 
     <DockPanel>
@@ -79,9 +100,10 @@
             </Grid.RowDefinitions>
 
             <Grid Grid.Row="1">
+                <!-- At the minimum window size the list column gives way so the editor keeps its 420 px. -->
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="180" />
-                    <ColumnDefinition Width="260" />
+                    <ColumnDefinition Width="*" MinWidth="200" MaxWidth="260" />
                     <ColumnDefinition Width="*" MinWidth="420" />
                 </Grid.ColumnDefinitions>
 
@@ -111,10 +133,26 @@
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Grid.Column="1" Text="{Binding Count}" Style="{StaticResource MutedText}"
+                                            <TextBlock x:Name="CountText" Grid.Column="1" Text="{Binding Count}"
+                                                       Style="{StaticResource MutedText}"
                                                        Margin="8,0,0,0" VerticalAlignment="Center" />
+                                            <!-- Rename / Delete on the selected or hovered row. The negative margin keeps
+                                                 the 24 px buttons from making the row taller. -->
+                                            <StackPanel x:Name="RowActions" Grid.Column="2" Orientation="Horizontal"
+                                                        Margin="4,-4,-8,-4" VerticalAlignment="Center"
+                                                        Visibility="Collapsed">
+                                                <Button Style="{StaticResource IconButton}" Content="&#xE70F;"
+                                                        Focusable="False" Click="RenameCategory_Click"
+                                                        ToolTip="Rename (F2)"
+                                                        AutomationProperties.Name="{Binding Name, StringFormat=Rename {0}}" />
+                                                <Button Style="{StaticResource IconButton}" Content="&#xE74D;"
+                                                        Focusable="False" Click="DeleteCategory_Click"
+                                                        ToolTip="Delete (Del)"
+                                                        AutomationProperties.Name="{Binding Name, StringFormat=Delete {0}}" />
+                                            </StackPanel>
                                         </Grid>
                                         <StackPanel Visibility="{Binding IsRenaming, Converter={StaticResource BoolToVisibility}}">
                                             <TextBox Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}"
@@ -123,13 +161,38 @@
                                                      LostKeyboardFocus="RenameBox_LostKeyboardFocus"
                                                      IsVisibleChanged="InlineBox_IsVisibleChanged" />
                                             <TextBlock Text="{Binding Error}" Style="{StaticResource ErrorText}" />
+                                            <TextBlock Text="Enter to save, Esc to cancel" Style="{StaticResource MutedText}"
+                                                       Margin="0,4,0,0" />
                                         </StackPanel>
                                     </Grid>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding Count}" Value="0">
+                                            <Setter TargetName="CountText" Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding IsAll}" Value="False" />
+                                                <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True" />
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter TargetName="RowActions" Property="Visibility" Value="Visible" />
+                                            <Setter TargetName="CountText" Property="Visibility" Value="Collapsed" />
+                                        </MultiDataTrigger>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding IsAll}" Value="False" />
+                                                <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True" />
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter TargetName="RowActions" Property="Visibility" Value="Visible" />
+                                            <Setter TargetName="CountText" Property="Visibility" Value="Collapsed" />
+                                        </MultiDataTrigger>
+                                    </DataTemplate.Triggers>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
 
                         <StackPanel Grid.Row="2" Margin="8,8,8,16">
+                            <TextBlock Text="{Binding StatusText}" Style="{StaticResource MutedWhenSet}"
+                                       Margin="8,0,8,8" AutomationProperties.LiveSetting="Polite" />
                             <StackPanel Margin="8,0,8,8"
                                         Visibility="{Binding IsAddingCategory, Converter={StaticResource BoolToVisibility}}">
                                 <TextBox x:Name="NewCategoryBox"
@@ -159,12 +222,19 @@
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <TextBox x:Name="SearchBox" Grid.Row="0" Style="{StaticResource SearchBox}"
-                                 Tag="Search prompts" Margin="16,16,16,8"
-                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                                 ToolTip="Search titles, descriptions and prompt text (Ctrl+F)"
-                                 AutomationProperties.Name="Search prompts"
-                                 KeyDown="SearchBox_KeyDown" />
+                        <Grid Grid.Row="0" Margin="16,16,16,8">
+                            <TextBox x:Name="SearchBox" Style="{StaticResource PlaceholderBox}"
+                                     Tag="Search prompts" Padding="6,0,28,0"
+                                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="Search titles, descriptions and prompt text (Ctrl+F)"
+                                     AutomationProperties.Name="Search prompts"
+                                     KeyDown="SearchBox_KeyDown" />
+                            <Button Style="{StaticResource IconButton}" Content="&#xE711;" FontSize="10"
+                                    HorizontalAlignment="Right" Margin="0,0,4,0" Focusable="False"
+                                    Command="{Binding ClearSearchCommand}"
+                                    Visibility="{Binding HasSearchText, Converter={StaticResource BoolToVisibility}}"
+                                    ToolTip="Clear search (Esc)" AutomationProperties.Name="Clear search" />
+                        </Grid>
 
                         <ListBox x:Name="PromptList" Grid.Row="1" Style="{StaticResource PlainList}"
                                  ItemsSource="{Binding Prompts}"
@@ -185,7 +255,7 @@
                         <StackPanel Grid.Row="1" Margin="16,8,16,0"
                                     Visibility="{Binding ShowNoPromptsYet, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="No prompts yet" FontWeight="SemiBold" />
-                            <Button Content="New prompt" Command="{Binding NewPromptCommand}"
+                            <Button x:Name="EmptyNewPromptButton" Content="New prompt" Command="{Binding NewPromptCommand}"
                                     HorizontalAlignment="Left" Margin="0,16,0,0"
                                     ToolTip="New prompt (Ctrl+N)" AutomationProperties.Name="New prompt" />
                         </StackPanel>
@@ -201,14 +271,16 @@
 
                         <Button Grid.Row="2" Style="{StaticResource TextButton}" Content="+ New prompt"
                                 Margin="8,8,8,16" Command="{Binding NewPromptCommand}"
+                                Visibility="{Binding ShowNewPromptFooter, Converter={StaticResource BoolToVisibility}}"
                                 ToolTip="New prompt (Ctrl+N)" AutomationProperties.Name="New prompt" />
                     </Grid>
                 </Border>
 
                 <!-- Right: editor -->
                 <Grid Grid.Column="2">
-                    <TextBlock Text="Select a prompt, or create one." Foreground="{StaticResource Brush.Muted}"
-                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                    <TextBlock Text="{Binding NoEditorText}" Foreground="{StaticResource Brush.Muted}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap"
+                               Margin="16"
                                Visibility="{Binding HasNoEditor, Converter={StaticResource BoolToVisibility}}" />
 
                     <Grid Margin="16" Visibility="{Binding HasEditor, Converter={StaticResource BoolToVisibility}}">
@@ -217,14 +289,19 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" MinHeight="96" />
+                            <!-- 64 = three lines, so a new prompt (with its heading) still fits at the minimum window height. -->
+                            <RowDefinition Height="*" MinHeight="64" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
                         <StackPanel Grid.Row="0" Margin="0,0,0,16">
+                            <!-- Says this is a new, not yet saved prompt. -->
+                            <TextBlock Text="New prompt" FontWeight="SemiBold" Margin="0,0,0,4"
+                                       Visibility="{Binding Editor.IsNew, Converter={StaticResource BoolToVisibility}}" />
                             <TextBlock Text="Title" Style="{StaticResource FieldLabel}" />
-                            <TextBox x:Name="TitleBox" FontSize="18" FontWeight="SemiBold" MinHeight="40"
+                            <TextBox x:Name="TitleBox" Style="{StaticResource PlaceholderBox}" Tag="Untitled prompt"
+                                     FontSize="18" FontWeight="SemiBold"
                                      Text="{Binding Editor.Title, UpdateSourceTrigger=PropertyChanged}"
                                      AutomationProperties.Name="Title" />
                             <TextBlock Text="{Binding Editor.TitleError}" Style="{StaticResource ErrorText}" />
@@ -260,7 +337,9 @@
                                     CornerRadius="4,0,0,4" />
                             <TextBox x:Name="PromptBox" Style="{StaticResource SlipTextBox}" Margin="4,1,1,1"
                                      Text="{Binding Editor.Text, UpdateSourceTrigger=PropertyChanged}"
-                                     AutomationProperties.Name="Prompt text" />
+                                     PreviewKeyDown="PromptBox_PreviewKeyDown"
+                                     AutomationProperties.Name="Prompt text"
+                                     AutomationProperties.HelpText="Ctrl+Tab inserts a tab" />
                             <Border BorderBrush="{StaticResource Brush.Brand}" BorderThickness="2"
                                     CornerRadius="{StaticResource Radius}" IsHitTestVisible="False">
                                 <Border.Style>
@@ -276,7 +355,11 @@
                             </Border>
                         </Grid>
 
-                        <TextBlock Grid.Row="5" Text="{Binding Editor.TextError}" Style="{StaticResource ErrorText}" />
+                        <DockPanel Grid.Row="5" Margin="0,4,0,0">
+                            <TextBlock DockPanel.Dock="Right" Text="Ctrl+Tab inserts a tab" Style="{StaticResource MutedText}"
+                                       Margin="8,0,0,0" />
+                            <TextBlock Text="{Binding Editor.TextError}" Style="{StaticResource ErrorText}" Margin="0" />
+                        </DockPanel>
 
                         <Grid Grid.Row="6" Margin="0,16,0,0">
                             <Grid.ColumnDefinitions>
@@ -288,7 +371,8 @@
                                     HorizontalAlignment="Left" Command="{Binding DeleteCommand}"
                                     ToolTip="Delete this prompt (Delete key in the list)"
                                     AutomationProperties.Name="Delete prompt" />
-                            <Button Grid.Column="1" Content="Save" Margin="0,0,8,0"
+                            <Button Grid.Column="1" Style="{StaticResource SaveButton}" Content="{Binding Editor.SaveLabel}"
+                                    Margin="0,0,8,0"
                                     Command="{Binding SaveCommand}" IsEnabled="{Binding Editor.IsDirty}"
                                     ToolTip="Save (Ctrl+S)" AutomationProperties.Name="Save" />
                             <Button Grid.Column="2" Style="{StaticResource PrimaryButton}" MinWidth="128"

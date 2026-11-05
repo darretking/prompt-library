@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
+using PromptLibrary.App.Hotkeys;
 using PromptLibrary.Core.Hotkeys;
 
 namespace PromptLibrary.App.Views;
@@ -15,6 +17,8 @@ namespace PromptLibrary.App.Views;
 /// <item>A combination that can't be a shortcut raises <see cref="Rejected"/> and keeps listening.</item>
 /// <item>A valid combination stops listening and raises <see cref="ShortcutPressed"/>; the owner registers it and
 /// sets <see cref="Shortcut"/> if that worked.</item>
+/// <item>A Ctrl/Alt combination that another app has registered is read by a keyboard hook (installed only while
+/// listening), so it is reported too and the owner can say it is in use.</item>
 /// </list>
 /// Shared by Settings and the onboarding wizard.
 /// </summary>
@@ -28,6 +32,7 @@ public sealed class ShortcutBox : TextBox
         new FrameworkPropertyMetadata("", (d, _) => ((ShortcutBox)d).ShowCurrent()));
 
     private bool _isListening;
+    private ShortcutKeyHook? _hook;
 
     public ShortcutBox()
     {
@@ -35,6 +40,7 @@ public sealed class ShortcutBox : TextBox
         IsReadOnlyCaretVisible = false;
         IsUndoEnabled = false;
         InputMethod.SetIsInputMethodEnabled(this, false);
+        Unloaded += (_, _) => StopListening(); // the window closed: never leave the hook behind
     }
 
     /// <summary>The shortcut in use, e.g. <c>Ctrl+Alt+P</c>.</summary>
@@ -61,6 +67,7 @@ public sealed class ShortcutBox : TextBox
         if (_isListening) return;
         _isListening = true;
         ShowCurrent();
+        InstallHook();
         ListeningChanged?.Invoke(this, true);
     }
 
@@ -68,8 +75,35 @@ public sealed class ShortcutBox : TextBox
     {
         if (!_isListening) return;
         _isListening = false;
+        RemoveHook();
         ShowCurrent();
         ListeningChanged?.Invoke(this, false);
+    }
+
+    /// <summary>
+    /// While listening, a keyboard hook also reads the combination, so a shortcut another app has taken (whose key
+    /// presses never reach this box) can still be picked; registering it then fails and the owner says so.
+    /// </summary>
+    private void InstallHook()
+    {
+        if (Window.GetWindow(this) is not { } window) return;
+        var handle = new WindowInteropHelper(window).Handle;
+        if (handle == IntPtr.Zero) return;
+        // Deferred so the hook returns at once; the combination is handled like a key press in the box.
+        _hook = new ShortcutKeyHook(handle, text => Dispatcher.BeginInvoke(() => OnHookCombination(text)));
+    }
+
+    private void RemoveHook()
+    {
+        _hook?.Dispose();
+        _hook = null;
+    }
+
+    private void OnHookCombination(string text)
+    {
+        if (!_isListening || !HotkeyGesture.TryParse(text, out var gesture)) return;
+        StopListening();
+        ShortcutPressed?.Invoke(this, gesture!.ToString());
     }
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)

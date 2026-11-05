@@ -16,7 +16,7 @@ public class SeedLibraryTests
 
         Assert.Equal(12, lib.Prompts.Count);
         Assert.Equal(
-            new[] { "Coding", "Testing", "User Interface", "Marketing", "Documentation", "Code Review" },
+            new[] { "Coding", "Testing", "User interface", "Marketing", "Documentation", "Code review" },
             lib.Categories.Select(c => c.Name).ToArray());
         Assert.All(lib.Prompts, p => Assert.Contains(lib.Categories, c => c.Id == p.CategoryId));
         Assert.All(lib.Prompts, p => Assert.Equal(Now, p.CreatedAt));

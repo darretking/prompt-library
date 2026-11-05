@@ -41,6 +41,10 @@ public partial class SettingsWindow : Window
         KeepBox.SelectedItem = keep;
         KeepBox.SelectionChanged += KeepBox_SelectionChanged;
 
+        PasteBox.IsChecked = host.Settings.PasteAfterCopy;
+        PasteBox.Checked += (_, _) => ApplyPasteAfterCopy(true);
+        PasteBox.Unchecked += (_, _) => ApplyPasteAfterCopy(false);
+
         StartupBox.IsChecked = host.Settings.StartWithWindows;
         StartupBox.Checked += (_, _) => ApplyStartWithWindows(true);
         StartupBox.Unchecked += (_, _) => ApplyStartWithWindows(false);
@@ -82,6 +86,12 @@ public partial class SettingsWindow : Window
         if (KeepBox.SelectedItem is not int keep) return;
         _host.Settings.BackupsToKeep = keep;
         _host.SaveSettings(); // older backups are pruned at the next backup
+    }
+
+    private void ApplyPasteAfterCopy(bool enabled)
+    {
+        _host.Settings.PasteAfterCopy = enabled;
+        _host.SaveSettings();
     }
 
     private void ApplyStartWithWindows(bool enabled)

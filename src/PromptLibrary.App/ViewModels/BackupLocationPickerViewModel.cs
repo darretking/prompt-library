@@ -42,7 +42,9 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
             card is null ? Task.CompletedTask : BackUpToAsync(card.Folder, card.ProviderName, card.Name));
         ChooseFolderCommand = new AsyncRelayCommand(ChooseFolderAsync, () => !_isBusy);
         RefreshCommand = new AsyncRelayCommand(() => RefreshAsync(showProgress: true));
-        TryAgainCommand = new AsyncRelayCommand(() => _retry?.Invoke() ?? Task.CompletedTask);
+        // Not while a timed-out copy to the folder is still running.
+        TryAgainCommand = new AsyncRelayCommand(() => _retry?.Invoke() ?? Task.CompletedTask,
+            () => _host.SlowPickedFolderBackup is null);
         RestoreCommand = new RelayCommand(_host.OpenRestore);
 
         RebuildCards();
@@ -183,9 +185,26 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
             _retry = () => BackUpToAsync(folder, providerName, where);
             ResultText = $"Backup failed: {result.Error}";
             ResultIsError = true;
+            if (_host.SlowPickedFolderBackup is { } stillRunning)
+                _ = EnableTryAgainWhenDoneAsync(stillRunning);
         }
         OnPropertyChanged(nameof(ShowTryAgain));
         OnPropertyChanged(nameof(LastBackupText));
+    }
+
+    /// <summary>Try again stays disabled until the copy that timed out has really finished.</summary>
+    private async Task EnableTryAgainWhenDoneAsync(Task stillRunning)
+    {
+        TryAgainCommand.NotifyCanExecuteChanged();
+        try
+        {
+            await stillRunning;
+        }
+        catch (Exception)
+        {
+            // Only its end matters here.
+        }
+        TryAgainCommand.NotifyCanExecuteChanged();
     }
 
     private void SetBusy(bool busy)

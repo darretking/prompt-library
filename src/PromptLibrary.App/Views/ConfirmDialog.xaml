@@ -11,9 +11,15 @@
         <Button x:Name="LinkButton" Style="{StaticResource LinkButton}" HorizontalAlignment="Left"
                 Margin="0,8,0,0" Visibility="Collapsed" Click="Link_Click" />
 
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
-            <Button x:Name="CancelButton" IsCancel="True" Margin="0,0,8,0" />
-            <Button x:Name="PrimaryButton" Style="{StaticResource PrimaryButton}" IsDefault="True" Click="Primary_Click" />
-        </StackPanel>
+        <Grid Margin="0,24,0,0">
+            <!-- An optional second way out (e.g. "Don't save"), kept apart from the main pair. -->
+            <Button x:Name="AlternativeButton" HorizontalAlignment="Left" Visibility="Collapsed"
+                    Click="Alternative_Click" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="CancelButton" IsCancel="True" Margin="0,0,8,0" />
+                <Button x:Name="PrimaryButton" Style="{StaticResource PrimaryButton}" IsDefault="True"
+                        Click="Primary_Click" />
+            </StackPanel>
+        </Grid>
     </StackPanel>
 </Window>

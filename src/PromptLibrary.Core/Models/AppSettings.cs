@@ -13,4 +13,13 @@ public class AppSettings
     public DateTimeOffset? LastBackupAt { get; set; }
     public string? LastBackedUpLibraryHash { get; set; }
     public bool FirstRunDone { get; set; }
+
+    /// <summary>After a pick from the shortcut menu, also paste it into the app the user was typing in.</summary>
+    public bool PasteAfterCopy { get; set; } = true;
+
+    /// <summary>True once the tray has said "Still running…" after the main window was first closed.</summary>
+    public bool HideToTrayNoticeShown { get; set; }
+
+    /// <summary>The backup at the last exit didn't finish in time; the next start says so once.</summary>
+    public bool LastBackupUnfinished { get; set; }
 }
