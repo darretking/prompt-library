@@ -45,11 +45,17 @@ public partial class BackupLocationPicker : UserControl
         return ViewModel;
     }
 
+    /// <summary>Puts the keyboard focus on the selected card (select-only mode), else the first one.</summary>
+    public void FocusSelectedCard()
+        => FocusCard(ViewModel?.SelectedCard is { } selected ? Math.Max(0, ViewModel.Cards.IndexOf(selected)) : 0);
+
     /// <summary>
     /// Puts the keyboard focus on the first card. If the cards aren't there yet (detection still running), focus
     /// goes to "Choose another folder…" and moves to the first card when it appears.
     /// </summary>
-    public void FocusFirstCard()
+    public void FocusFirstCard() => FocusCard(0);
+
+    private void FocusCard(int index)
     {
         if (ViewModel is { Cards.Count: 0 } vm)
         {
@@ -57,7 +63,7 @@ public partial class BackupLocationPicker : UserControl
             {
                 if (vm.Cards.Count == 0) return;
                 vm.Cards.CollectionChanged -= OnCardsChanged;
-                FocusFirstCard();
+                FocusCard(index);
             }
             vm.Cards.CollectionChanged += OnCardsChanged;
         }
@@ -65,7 +71,7 @@ public partial class BackupLocationPicker : UserControl
         // After layout and activation, so the card exists and window activation doesn't take the focus back.
         Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () =>
         {
-            if (CardList.ItemContainerGenerator.ContainerFromIndex(0) is DependencyObject first
+            if (CardList.ItemContainerGenerator.ContainerFromIndex(index) is DependencyObject first
                 && FindButton(first) is { } card)
                 Keyboard.Focus(card);
             else if (ChooseFolderButton.IsVisible)

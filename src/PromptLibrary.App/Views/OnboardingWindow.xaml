@@ -83,15 +83,12 @@
                                    Text="That's it. In any other app, this opens your prompt menu — pick a prompt and it's pasted where you were typing." />
                     </Grid>
 
-                    <Button Style="{StaticResource LinkButton}" Content="Change shortcut" HorizontalAlignment="Left"
-                            Margin="0,24,0,0" Command="{Binding ChangeShortcutCommand}"
-                            AutomationProperties.Name="Change shortcut"
-                            Visibility="{Binding ShowChangeLink, Converter={StaticResource BoolToVisibility}}" />
 
                     <StackPanel Margin="0,24,0,0"
-                                Visibility="{Binding IsChangingShortcut, Converter={StaticResource BoolToVisibility}}">
+                                Visibility="{Binding ShowCaptureBox, Converter={StaticResource BoolToVisibility}}">
                         <TextBlock Text="New shortcut" Style="{StaticResource FieldLabel}" />
                         <views:ShortcutBox x:Name="ShortcutField" Style="{StaticResource {x:Type TextBox}}" Width="280"
+                                           Shortcut="{Binding CaptureBoxText, Mode=OneWay}"
                                            HorizontalAlignment="Left"
                                            AutomationProperties.Name="New shortcut"
                                            AutomationProperties.HelpText="Press the new shortcut, or Esc to cancel" />
@@ -110,6 +107,10 @@
                             </TextBlock.Style>
                         </TextBlock>
                     </StackPanel>
+                    <Button Style="{StaticResource LinkButton}" Content="Change shortcut" HorizontalAlignment="Left"
+                            Margin="0,16,0,0" Command="{Binding ChangeShortcutCommand}"
+                            AutomationProperties.Name="Change shortcut"
+                            Visibility="{Binding ShowChangeLink, Converter={StaticResource BoolToVisibility}}" />
                 </StackPanel>
 
                 <!-- Step 3: Backups -->

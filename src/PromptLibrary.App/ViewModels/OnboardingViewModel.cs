@@ -37,10 +37,10 @@ public sealed class OnboardingViewModel : ObservableObject
         _pasteAfterCopy = host.Settings.PasteAfterCopy;
         _isChangingShortcut = IsConflict; // the shortcut is taken: the capture box shows straight away
 
-        NextCommand = new AsyncRelayCommand(NextAsync, () => !_isBusy && _picker is not { IsBusy: true });
-        BackCommand = new RelayCommand(() => Move(_flow.Back()), () => !_isBusy);
+        NextCommand = new AsyncRelayCommand(NextAsync, () => !IsBusy);
+        BackCommand = new RelayCommand(() => Move(_flow.Back()), () => !IsBusy);
         SkipSetupCommand = new RelayCommand(() => CloseRequested?.Invoke(this, EventArgs.Empty));
-        SkipBackupsCommand = new RelayCommand(() => Move(_flow.Next()), () => !_isBusy);
+        SkipBackupsCommand = new RelayCommand(() => Move(_flow.Next()), () => !IsBusy);
         ChangeShortcutCommand = new RelayCommand(StartChangingShortcut);
     }
 
@@ -58,6 +58,9 @@ public sealed class OnboardingViewModel : ObservableObject
 
     /// <summary>True after Finish (closing then has nothing more to do).</summary>
     public bool IsFinished { get; private set; }
+
+    /// <summary>A backup is running (Next's, Try again, or a chosen folder): moving on or leaving waits for it.</summary>
+    public bool IsBusy => _isBusy || _picker is { IsBusy: true };
 
     // Steps and footer
     public OnboardingStep Step => _flow.Step;
@@ -100,11 +103,20 @@ public sealed class OnboardingViewModel : ObservableObject
         private set
         {
             if (SetProperty(ref _isChangingShortcut, value))
+            {
                 OnPropertyChanged(nameof(ShowChangeLink));
+                OnPropertyChanged(nameof(ShowCaptureBox));
+            }
         }
     }
 
     public bool ShowChangeLink => !_isChangingShortcut;
+
+    /// <summary>The capture box: while changing, and always when the shortcut is taken (it then says "Not set").</summary>
+    public bool ShowCaptureBox => _isChangingShortcut || IsConflict;
+
+    /// <summary>What the idle capture box shows: the shortcut that works, or <c>Not set</c>.</summary>
+    public string CaptureBoxText => IsConflict ? "Not set" : Hotkey;
 
     /// <summary>Under the capture box: the "use Ctrl or Alt" hint or the "already used" error.</summary>
     public string? ShortcutStatus
@@ -151,7 +163,7 @@ public sealed class OnboardingViewModel : ObservableObject
         picker.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(BackupLocationPickerViewModel.IsBusy))
-                NextCommand.NotifyCanExecuteChanged();
+                NotifyBusyChanged();
         };
     }
 
@@ -185,12 +197,13 @@ public sealed class OnboardingViewModel : ObservableObject
     }
 
     /// <summary>
-    /// The capture box stopped listening. Without a new shortcut (Esc, Tab) it goes away again and the keycaps
-    /// show, unless the shortcut is taken or the last try failed (then the box stays for another try).
+    /// The capture box stopped listening (Esc, Tab, a new shortcut, or leaving the step). Unless it is listening
+    /// again for another try, changing is over: the box shows the shortcut that works (or "Not set") and the hint
+    /// or error goes, so pressing the real shortcut on step 2 shows the ✓ line.
     /// </summary>
-    public void OnCaptureEnded()
+    public void OnCaptureEnded(bool listeningAgain)
     {
-        if (!IsChangingShortcut || IsConflict || ShortcutStatusIsError) return;
+        if (listeningAgain || !IsChangingShortcut) return;
         IsChangingShortcut = false;
         SetShortcutStatus(null, isError: false);
     }
@@ -198,10 +211,15 @@ public sealed class OnboardingViewModel : ObservableObject
     /// <summary>Keys that can't be a shortcut were pressed in the capture box.</summary>
     public void ShowShortcutHint(string hint) => SetShortcutStatus(hint, isError: false);
 
-    /// <summary>Skip setup, Esc or ×: the defaults stay and the wizard won't open by itself again.</summary>
-    public void Skip()
+    /// <summary>
+    /// Skip setup, Esc or ×: the choices so far are kept (on step 4 including its checkboxes), everything else stays
+    /// at the defaults, and the wizard won't open by itself again.
+    /// </summary>
+    public void Leave()
     {
-        OnboardingFlow.ApplySkip(_host.Settings);
+        _flow.ApplyLeave(_host.Settings, _startWithWindows, _pasteAfterCopy);
+        if (IsReady)
+            _host.ApplyStartupRegistration();
         _host.SaveSettings();
     }
 
@@ -256,6 +274,11 @@ public sealed class OnboardingViewModel : ObservableObject
     private void SetBusy(bool busy)
     {
         _isBusy = busy;
+        NotifyBusyChanged();
+    }
+
+    private void NotifyBusyChanged()
+    {
         NextCommand.NotifyCanExecuteChanged();
         BackCommand.NotifyCanExecuteChanged();
         SkipBackupsCommand.NotifyCanExecuteChanged();

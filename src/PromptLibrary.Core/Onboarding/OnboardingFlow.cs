@@ -54,6 +54,18 @@ public sealed class OnboardingFlow
     /// </summary>
     public bool AsksBeforeLeaving(bool backupFolderChosen) => Step != OnboardingStep.Welcome && backupFolderChosen;
 
+    /// <summary>
+    /// Esc, × or Skip setup: "your choices so far are kept". On step 4 that includes its checkboxes (as Finish);
+    /// before it the defaults stay. Either way the wizard doesn't open by itself again. The caller saves.
+    /// </summary>
+    public void ApplyLeave(AppSettings settings, bool startWithWindows, bool pasteAfterCopy)
+    {
+        if (IsLastStep)
+            ApplyFinish(settings, startWithWindows, pasteAfterCopy);
+        else
+            ApplySkip(settings);
+    }
+
     /// <summary>Skip (or leaving early): the defaults stay as they are and the wizard doesn't open again.</summary>
     public static void ApplySkip(AppSettings settings) => settings.FirstRunDone = true;
 

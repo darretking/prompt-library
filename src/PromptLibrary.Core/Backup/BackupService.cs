@@ -8,7 +8,10 @@ namespace PromptLibrary.Core.Backup;
 
 public enum BackupTrigger { Daily, OnExit, Manual }
 
-public record BackupResult(bool Success, string? BackupPath, string? Hash, string? Error);
+/// <summary>The outcome of a backup or restore. On failure <see cref="Error"/> is the technical detail and
+/// <see cref="Reason"/> what the user can act on (see <see cref="BackupFailureText"/>).</summary>
+public record BackupResult(bool Success, string? BackupPath, string? Hash, string? Error,
+    BackupFailureReason Reason = BackupFailureReason.Other);
 
 /// <summary>PromptCount is -1 when the backup file can't be read or parsed.</summary>
 public record BackupInfo(string Path, DateTime Timestamp, int PromptCount);
@@ -52,7 +55,7 @@ public class BackupService(Func<DateTime> nowLocal)
             if (!Directory.Exists(backupFolder))
             {
                 if (string.IsNullOrEmpty(parent) || !Directory.Exists(parent))
-                    return Failure($"Backup folder '{backupFolder}' is not available.");
+                    return Failure($"Backup folder '{backupFolder}' is not available.", BackupFailureReason.Unavailable);
                 Directory.CreateDirectory(backupFolder);
             }
 
@@ -63,7 +66,7 @@ public class BackupService(Func<DateTime> nowLocal)
         }
         catch (Exception ex) when (IsIoProblem(ex))
         {
-            return Failure(ex.Message);
+            return Failure(ex.Message, BackupFailureText.Classify(ex));
         }
 
         string hash;
@@ -73,7 +76,7 @@ public class BackupService(Func<DateTime> nowLocal)
         }
         catch (Exception ex) when (IsIoProblem(ex))
         {
-            return Failure(ex.Message);
+            return Failure(ex.Message, BackupFailureText.Classify(ex));
         }
 
         try { Prune(backupFolder, keep); }
@@ -203,5 +206,6 @@ public class BackupService(Func<DateTime> nowLocal)
     private static bool IsIoProblem(Exception ex)
         => ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException;
 
-    private static BackupResult Failure(string error) => new(false, null, null, error);
+    private static BackupResult Failure(string error, BackupFailureReason reason = BackupFailureReason.Other)
+        => new(false, null, null, error, reason);
 }

@@ -35,28 +35,23 @@ public partial class OnboardingWindow : Window
         ViewModel.ListenRequested += (_, _) => ListenForShortcut();
         ViewModel.PropertyChanged += (_, e) =>
         {
-            // A new step: the keyboard focus goes back to Next/Finish, so Enter keeps moving on.
             if (e.PropertyName is "" or nameof(OnboardingViewModel.Step) && !ShortcutField.IsListening)
-                Dispatcher.BeginInvoke(DispatcherPriority.Input, () => PrimaryButton.Focus());
+                Dispatcher.BeginInvoke(DispatcherPriority.Input, FocusForStep);
         };
 
         // While listening, the current shortcut is let go so pressing it reaches the box.
-        ShortcutField.Shortcut = host.Settings.Hotkey;
         ShortcutField.ListeningChanged += (_, listening) =>
         {
             if (listening) _host.SuspendHotkey();
             else
             {
                 _host.ResumeHotkey();
-                // After the press (if any) has been handled: Esc or Tab without a new shortcut closes the box.
-                Dispatcher.BeginInvoke(DispatcherPriority.Background, ViewModel.OnCaptureEnded);
+                // After the press (if any) has been handled and a failed try has started listening again.
+                Dispatcher.BeginInvoke(DispatcherPriority.Background,
+                    () => ViewModel.OnCaptureEnded(ShortcutField.IsListening));
             }
         };
-        ShortcutField.ShortcutPressed += (_, shortcut) =>
-        {
-            ViewModel.ApplyShortcut(shortcut);
-            ShortcutField.Shortcut = host.Settings.Hotkey;
-        };
+        ShortcutField.ShortcutPressed += (_, shortcut) => ViewModel.ApplyShortcut(shortcut);
         ShortcutField.Rejected += (_, hint) => ViewModel.ShowShortcutHint(hint);
         Closed += (_, _) => _host.ResumeHotkey();
         Loaded += (_, _) => PrimaryButton.Focus();
@@ -87,15 +82,33 @@ public partial class OnboardingWindow : Window
     {
         if (!_closingForExit && !ViewModel.IsFinished)
         {
+            // Not while a backup is running (its result decides what happens next); Esc and × wait for it.
+            if (ViewModel.IsBusy && !_host.IsSessionEnding)
+            {
+                e.Cancel = true;
+                return;
+            }
             if (ViewModel.AsksBeforeLeaving && !_host.IsSessionEnding
                 && !ConfirmDialog.Ask(this, "Leave setup? Your choices so far are kept.", "Leave", "Stay"))
             {
                 e.Cancel = true;
                 return;
             }
-            ViewModel.Skip();
+            ViewModel.Leave();
         }
         base.OnClosing(e);
+    }
+
+    /// <summary>
+    /// A new step: the keyboard focus goes to Next/Finish so Enter moves on, except on step 3 where it goes to the
+    /// selected folder card, so the choice is seen before Next backs up there.
+    /// </summary>
+    private void FocusForStep()
+    {
+        if (ViewModel.IsBackups && Picker.ViewModel?.SelectedCard is not null)
+            Picker.FocusSelectedCard();
+        else
+            PrimaryButton.Focus();
     }
 
     /// <summary>Shows the capture box listening (after layout, so it can take the focus).</summary>

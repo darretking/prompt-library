@@ -137,7 +137,7 @@ public sealed class AppHost : IDisposable
         }
         else if (!hotkeyRegistered)
         {
-            Tray.ShowMessage(AppName, $"Shortcut {Settings.Hotkey} is in use by another app. Pick another in Settings.", isError: true);
+            ShowHotkeyConflictMessage();
             OpenSettings();
         }
 
@@ -292,7 +292,14 @@ public sealed class AppHost : IDisposable
                 ShowInTaskbar = owner is null,
                 WindowStartupLocation = owner is null ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner,
             };
-            _onboardingWindow.Closed += (_, _) => _onboardingWindow = null;
+            _onboardingWindow.Closed += (_, _) =>
+            {
+                var finished = _onboardingWindow?.ViewModel.IsFinished == true;
+                _onboardingWindow = null;
+                // Left before Finish (step 4 explains a missing shortcut): say why the shortcut doesn't work.
+                if (!finished && !_exiting && !IsSessionEnding && !HotkeyRegistered)
+                    ShowHotkeyConflictMessage();
+            };
             _onboardingWindow.Show();
         }
         else if (_onboardingWindow.WindowState == WindowState.Minimized)
@@ -300,6 +307,9 @@ public sealed class AppHost : IDisposable
 
         _onboardingWindow.Activate();
     }
+
+    private void ShowHotkeyConflictMessage()
+        => Tray.ShowMessage(AppName, $"Shortcut {Settings.Hotkey} is in use by another app. Pick another in Settings.", isError: true);
 
     /// <summary><c>Help → About Prompt Library</c>: the name, version and where the prompts are stored.</summary>
     public void ShowAbout()
@@ -394,7 +404,11 @@ public sealed class AppHost : IDisposable
             var result = _backups.BackupNow(Paths.LibraryFile, folder, keep);
             // A technical "not available" error becomes the friendly one (e.g. "Is Google Drive signed in?").
             return !result.Success && BackupLocation.IsUnavailable(folder, Directory.Exists)
-                ? result with { Error = BackupLocation.UnavailableText(folder, providerName) }
+                ? result with
+                {
+                    Error = BackupLocation.UnavailableText(folder, providerName),
+                    Reason = BackupFailureReason.Unavailable,
+                }
                 : result;
         });
         var finished = await Task.WhenAny(backup, Task.Delay(PickedFolderBackupTimeout));
@@ -407,12 +421,13 @@ public sealed class AppHost : IDisposable
             else
             {
                 _slowPickedFolderBackup = backup;
-                result = new BackupResult(false, null, null, "The folder didn't respond within 15 seconds.");
+                result = new BackupResult(false, null, null, "The folder didn't respond within 15 seconds.",
+                    BackupFailureReason.TimedOut);
             }
         }
         catch (Exception ex)
         {
-            result = new BackupResult(false, null, null, ex.Message);
+            result = new BackupResult(false, null, null, ex.Message, BackupFailureText.Classify(ex));
         }
         if (!result.Success)
             return result;

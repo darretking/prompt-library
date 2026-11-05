@@ -118,3 +118,37 @@ public class OnboardingFlowTests
         return flow;
     }
 }
+
+public class OnboardingLeaveTests
+{
+    [Fact]
+    public void LeavingFromStep4_KeepsTheCheckboxChoices()
+    {
+        var flow = new OnboardingFlow();
+        while (!flow.IsLastStep) flow.Next();
+        var settings = new AppSettings();
+
+        flow.ApplyLeave(settings, startWithWindows: false, pasteAfterCopy: false);
+
+        Assert.True(settings.FirstRunDone);
+        Assert.False(settings.StartWithWindows);
+        Assert.False(settings.PasteAfterCopy);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void LeavingBeforeStep4_KeepsTheDefaults(int nexts)
+    {
+        var flow = new OnboardingFlow();
+        for (var i = 0; i < nexts - 1; i++) flow.Next();
+        var settings = new AppSettings();
+
+        flow.ApplyLeave(settings, startWithWindows: false, pasteAfterCopy: false);
+
+        Assert.True(settings.FirstRunDone);
+        Assert.True(settings.StartWithWindows);
+        Assert.True(settings.PasteAfterCopy);
+    }
+}

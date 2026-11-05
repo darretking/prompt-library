@@ -96,7 +96,7 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
         private set => SetProperty(ref _progressText, value);
     }
 
-    /// <summary><c>Backed up to …</c> or <c>Backup failed: …</c> after a pick; null before.</summary>
+    /// <summary><c>Backed up to …</c> or <c>Couldn't back up to …</c> after a pick; null before.</summary>
     public string? ResultText
     {
         get => _resultText;
@@ -227,7 +227,7 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
         else
         {
             _retry = () => BackUpToAsync(folder, providerName, where);
-            ResultText = $"Backup failed: {result.Error}";
+            ResultText = BackupFailureText.Message(folder, providerName, result.Reason);
             ResultIsError = true;
             if (_host.SlowPickedFolderBackup is { } stillRunning)
                 _ = EnableTryAgainWhenDoneAsync(stillRunning);
