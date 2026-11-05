@@ -18,6 +18,7 @@
     <Company>Prompt Library</Company>
     <!-- The installer takes its version from this exe's file version; bump it for every release. -->
     <Version>1.0.0</Version>
+    <Copyright>Copyright © 2026 Darret King. Licensed under GPL-3.0-or-later.</Copyright>
   </PropertyGroup>
 
   <!-- Single-file, self-contained publish (dotnet publish -c Release). Release only, so Debug builds and
