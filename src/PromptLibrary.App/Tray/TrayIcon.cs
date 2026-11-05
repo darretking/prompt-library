@@ -56,7 +56,10 @@ public sealed class TrayIcon : IDisposable
         {
             var click = _balloonClick;
             _balloonClick = null;
-            click?.Invoke();
+            // After this callback has returned: the click may open a modal dialog and even exit the app, which
+            // disposes this icon, and that must not happen inside its own event.
+            if (click is not null)
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(click);
         };
         _notifyIcon.BalloonTipClosed += (_, _) => _balloonClick = null;
         ToolTipText = tooltip;

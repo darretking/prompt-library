@@ -100,7 +100,8 @@ public class UpdateScheduleTests
 
     internal static ReleaseInfo Release(string version) => new(version, "v" + version,
         "https://github.com/darretking/prompt-library/releases/tag/v" + version, "PromptLibrary-Setup.msi",
-        "https://example.invalid/PromptLibrary-Setup.msi", 10, new string('a', 64));
+        $"https://github.com/darretking/prompt-library/releases/download/v{version}/PromptLibrary-Setup.msi", 10,
+        new string('a', 64));
 
     private static UpdateState StateWith(string version) => new() { LatestRelease = Release(version) };
 

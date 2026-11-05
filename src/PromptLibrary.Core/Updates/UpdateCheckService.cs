@@ -23,7 +23,34 @@ public sealed class UpdateCheckService : IUpdateCheckService
         _options = options;
         _now = now;
         State = UpdateStore.Load(options.StatePath);
-        if (UpdateSchedule.Reconcile(State, options.Running)) Save();
+        var changed = false;
+        if (State.LatestRelease is { } saved && !IsTrustworthy(saved))
+        {
+            // The file is only a cache: a release whose URLs aren't this app's GitHub releases is dropped.
+            State.LatestRelease = null;
+            changed = true;
+        }
+        if (UpdateSchedule.Reconcile(State, options.Running) || changed) Save();
+    }
+
+    private bool IsTrustworthy(ReleaseInfo release)
+        => ReleaseUrls.IsReleasePage(release.PageUrl, _options.Owner, _options.Repo)
+           && (release.AssetUrl is null || ReleaseUrls.IsReleaseAsset(release.AssetUrl, _options.Owner, _options.Repo))
+           && AppVersion.TryParse(release.Version, out _);
+
+    /// <summary>
+    /// Asks GitHub again and returns its latest release only if it is still <paramref name="version"/>. Update now
+    /// downloads from this fresh answer, never from the saved state, so the file and its checksum always come from
+    /// the same live response. Null when offline, changed or anything else went wrong. Doesn't change the state.
+    /// </summary>
+    public async Task<ReleaseInfo?> ConfirmLatestAsync(string version, CancellationToken ct)
+    {
+        var result = await FetchAsync(ct);
+        return result is { Status: UpdateCheckStatus.UpdateAvailable, Release: { } release }
+               && AppVersion.TryParse(version, out var offered) && AppVersion.TryParse(release.Version, out var latest)
+               && offered.CompareTo(latest) == 0
+            ? release
+            : null;
     }
 
     public UpdateState State { get; }
@@ -97,7 +124,7 @@ public sealed class UpdateCheckService : IUpdateCheckService
                 return Failed(UpdateFailure.BadResponse);
 
             var json = await response.Content.ReadAsStringAsync(timeout.Token);
-            if (ParseRelease(json, _options.AssetName) is not { } release
+            if (ParseRelease(json, _options) is not { } release
                 || !AppVersion.TryParse(release.Version, out var latest))
                 return Failed(UpdateFailure.BadResponse);
 
@@ -119,8 +146,23 @@ public sealed class UpdateCheckService : IUpdateCheckService
         }
     }
 
-    /// <summary>The release in a <c>releases/latest</c> body, or null when its tag or page is missing or the tag isn't a version.</summary>
-    internal static ReleaseInfo? ParseRelease(string json, string preferredAsset)
+    /// <summary>
+    /// The release in a <c>releases/latest</c> body, or null when its tag or page is missing or the tag isn't a version.
+    /// A page URL that isn't this repository's releases is replaced by <see cref="ReleaseUrls.LatestPage"/>; an
+    /// installer URL that isn't one of its release downloads is dropped (Update now then opens the page).
+    /// </summary>
+    internal static ReleaseInfo? ParseRelease(string json, UpdateOptions options)
+    {
+        var release = ParseRawRelease(json, options.AssetName);
+        if (release is null) return null;
+        if (!ReleaseUrls.IsReleasePage(release.PageUrl, options.Owner, options.Repo))
+            release = release with { PageUrl = ReleaseUrls.LatestPage(options.Owner, options.Repo) };
+        if (release.AssetUrl is not null && !ReleaseUrls.IsReleaseAsset(release.AssetUrl, options.Owner, options.Repo))
+            release = release with { AssetName = null, AssetUrl = null, AssetSize = null, AssetSha256 = null };
+        return release;
+    }
+
+    private static ReleaseInfo? ParseRawRelease(string json, string preferredAsset)
     {
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;

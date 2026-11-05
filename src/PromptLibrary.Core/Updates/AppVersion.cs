@@ -28,7 +28,8 @@ public readonly record struct AppVersion(int Major, int Minor, int Patch, int Re
         {
             pre = s[(dash + 1)..];
             s = s[..dash];
-            if (pre.Length == 0) return false;
+            // SemVer's characters only: the version also names the downloaded file, so no slashes, dots-dots or spaces.
+            if (pre.Length == 0 || !pre.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-')) return false;
         }
 
         var parts = s.Split('.');

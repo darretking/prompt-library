@@ -26,8 +26,18 @@ public sealed class UpdateDownloader(HttpClient http)
         if (release.AssetSha256 is null)
             throw new UpdateDownloadException("This release has no checksum, so its installer can't be verified.");
 
+        if (!Uri.TryCreate(release.AssetUrl, UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttps)
+            throw new UpdateDownloadException("The installer's address isn't a secure web address.");
+
+        // The file name comes from the parsed version (letters, digits, dots and dashes only) and must stay in the folder.
+        if (!AppVersion.TryParse(release.Version, out var version))
+            throw new UpdateDownloadException("The release's version isn't valid.");
+        var fullFolder = Path.GetFullPath(folder);
+        var path = Path.GetFullPath(Path.Combine(fullFolder, $"PromptLibrary-Setup-{version}.msi"));
+        if (!string.Equals(Path.GetDirectoryName(path), fullFolder.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+            throw new UpdateDownloadException("The release's version isn't valid.");
+
         var expectedSize = release.AssetSize.Value;
-        var path = Path.Combine(folder, $"PromptLibrary-Setup-{release.Version}.msi");
         var completed = false;
         try
         {
@@ -36,7 +46,7 @@ public sealed class UpdateDownloader(HttpClient http)
             using var watchdog = CancellationTokenSource.CreateLinkedTokenSource(ct);
             watchdog.CancelAfter(StallTimeout);
 
-            using var request = new HttpRequestMessage(HttpMethod.Get, release.AssetUrl);
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.UserAgent.Add(new ProductInfoHeaderValue("PromptLibrary", "updater"));
             using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, watchdog.Token);
             if (!response.IsSuccessStatusCode)
@@ -83,6 +93,11 @@ public sealed class UpdateDownloader(HttpClient http)
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             throw new UpdateDownloadException("The installer couldn't be saved: " + ex.Message, ex);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not UpdateDownloadException)
+        {
+            // Anything else (an odd redirect, a handler error) is a failed download, never a crash.
+            throw new UpdateDownloadException("The download failed: " + ex.Message, ex);
         }
         finally
         {

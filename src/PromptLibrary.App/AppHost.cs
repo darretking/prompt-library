@@ -777,11 +777,13 @@ public sealed class AppHost : IDisposable
                 return false;
         }
 
-        _ = FinishExitAsync(afterExit);
+        FinishExit(afterExit);
         return true;
     }
 
-    private async Task FinishExitAsync(Action? afterExit)
+    // async void on purpose, as ExitApp was: an unexpected error here must reach the dispatcher's crash handler
+    // (log, recovery files, process ends) instead of vanishing in an unobserved Task and leaving a headless process.
+    private async void FinishExit(Action? afterExit)
     {
 
         // From here nothing can reopen a window or start a copy: the tray icon, shortcut and timers go first

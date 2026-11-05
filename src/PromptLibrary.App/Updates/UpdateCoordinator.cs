@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using PromptLibrary.App.Views;
 using PromptLibrary.Core.Storage;
@@ -118,14 +119,27 @@ public sealed class UpdateCoordinator : IDisposable
     /// <summary>Opens the update dialog for the newest known release (rail link, tray item, balloon, manual check).</summary>
     public void OpenDialog()
     {
-        if (_dialogOpen || _host.IsExiting || NewerRelease is not { } release) return;
+        if (_dialogOpen || _host.IsExiting || _host.AsksNothing || NewerRelease is not { } release) return;
+        if (ComponentDispatcher.IsThreadModal)
+        {
+            // Another of our dialogs is open (e.g. "Save changes?" from the tray or a balloon click): never stack
+            // on it; open once it has closed.
+            WaitForModalToClose();
+            return;
+        }
         _dialogOwed = false;
         _dialogOpen = true;
         UpdateDialogResult result;
         try
         {
-            result = UpdateDialog.Ask(_host.DialogOwner, release, _service.Running,
-                (progress, ct) => _downloader.DownloadAsync(release, Paths.UpdateDownloadFolder, progress, ct));
+            result = UpdateDialog.Ask(_host.DialogOwner, release, _service.Running, async (progress, ct) =>
+            {
+                // Download from a fresh answer, never from the saved state: the file and its checksum must come from
+                // the same live response.
+                var fresh = await _service.ConfirmLatestAsync(release.Version, ct)
+                            ?? throw new UpdateDownloadException("GitHub didn't confirm this release.");
+                return await _downloader.DownloadAsync(fresh, Paths.UpdateDownloadFolder, progress, ct);
+            });
         }
         finally
         {
@@ -149,7 +163,26 @@ public sealed class UpdateCoordinator : IDisposable
         ApplyReminder();
     }
 
-    public void Dispose() => _timer.Stop();
+    public void Dispose()
+    {
+        _timer.Stop();
+        _modalWait?.Stop();
+    }
+
+    private DispatcherTimer? _modalWait;
+
+    private void WaitForModalToClose()
+    {
+        if (_modalWait is { IsEnabled: true }) return;
+        _modalWait = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _modalWait.Tick += (_, _) =>
+        {
+            if (ComponentDispatcher.IsThreadModal) return;
+            _modalWait!.Stop();
+            OpenDialog();
+        };
+        _modalWait.Start();
+    }
 
     private async Task RunAutomaticCheckAsync()
     {

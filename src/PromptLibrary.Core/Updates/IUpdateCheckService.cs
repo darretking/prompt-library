@@ -17,6 +17,12 @@ public interface IUpdateCheckService
     /// </summary>
     Task<UpdateCheckResult> CheckAsync(bool manual, CancellationToken ct = default);
 
+    /// <summary>
+    /// Asks GitHub again; its latest release if that is still <paramref name="version"/>, else null. Update now
+    /// downloads from this, never from the saved state.
+    /// </summary>
+    Task<ReleaseInfo?> ConfirmLatestAsync(string version, CancellationToken ct);
+
     /// <summary>A balloon or dialog announced <paramref name="version"/>; don't announce it again.</summary>
     void MarkPrompted(string version);
 
