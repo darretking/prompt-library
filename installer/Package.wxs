@@ -1,0 +1,88 @@
+<!--
+  Prompt Library installer: a per-user MSI (no admin prompt) that installs the single-file Release exe to
+  %LOCALAPPDATA%\Programs\Prompt Library, adds a Start-menu shortcut and a Settings > Apps entry.
+  Build with build\build-installer.ps1. The pages are in InstallerUi.wxs.
+
+  Uninstall removes the program files, the shortcut and the "start with Windows" Run value the app writes,
+  but never the user's data in %APPDATA%\PromptLibrary.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <!-- The version is the exe's file version (<Version> in PromptLibrary.App.csproj). The UpgradeCode never changes. -->
+  <Package Name="Prompt Library"
+           Manufacturer="Prompt Library"
+           Version="!(bind.FileVersion.PromptLibraryExe)"
+           UpgradeCode="1DE72CEB-0AAE-4DBD-85CC-04D3D3109BAA"
+           Scope="perUser"
+           Codepage="1252">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Prompt Library is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="AppIcon.ico" SourceFile="..\src\PromptLibrary.App\Assets\app.ico" />
+
+    <!-- Settings > Apps: the app icon, and only Uninstall (no Modify or Repair buttons). -->
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <!-- A running copy is closed by util:CloseApplication below, so Windows Installer's own "files in use" check
+         (Restart Manager) is turned off: it would otherwise ask the user to close the tray app by hand. -->
+    <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="LocalProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="Prompt Library" />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <!-- The exe and its Start-menu shortcut. Files in the user profile need a per-user registry key path and
+         RemoveFolder entries (ICE38, ICE64). RemoveFolder only removes an empty folder, so a shared Programs
+         folder stays. -->
+    <Component Id="AppExe" Directory="INSTALLFOLDER" Guid="CCBAADC0-E985-46EA-A3C8-ED513A7400E4">
+      <File Id="PromptLibraryExe" Source="$(AppPublishDir)PromptLibrary.exe" />
+      <Shortcut Id="AppShortcut" Directory="ProgramMenuFolder" Name="Prompt Library"
+                Description="Keep your AI prompts one shortcut away." Target="[#PromptLibraryExe]"
+                WorkingDirectory="INSTALLFOLDER" Icon="AppIcon.ico" />
+      <RegistryValue Root="HKCU" Key="Software\Prompt Library" Name="InstallFolder" Type="string"
+                     Value="[INSTALLFOLDER]" KeyPath="yes" />
+      <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
+      <RemoveFolder Id="RemoveLocalProgramsFolder" Directory="LocalProgramsFolder" On="uninstall" />
+    </Component>
+
+    <!-- Closes a running copy before its files are replaced or removed (install, upgrade, uninstall). The app
+         answers WM_CLOSE by exiting normally, which includes its exit backup (at most 10 s), so this waits up to
+         12 s. No TerminateProcess: that needs WiX's deferred action, which can't run this early (see below); if
+         the app ever didn't exit, Windows Installer's own "close the app" message would be the fallback. -->
+    <util:CloseApplication Id="CloseRunningApp" Target="PromptLibrary.exe" CloseMessage="yes"
+                           RebootPrompt="no" Timeout="12" />
+
+    <!-- The app writes HKCU\...\Run\PromptLibrary itself ("start with Windows"), so MSI doesn't know about it.
+         Delete just that value on a real uninstall (not when an upgrade removes the old version). -->
+    <SetProperty Id="RemoveStartupValue" Sequence="execute" Before="RemoveStartupValue"
+                 Condition="REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE"
+                 Value="&quot;[System64Folder]reg.exe&quot; delete &quot;HKCU\Software\Microsoft\Windows\CurrentVersion\Run&quot; /v PromptLibrary /f" />
+    <CustomAction Id="RemoveStartupValue" BinaryRef="Wix4UtilCA_X64" DllEntry="WixQuietExec"
+                  Execute="deferred" Impersonate="yes" Return="ignore" />
+
+    <!-- "Launch Prompt Library" on the finish page. Per-user install, so it starts as the user, not elevated. -->
+    <CustomAction Id="LaunchApp" FileRef="PromptLibraryExe" ExeCommand="" Return="asyncNoWait" />
+
+    <InstallExecuteSequence>
+      <!-- util:CloseApplication runs just before InstallFiles by default, but Windows Installer checks for files in
+           use earlier, in InstallValidate, and would then ask the user to close the app. Close it before that. -->
+      <Custom Action="override Wix4CloseApplications_X64" Before="InstallValidate" Condition="VersionNT &gt; 400" />
+      <Custom Action="RemoveStartupValue" After="RemoveRegistryValues"
+              Condition="REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+    </InstallExecuteSequence>
+
+    <Feature Id="Main">
+      <ComponentRef Id="AppExe" />
+    </Feature>
+
+    <UIRef Id="PromptLibraryUI" />
+  </Package>
+</Wix>

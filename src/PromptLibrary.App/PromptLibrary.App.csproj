@@ -16,6 +16,8 @@
     <AssemblyTitle>Prompt Library</AssemblyTitle>
     <Product>Prompt Library</Product>
     <Company>Prompt Library</Company>
+    <!-- The installer takes its version from this exe's file version; bump it for every release. -->
+    <Version>1.0.0</Version>
   </PropertyGroup>
 
   <!-- Single-file, self-contained publish (dotnet publish -c Release). Release only, so Debug builds and

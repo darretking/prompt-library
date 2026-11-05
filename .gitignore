@@ -435,3 +435,8 @@ FodyWeavers.xsd
 !src/PromptLibrary.Core/Backup/
 
 publish/
+
+# Installer build output (build/build-installer.ps1)
+artifacts/
+installer/bin/
+installer/obj/

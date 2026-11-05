@@ -1,0 +1,201 @@
+<!--
+  The installer's pages: Welcome (Install) -> Progress -> Finish ("Launch Prompt Library", ticked).
+  Our own small dialog set instead of a stock WixUI set, so there is no licence page, no Ready page, no folder
+  choice and no "Setup Wizard" wording. Running the MSI again shows Repair / Uninstall instead of Welcome.
+  All copy is sentence case. Sizes are in dialog units (370 x 270 for the main pages); the art bitmaps are
+  in Assets (made by build\make-installer-bitmaps.py).
+
+  There is deliberately no FilesInUse / MsiRMFilesInUse dialog: the running app is closed by
+  util:CloseApplication (Package.wxs), so the user is never asked to close it.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Fragment>
+    <Binary Id="PL_DialogBmp" SourceFile="Assets\dialog.png" />
+    <Binary Id="PL_BannerBmp" SourceFile="Assets\banner.png" />
+
+    <!-- "Install" for a new install, "Update" when an older version is installed (set once FindRelatedProducts ran). -->
+    <Property Id="PL_VERB" Value="Install" />
+    <SetProperty Id="PL_VERB" Value="Update" Sequence="ui" After="FindRelatedProducts" Condition="WIX_UPGRADE_DETECTED" />
+
+    <!-- The finish page's "Launch Prompt Library" box starts ticked. -->
+    <Property Id="LAUNCHAPP" Value="1" />
+
+    <UI Id="PromptLibraryUI">
+      <TextStyle Id="PL_Normal" FaceName="Segoe UI" Size="9" />
+      <TextStyle Id="PL_Big" FaceName="Segoe UI" Size="15" />
+      <TextStyle Id="PL_Heading" FaceName="Segoe UI" Size="11" />
+      <Property Id="DefaultUIFont" Value="PL_Normal" />
+      <Property Id="ErrorDialog" Value="ErrorDlg" />
+
+      <!-- Welcome: new install or update. -->
+      <Dialog Id="WelcomeDlg" Width="370" Height="270" Title="[ProductName]">
+        <Control Id="Install" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="[PL_VERB]">
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel">
+          <Publish Event="EndDialog" Value="Exit" />
+        </Control>
+        <Control Id="Bitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="234" TabSkip="no" Text="PL_DialogBmp" />
+        <Control Id="Title" Type="Text" X="135" Y="20" Width="220" Height="30" Transparent="yes" NoPrefix="yes"
+                 Text="{\PL_Big}[PL_VERB] Prompt Library" />
+        <Control Id="InstallText" Type="Text" X="135" Y="58" Width="220" Height="60" Transparent="yes" NoPrefix="yes"
+                 Hidden="yes" ShowCondition="NOT WIX_UPGRADE_DETECTED"
+                 Text="Keep your AI prompts one shortcut away. Installs just for you; no admin rights needed." />
+        <Control Id="UpdateText" Type="Text" X="135" Y="58" Width="220" Height="60" Transparent="yes" NoPrefix="yes"
+                 Hidden="yes" ShowCondition="WIX_UPGRADE_DETECTED"
+                 Text="Prompt Library closes for a moment if it's running. Your prompts and settings are kept." />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+      </Dialog>
+
+      <!-- Running the MSI again while this version is installed. -->
+      <Dialog Id="MaintenanceDlg" Width="370" Height="270" Title="[ProductName]">
+        <Control Id="Repair" Type="PushButton" X="168" Y="243" Width="56" Height="17" Default="yes" Text="Repair">
+          <Publish Event="ReinstallMode" Value="ecmus" />
+          <Publish Event="Reinstall" Value="All" />
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+        <Control Id="Uninstall" Type="PushButton" X="236" Y="243" Width="56" Height="17" Text="Uninstall">
+          <Publish Event="Remove" Value="All" />
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel">
+          <Publish Event="EndDialog" Value="Exit" />
+        </Control>
+        <Control Id="Bitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="234" TabSkip="no" Text="PL_DialogBmp" />
+        <Control Id="Title" Type="Text" X="135" Y="20" Width="220" Height="30" Transparent="yes" NoPrefix="yes"
+                 Text="{\PL_Big}Prompt Library is installed" />
+        <Control Id="Description" Type="Text" X="135" Y="58" Width="220" Height="60" Transparent="yes" NoPrefix="yes"
+                 Text="Repair puts its program files back. Uninstall removes the app and keeps your prompts and backups." />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+      </Dialog>
+
+      <!-- Shown while the install runs (modeless). -->
+      <Dialog Id="ProgressDlg" Width="370" Height="270" Title="[ProductName]" Modeless="yes">
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Default="yes" Cancel="yes" Text="Cancel">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
+        </Control>
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="PL_BannerBmp" />
+        <Control Id="TitleInstall" Type="Text" X="20" Y="14" Width="290" Height="18" Transparent="yes" NoPrefix="yes"
+                 Hidden="yes" ShowCondition="NOT Installed AND NOT WIX_UPGRADE_DETECTED"
+                 Text="{\PL_Heading}Installing Prompt Library…" />
+        <Control Id="TitleUpdate" Type="Text" X="20" Y="14" Width="290" Height="18" Transparent="yes" NoPrefix="yes"
+                 Hidden="yes" ShowCondition="NOT Installed AND WIX_UPGRADE_DETECTED"
+                 Text="{\PL_Heading}Updating Prompt Library…" />
+        <Control Id="TitleRepair" Type="Text" X="20" Y="14" Width="290" Height="18" Transparent="yes" NoPrefix="yes"
+                 Hidden="yes" ShowCondition="Installed AND NOT REMOVE=&quot;ALL&quot;"
+                 Text="{\PL_Heading}Repairing Prompt Library…" />
+        <Control Id="TitleRemove" Type="Text" X="20" Y="14" Width="290" Height="18" Transparent="yes" NoPrefix="yes"
+                 Hidden="yes" ShowCondition="Installed AND REMOVE=&quot;ALL&quot;"
+                 Text="{\PL_Heading}Removing Prompt Library…" />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+        <Control Id="ActionText" Type="Text" X="20" Y="80" Width="330" Height="12" NoPrefix="yes">
+          <Subscribe Event="ActionText" Attribute="Text" />
+        </Control>
+        <Control Id="ProgressBar" Type="ProgressBar" X="20" Y="96" Width="330" Height="10" ProgressBlocks="yes" Text="Progress">
+          <Subscribe Event="SetProgress" Attribute="Progress" />
+        </Control>
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+      </Dialog>
+
+      <!-- Finish. The launch box sits in the button row, where its background matches the dialog. -->
+      <Dialog Id="ExitDlg" Width="370" Height="270" Title="[ProductName]">
+        <Control Id="Finish" Type="PushButton" X="304" Y="243" Width="56" Height="17" Default="yes" Cancel="yes" Text="Finish">
+          <Publish Event="DoAction" Value="LaunchApp" Condition="LAUNCHAPP = 1 AND NOT Installed" />
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+        <Control Id="LaunchCheckBox" Type="CheckBox" X="15" Y="243" Width="200" Height="17" Property="LAUNCHAPP"
+                 CheckBoxValue="1" Text="Launch Prompt Library" Hidden="yes" ShowCondition="NOT Installed" />
+        <Control Id="Bitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="234" TabSkip="no" Text="PL_DialogBmp" />
+        <Control Id="TitleInstall" Type="Text" X="135" Y="20" Width="220" Height="30" Transparent="yes" NoPrefix="yes"
+                 Hidden="yes" ShowCondition="NOT Installed AND NOT WIX_UPGRADE_DETECTED"
+                 Text="{\PL_Big}Prompt Library is installed" />
+        <Control Id="TitleUpdate" Type="Text" X="135" Y="20" Width="220" Height="30" Transparent="yes" NoPrefix="yes"
+                 Hidden="yes" ShowCondition="NOT Installed AND WIX_UPGRADE_DETECTED"
+                 Text="{\PL_Big}Prompt Library is updated" />
+        <Control Id="TitleRepair" Type="Text" X="135" Y="20" Width="220" Height="30" Transparent="yes" NoPrefix="yes"
+                 Hidden="yes" ShowCondition="Installed AND NOT REMOVE=&quot;ALL&quot;"
+                 Text="{\PL_Big}Prompt Library is repaired" />
+        <Control Id="TitleRemove" Type="Text" X="135" Y="20" Width="220" Height="30" Transparent="yes" NoPrefix="yes"
+                 Hidden="yes" ShowCondition="Installed AND REMOVE=&quot;ALL&quot;"
+                 Text="{\PL_Big}Prompt Library is removed" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+      </Dialog>
+
+      <Dialog Id="UserExitDlg" Width="370" Height="270" Title="[ProductName]">
+        <Control Id="Finish" Type="PushButton" X="304" Y="243" Width="56" Height="17" Default="yes" Cancel="yes" Text="Close">
+          <Publish Event="EndDialog" Value="Exit" />
+        </Control>
+        <Control Id="Bitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="234" TabSkip="no" Text="PL_DialogBmp" />
+        <Control Id="Title" Type="Text" X="135" Y="20" Width="220" Height="30" Transparent="yes" NoPrefix="yes"
+                 Text="{\PL_Big}Setup was cancelled" />
+        <Control Id="Description" Type="Text" X="135" Y="58" Width="220" Height="60" Transparent="yes" NoPrefix="yes"
+                 Text="Nothing was changed." />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+      </Dialog>
+
+      <Dialog Id="FatalErrorDlg" Width="370" Height="270" Title="[ProductName]">
+        <Control Id="Finish" Type="PushButton" X="304" Y="243" Width="56" Height="17" Default="yes" Cancel="yes" Text="Close">
+          <Publish Event="EndDialog" Value="Exit" />
+        </Control>
+        <Control Id="Bitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="234" TabSkip="no" Text="PL_DialogBmp" />
+        <Control Id="Title" Type="Text" X="135" Y="20" Width="220" Height="30" Transparent="yes" NoPrefix="yes"
+                 Text="{\PL_Big}Setup didn't finish" />
+        <Control Id="Description" Type="Text" X="135" Y="58" Width="220" Height="60" Transparent="yes" NoPrefix="yes"
+                 Text="Something went wrong and nothing was changed. Try running the installer again." />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+      </Dialog>
+
+      <!-- Asked when Cancel is pressed during the install. -->
+      <Dialog Id="CancelDlg" Width="260" Height="85" Title="[ProductName]" NoMinimize="yes">
+        <Control Id="No" Type="PushButton" X="192" Y="57" Width="56" Height="17" Default="yes" Cancel="yes" Text="Keep going">
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+        <Control Id="Yes" Type="PushButton" X="130" Y="57" Width="56" Height="17" Text="Stop">
+          <Publish Event="EndDialog" Value="Exit" />
+        </Control>
+        <Control Id="Text" Type="Text" X="15" Y="15" Width="230" Height="30" NoPrefix="yes"
+                 Text="Stop now? Nothing will be changed." />
+      </Dialog>
+
+      <!-- Windows Installer's message box (errors, the downgrade message). The control names are fixed by MSI. -->
+      <Dialog Id="ErrorDlg" Width="270" Height="105" Title="[ProductName]" ErrorDialog="yes">
+        <Control Id="ErrorText" Type="Text" X="15" Y="15" Width="240" Height="60" TabSkip="no" NoPrefix="yes" Text="Error" />
+        <Control Id="Y" Type="PushButton" X="100" Y="80" Width="56" Height="17" TabSkip="yes" Text="Yes">
+          <Publish Event="EndDialog" Value="ErrorYes" />
+        </Control>
+        <Control Id="A" Type="PushButton" X="100" Y="80" Width="56" Height="17" TabSkip="yes" Text="Cancel">
+          <Publish Event="EndDialog" Value="ErrorAbort" />
+        </Control>
+        <Control Id="C" Type="PushButton" X="100" Y="80" Width="56" Height="17" TabSkip="yes" Text="Cancel">
+          <Publish Event="EndDialog" Value="ErrorCancel" />
+        </Control>
+        <Control Id="I" Type="PushButton" X="100" Y="80" Width="56" Height="17" TabSkip="yes" Text="Ignore">
+          <Publish Event="EndDialog" Value="ErrorIgnore" />
+        </Control>
+        <Control Id="N" Type="PushButton" X="100" Y="80" Width="56" Height="17" TabSkip="yes" Text="No">
+          <Publish Event="EndDialog" Value="ErrorNo" />
+        </Control>
+        <Control Id="O" Type="PushButton" X="100" Y="80" Width="56" Height="17" TabSkip="yes" Text="OK">
+          <Publish Event="EndDialog" Value="ErrorOk" />
+        </Control>
+        <Control Id="R" Type="PushButton" X="100" Y="80" Width="56" Height="17" TabSkip="yes" Text="Retry">
+          <Publish Event="EndDialog" Value="ErrorRetry" />
+        </Control>
+      </Dialog>
+
+      <InstallUISequence>
+        <Show Dialog="WelcomeDlg" Before="ProgressDlg" Condition="NOT Installed" />
+        <Show Dialog="MaintenanceDlg" Before="ProgressDlg" Condition="Installed AND NOT RESUME AND NOT Preselected" />
+        <Show Dialog="ProgressDlg" Before="ExecuteAction" />
+        <Show Dialog="ExitDlg" OnExit="success" />
+        <Show Dialog="UserExitDlg" OnExit="cancel" />
+        <Show Dialog="FatalErrorDlg" OnExit="error" />
+      </InstallUISequence>
+      <AdminUISequence>
+        <Show Dialog="ExitDlg" OnExit="success" />
+        <Show Dialog="UserExitDlg" OnExit="cancel" />
+        <Show Dialog="FatalErrorDlg" OnExit="error" />
+      </AdminUISequence>
+    </UI>
+  </Fragment>
+</Wix>

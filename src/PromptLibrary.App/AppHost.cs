@@ -38,6 +38,7 @@ public sealed class AppHost : IDisposable
     private readonly BackupService _backups = new(() => DateTime.Now);
 
     private GlobalHotkey? _hotkey;
+    private CloseRequestWindow? _closeRequestWindow;
     private HotkeyGesture? _activeGesture;
     private MainWindow? _mainWindow;
     private SettingsWindow? _settingsWindow;
@@ -117,6 +118,11 @@ public sealed class AppHost : IDisposable
 
         _hotkey = new GlobalHotkey();
         _hotkey.Pressed += (_, _) => OnHotkeyPressed();
+
+        // The installer closes a running copy before an upgrade or uninstall by sending it WM_CLOSE.
+        _closeRequestWindow = new CloseRequestWindow();
+        _closeRequestWindow.CloseRequested += (_, _) => ExitApp();
+
         var hotkeyRegistered = ApplyHotkey(Settings.Hotkey);
 
         ApplyStartupRegistration();
@@ -681,6 +687,8 @@ public sealed class AppHost : IDisposable
         _firstBackupTimer?.Stop();
         _hotkey?.Dispose();
         _hotkey = null;
+        _closeRequestWindow?.Dispose();
+        _closeRequestWindow = null;
         Tray?.Dispose();
     }
 

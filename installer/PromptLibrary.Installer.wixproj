@@ -1,0 +1,20 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+  <!-- Builds artifacts\PromptLibrary-Setup.msi from the single-file Release exe; run build\build-installer.ps1,
+       which publishes the exe first. Kept out of PromptLibrary.sln so dotnet build/test stay fast. -->
+  <PropertyGroup>
+    <OutputName>PromptLibrary-Setup</OutputName>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <!-- Folder holding the published PromptLibrary.exe (dotnet publish src/PromptLibrary.App -c Release -o publish). -->
+    <AppPublishDir Condition="'$(AppPublishDir)' == ''">$(MSBuildThisFileDirectory)..\publish\</AppPublishDir>
+    <DefineConstants>AppPublishDir=$([MSBuild]::EnsureTrailingSlash('$(AppPublishDir)'))</DefineConstants>
+    <!-- ICE20: there is deliberately no FilesInUse dialog (the running app is closed for the user, see Package.wxs).
+         ICE91: files go to the user's profile on purpose; this package is per-user only. -->
+    <SuppressIces>ICE20;ICE91</SuppressIces>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
+  </ItemGroup>
+
+</Project>
