@@ -31,16 +31,22 @@ public static class JsonStore
     public static LoadResult<Library> LoadLibrary(string path)
         => Load(path, ParseLibrary);
 
-    /// <summary>Normalises line endings to CRLF in place (so memory matches disk), then writes atomically.</summary>
-    public static void SaveLibrary(string path, Library library)
+    /// <summary>
+    /// Normalises line endings to CRLF in place (so memory matches disk), then writes atomically. The save being
+    /// replaced is kept as <see cref="PreviousSavePath"/> (unless <paramref name="keepPreviousSave"/> is false).
+    /// </summary>
+    public static void SaveLibrary(string path, Library library, bool keepPreviousSave = true)
     {
         foreach (var prompt in library.Prompts)
         {
             prompt.Text = LineEndings.ToCrlf(prompt.Text);
             prompt.Description = LineEndings.ToCrlf(prompt.Description);
         }
-        AtomicFile.WriteAllText(path, Serialize(library));
+        AtomicFile.WriteAllText(path, Serialize(library), keepBackup: keepPreviousSave);
     }
+
+    /// <summary>Where <see cref="SaveLibrary"/> keeps the save before the latest one: <c>library.json.bak</c>.</summary>
+    public static string PreviousSavePath(string libraryPath) => libraryPath + ".bak";
 
     public static LoadResult<AppSettings> LoadSettings(string path)
         => Load(path, json => JsonSerializer.Deserialize<AppSettings>(json, Options)

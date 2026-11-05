@@ -113,7 +113,9 @@ public sealed class TrayIcon : IDisposable
         exit.Click += (_, _) =>
         {
             ReturnFocus();
-            ExitRequested?.Invoke(this, EventArgs.Empty);
+            // After this click handler has returned: exiting disposes this menu, which must not happen inside it.
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                () => ExitRequested?.Invoke(this, EventArgs.Empty));
         };
         _menu.Items.Add(exit);
     }

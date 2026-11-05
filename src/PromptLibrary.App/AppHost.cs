@@ -26,6 +26,8 @@ public sealed class AppHost : IDisposable
     private const string AppName = "Prompt Library";
     private const string DefaultHotkey = "Ctrl+Alt+P";
     private const string BackupsOffText = "Backups are off.";
+    private const string PromptSaveFailedAdvice = "Your changes are still open — try again.";
+    private const string ChangeSaveFailedAdvice = "Your change is kept and will be saved when it can.";
 
     private static readonly TimeSpan BackupCheckInterval = TimeSpan.FromMinutes(60);
     private static readonly TimeSpan FirstBackupCheckDelay = TimeSpan.FromMinutes(1);
@@ -52,6 +54,9 @@ public sealed class AppHost : IDisposable
 
     // Set while the app exits without asking (installer, logoff): error messages are not shown then.
     private bool _quietExit;
+
+    // Set (0 → 1) by the first OnCrash.
+    private int _crashed;
 
     // One backup (or restore) at a time. Scheduled backups skip if one is running; the others wait for it.
     private readonly SemaphoreSlim _backupGate = new(1, 1);
@@ -174,6 +179,13 @@ public sealed class AppHost : IDisposable
             SaveSettings();
         }
 
+        if (Settings.RecoveredLibraryFile is { } recoveredLibrary)
+        {
+            Tray.ShowMessage(AppName, $"Some library changes couldn't be saved last time. They were recovered to {recoveredLibrary}.");
+            Settings.RecoveredLibraryFile = null;
+            SaveSettings();
+        }
+
         return true;
     }
 
@@ -187,12 +199,27 @@ public sealed class AppHost : IDisposable
     }
 
     /// <summary>
-    /// Saves the library, tells listeners and refreshes the quick menu. If the file can't be written
-    /// the user is told, the in-memory library is kept and false is returned.
+    /// Saves the library after a prompt's Save, tells listeners and refreshes the quick menu. If the file can't be
+    /// written the user is told (to try again), the in-memory library is kept and false is returned.
     /// </summary>
-    public bool SaveLibrary()
+    public bool SaveLibrary() => SaveLibrary(PromptSaveFailedAdvice);
+
+    /// <summary>
+    /// As <see cref="SaveLibrary()"/>, for a change that has no Save button to try again with (adding, renaming or
+    /// deleting a category, deleting a prompt). On failure the change stays in memory and is written with the next
+    /// save that works, or at exit (see <see cref="LibraryUnwritten"/>).
+    /// </summary>
+    public bool SaveLibraryChange() => SaveLibrary(ChangeSaveFailedAdvice);
+
+    /// <summary>
+    /// True while the in-memory library has changes that library.json doesn't (the last write failed). The next
+    /// write that works clears it; the exit tries once more and otherwise keeps a copy in <c>Recovered\</c>.
+    /// </summary>
+    public bool LibraryUnwritten { get; private set; }
+
+    private bool SaveLibrary(string failureAdvice)
     {
-        var saved = WriteLibraryFile();
+        var saved = WriteLibraryFile(failureAdvice);
         LibraryChanged?.Invoke(this, EventArgs.Empty);
         RefreshQuickMenu();
         return saved;
@@ -264,6 +291,12 @@ public sealed class AppHost : IDisposable
     public void ShowMainWindow()
     {
         if (_exiting) return; // the window is closed and the app is waiting for its exit backup
+        if (_mainWindow?.IsAskingToClose == true)
+        {
+            // Its "Save changes?" is open: that answer decides whether the window stays.
+            _mainWindow.ActivateCloseQuestion();
+            return;
+        }
         if (_mainWindow is null)
             _mainWindow = new MainWindow(this);
         else if (!_mainWindow.IsVisible)
@@ -510,6 +543,7 @@ public sealed class AppHost : IDisposable
             return $"The backup was restored but can't be read: {loaded.Error}";
 
         Library = loaded.Value!;
+        LibraryUnwritten = false; // memory is what is on disk again (changes that weren't written were warned about)
         if (outcome.Result.BackupPath is { } preRestoreCopy)
         {
             BackupLocation.RememberPreRestoreCopy(Settings, preRestoreCopy); // labelled in the Restore window
@@ -651,8 +685,22 @@ public sealed class AppHost : IDisposable
         if (_exiting) return;
         if (reason == ExitReason.External)
             KeepUnsavedWorkWithoutAsking();
-        else if (_mainWindow is { IsVisible: true } && !_mainWindow.ViewModel.ConfirmDiscardOrSave())
-            return;
+        else
+        {
+            // A close question is open ("Save changes?", "Leave setup?"): it is answered first, not asked twice.
+            if (_mainWindow?.IsAskingToClose == true)
+            {
+                _mainWindow.ActivateCloseQuestion();
+                return;
+            }
+            if (_onboardingWindow?.IsAskingToClose == true)
+            {
+                _onboardingWindow.ActivateCloseQuestion();
+                return;
+            }
+            if (_mainWindow is { IsVisible: true } && !_mainWindow.ViewModel.ConfirmDiscardOrSave())
+                return;
+        }
 
         // From here nothing can reopen a window or start a copy: the tray icon, shortcut and timers go first
         // (the backup result is still recorded in settings; it just isn't announced).
@@ -661,6 +709,7 @@ public sealed class AppHost : IDisposable
         _settingsWindow?.Close();
         _onboardingWindow?.CloseForExit();
         _mainWindow?.CloseForExit();
+        KeepUnwrittenLibrary(); // before the exit backup, so it backs up what was written
 
         var backup = RunBackupAsync(BackupTrigger.OnExit);
         if (await Task.WhenAny(backup, Task.Delay(ExitBackupTimeout)) != backup)
@@ -678,7 +727,10 @@ public sealed class AppHost : IDisposable
         if (IsSessionEnding) return;
         IsSessionEnding = true;
         if (!_exiting && _started && !_disposed)
+        {
             KeepUnsavedWorkWithoutAsking();
+            KeepUnwrittenLibrary();
+        }
 
         if (!_exiting && _started && !_disposed && Settings.BackupFolder is { } folder)
         {
@@ -736,6 +788,45 @@ public sealed class AppHost : IDisposable
 
         if (_onboardingWindow is { ViewModel.IsFinished: false } wizard)
             wizard.ViewModel.Leave();
+    }
+
+    /// <summary>True once <see cref="OnCrash"/> has run.</summary>
+    public bool HasCrashed => _crashed != 0;
+
+    /// <summary>
+    /// An exception nothing caught: the app is about to die. Only the first call counts. Logs it to
+    /// <c>crash.log</c>, keeps the editor's unsaved edits (and library changes that couldn't be written) in
+    /// <c>Recovered\</c> for the next start to announce, and removes the tray icon so none is left behind. library.json
+    /// is never written here: the library in memory may be half-way through a change. Call on the UI thread.
+    /// </summary>
+    public void OnCrash(Exception exception)
+    {
+        if (Interlocked.Exchange(ref _crashed, 1) != 0) return;
+        CrashLog.Append(Paths.CrashLogFile, exception, DateTime.Now);
+        _quietExit = true;
+
+        try
+        {
+            var now = DateTime.Now;
+            if (_mainWindow?.ViewModel.CurrentUnsavedEdit() is { } unsaved)
+                Settings.RecoveredEditsFile = ExitEdits.WriteRecoveryFile(Paths.RecoveredFolder, unsaved, now);
+            if (LibraryUnwritten)
+                Settings.RecoveredLibraryFile = RecoveredLibrary.Write(Paths.RecoveredFolder, Library, now);
+            JsonStore.SaveSettings(Paths.SettingsFile, Settings);
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Append(Paths.CrashLogFile, ex, DateTime.Now); // best effort; on with the clean-up
+        }
+
+        try
+        {
+            Dispose();
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Append(Paths.CrashLogFile, ex, DateTime.Now);
+        }
     }
 
     /// <summary>Removes the tray icon, stops the backup timers and releases the global shortcut. Safe to call more than once.</summary>
@@ -923,24 +1014,50 @@ public sealed class AppHost : IDisposable
         }
     }
 
-    /// <summary>Writes library.json. On failure tells the user and returns false; memory is left as is.</summary>
-    private bool WriteLibraryFile()
+    /// <summary>
+    /// Writes library.json and records whether memory and disk now agree (<see cref="LibraryUnwritten"/>). On
+    /// failure tells the user (<c>Couldn't save your library: reason. advice</c>) and returns false; memory is
+    /// left as is.
+    /// </summary>
+    private bool WriteLibraryFile(string failureAdvice = ChangeSaveFailedAdvice)
     {
         try
         {
             JsonStore.SaveLibrary(Paths.LibraryFile, Library);
+            LibraryUnwritten = false;
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            ShowError($"Couldn't save your library: {WithoutFinalPeriod(ex.Message)}. Your changes are still open — try again.");
+            LibraryUnwritten = true;
+            ShowError($"Couldn't save your library: {WithoutFinalPeriod(ex.Message)}. {failureAdvice}");
             return false;
         }
     }
 
+    /// <summary>
+    /// At exit, when library.json is behind memory (<see cref="LibraryUnwritten"/>): one more try at writing it,
+    /// and if that fails too a copy of the whole library goes to <c>Recovered\library-&lt;time&gt;.json</c>, which
+    /// the next start announces. Nothing is shown from here.
+    /// </summary>
+    private void KeepUnwrittenLibrary()
+    {
+        if (!LibraryUnwritten || WriteLibraryFile()) return;
+        try
+        {
+            Settings.RecoveredLibraryFile = RecoveredLibrary.Write(Paths.RecoveredFolder, Library, DateTime.Now);
+            JsonStore.SaveSettings(Paths.SettingsFile, Settings);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Nothing more can be done; the folder is probably as unwritable as library.json.
+        }
+    }
+
+    // Not while exiting either: the windows are gone and nobody is left to answer.
     private void ShowError(string text)
     {
-        if (AsksNothing) return;
+        if (AsksNothing || _exiting) return;
         ConfirmDialog.Inform(VisibleMainWindow, text);
     }
 
@@ -962,19 +1079,38 @@ public sealed class AppHost : IDisposable
     }
 
     /// <summary>
-    /// The library file exists but cannot be read; it is never overwritten here. The user can restore a backup
-    /// (startup then continues) or exit. Returns the restored backup's time text, or null after shutting the
-    /// app down.
+    /// The library file exists but cannot be read; it is never overwritten here. The user can restore the previous
+    /// save (<c>library.json.bak</c>, offered when it can be read) or a backup (startup then continues), or exit.
+    /// Returns what was restored, for <c>Library restored from …</c>, or null after shutting the app down.
     /// </summary>
     private string? HandleUnreadableLibrary(string path, string error)
     {
         System.Diagnostics.Debug.WriteLine($"Unreadable library {path}: {error}");
+        const string Unreadable = "Prompt Library couldn't open your prompts file. It hasn't been changed.";
+        var previous = JsonStore.PreviousSavePath(path);
 
-        while (ConfirmDialog.Ask(null,
-                   "Prompt Library couldn't open your prompts file. It hasn't been changed.",
-                   "Restore from backup…", "Exit",
-                   "Show file", () => ShowFileInExplorer(path)))
+        while (true)
         {
+            if (JsonStore.LoadLibrary(previous).Status == LoadStatus.Ok)
+            {
+                var savedAt = BackupLocation.RelativeTimeText(File.GetLastWriteTime(previous), DateTime.Now, midSentence: true);
+                var choice = ConfirmDialog.Choose(null,
+                    $"{Unreadable} The previous save, from {savedAt}, can be restored.",
+                    "Restore the previous save", "Restore from backup…", "Exit",
+                    "Show file", () => ShowFileInExplorer(path));
+                if (choice is null) break;
+                if (choice == true)
+                {
+                    if (RestorePreviousSave(previous) is not { } failed)
+                        return "the previous save";
+                    ConfirmDialog.Inform(null, $"Couldn't restore the previous save: {WithoutFinalPeriod(failed)}.");
+                    continue;
+                }
+            }
+            else if (!ConfirmDialog.Ask(null, Unreadable, "Restore from backup…", "Exit",
+                         "Show file", () => ShowFileInExplorer(path)))
+                break;
+
             var window = new RestoreWindow(this, isStartup: true)
             {
                 ShowInTaskbar = true,
@@ -986,6 +1122,31 @@ public sealed class AppHost : IDisposable
         }
 
         Application.Current.Shutdown();
+        return null;
+    }
+
+    /// <summary>
+    /// Restores <paramref name="previousSave"/> as a backup restore would: checked first, the unreadable file kept as
+    /// a safety copy, then loaded. Returns null on success, otherwise the error.
+    /// </summary>
+    private string? RestorePreviousSave(string previousSave)
+    {
+        var safetyFolder = BackupLocation.SafetyFolder(Settings.BackupFolder, Paths.SafetyBackupsFolder, Directory.Exists);
+        var keep = safetyFolder == Paths.SafetyBackupsFolder ? BackupLocation.SafetyBackupsToKeep : Settings.BackupsToKeep;
+        var result = _backups.Restore(previousSave, Paths.LibraryFile, safetyFolder, keep);
+        if (!result.Success)
+            return result.Error ?? "Unknown error.";
+
+        var loaded = JsonStore.LoadLibrary(Paths.LibraryFile);
+        if (loaded.Status != LoadStatus.Ok)
+            return $"It was restored but can't be read: {loaded.Error}";
+
+        Library = loaded.Value!;
+        if (result.BackupPath is { } safetyCopy)
+        {
+            BackupLocation.RememberPreRestoreCopy(Settings, safetyCopy); // labelled in the Restore window
+            SaveSettings();
+        }
         return null;
     }
 

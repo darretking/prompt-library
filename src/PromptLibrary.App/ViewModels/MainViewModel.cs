@@ -12,7 +12,8 @@ namespace PromptLibrary.App.ViewModels;
 
 /// <summary>
 /// State and actions of the main window: category rail, prompt list with search, and the editor.
-/// Every successful change is saved through <see cref="AppHost.SaveLibrary"/>.
+/// Every successful change is saved through <see cref="AppHost.SaveLibrary()"/> (a prompt's Save) or
+/// <see cref="AppHost.SaveLibraryChange"/> (category changes and deletions).
 /// </summary>
 public sealed class MainViewModel : ObservableObject
 {
@@ -269,11 +270,17 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     public UnsavedEdit? SaveForExit()
     {
+        if (CurrentUnsavedEdit() is not { } edit) return null;
+        return ExitEdits.Choose(edit) == ExitEditAction.Save && Save() ? null : edit;
+    }
+
+    /// <summary>What the editor holds that isn't saved, or null. Only reads (used by the crash handler).</summary>
+    public UnsavedEdit? CurrentUnsavedEdit()
+    {
         if (_editor is not { IsDirty: true } editor) return null;
 
         var categoryName = _host.Library.Categories.FirstOrDefault(c => c.Id == editor.CategoryId)?.Name;
-        var edit = new UnsavedEdit(editor.Title, editor.Description, editor.CategoryId, categoryName, editor.Text);
-        return ExitEdits.Choose(edit) == ExitEditAction.Save && Save() ? null : edit;
+        return new UnsavedEdit(editor.Title, editor.Description, editor.CategoryId, categoryName, editor.Text);
     }
 
     /// <summary>Rebuilds rail, list and choices from the library, keeping selections where they still exist.</summary>
@@ -296,7 +303,7 @@ public sealed class MainViewModel : ObservableObject
     public bool ConfirmBeforeRestore()
     {
         if (!ConfirmDiscardOrSave()) return false;
-        return _unwritten is null || _dialogs.ConfirmDestructive(
+        return (_unwritten is null && !_host.LibraryUnwritten) || _dialogs.ConfirmDestructive(
             "Some of your changes couldn't be saved to disk. Restoring now will lose them.", "Restore anyway");
     }
 
@@ -349,7 +356,7 @@ public sealed class MainViewModel : ObservableObject
         }
 
         IsAddingCategory = false;
-        _host.SaveLibrary();
+        _host.SaveLibraryChange(); // on failure the category stays and is written later (the host says so)
         RebuildCategories(_selectedCategory?.Id);
         SelectCategoryNow(category.Id);
         return true;
@@ -397,7 +404,7 @@ public sealed class MainViewModel : ObservableObject
         }
 
         item.IsRenaming = false;
-        _host.SaveLibrary();
+        _host.SaveLibraryChange(); // on failure the new name stays and is written later (the host says so)
         RebuildCategories(_selectedCategory?.Id);
         return true;
     }
@@ -442,7 +449,7 @@ public sealed class MainViewModel : ObservableObject
         }
 
         _editor?.ReplaceCategory(id, moveTo);
-        _host.SaveLibrary();
+        _host.SaveLibraryChange(); // on failure the deletion stays and is written later (the host says so)
 
         // Show where the prompts went; if the deleted category was empty, fall back to All prompts.
         var selectId = _selectedCategory?.Id == id ? moveTo : _selectedCategory?.Id;
@@ -568,7 +575,7 @@ public sealed class MainViewModel : ObservableObject
 
         if (_unwritten?.PromptId == id) _unwritten = null;
         Editor = null;
-        _host.SaveLibrary();
+        _host.SaveLibraryChange(); // on failure the deletion stays and is written later (the host says so)
         RebuildCategories(_selectedCategory?.Id);
         RefreshPrompts();
     }

@@ -21,6 +21,8 @@ public class BackupService(Func<DateTime> nowLocal)
     public const string FilePrefix = "PromptLibrary-backup-";
 
     private const string TimestampFormat = "yyyy-MM-dd_HHmmss";
+    private const string PartialSuffix = ".partial";
+    private static readonly TimeSpan AbandonedPartialAge = TimeSpan.FromHours(1);
 
     private static readonly Regex BackupName =
         new(@"^PromptLibrary-backup-(?<stamp>\d{4}-\d{2}-\d{2}_\d{6})(?:-(?<n>\d+))?\.json$",
@@ -40,7 +42,8 @@ public class BackupService(Func<DateTime> nowLocal)
     }
 
     /// <summary>
-    /// Copies the library file byte for byte into the folder, then prunes (always keeping at least the new backup).
+    /// Copies the library file byte for byte into the folder (via a <c>.partial</c> file, renamed when complete),
+    /// then prunes (always keeping at least the new backup).
     /// The result's Hash is of the copied file. Never throws for IO problems.
     /// </summary>
     public BackupResult BackupNow(string libraryPath, string backupFolder, int keep)
@@ -59,10 +62,9 @@ public class BackupService(Func<DateTime> nowLocal)
                 Directory.CreateDirectory(backupFolder);
             }
 
+            DeleteAbandonedPartials(backupFolder);
             target = UniqueTargetPath(backupFolder);
-            using var source = OpenLibraryForCopy(libraryPath);
-            using var copy = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-            source.CopyTo(copy);
+            CopyViaPartial(libraryPath, target);
         }
         catch (Exception ex) when (IsIoProblem(ex))
         {
@@ -83,6 +85,46 @@ public class BackupService(Func<DateTime> nowLocal)
         catch (Exception ex) when (IsIoProblem(ex)) { /* The backup itself succeeded; pruning is retried next time. */ }
 
         return new BackupResult(true, target, hash, null);
+    }
+
+    /// <summary>
+    /// Copies to <c>target + ".partial"</c> and renames it at the end, so a copy that is cut off (the app exiting
+    /// mid-copy, a cloud folder going away) never has a backup's name. A failed copy deletes its partial file.
+    /// </summary>
+    private static void CopyViaPartial(string libraryPath, string target)
+    {
+        var partial = target + PartialSuffix;
+        try
+        {
+            using (var source = OpenLibraryForCopy(libraryPath))
+            using (var copy = new FileStream(partial, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                source.CopyTo(copy);
+            File.Move(partial, target);
+        }
+        catch
+        {
+            try { File.Delete(partial); }
+            catch (Exception ex) when (IsIoProblem(ex)) { /* Best effort; it is cleaned up after an hour. */ }
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Deletes our own <c>.partial</c> files left by a copy that was cut off, once they are over an hour old (a
+    /// younger one may still be copying).
+    /// </summary>
+    private static void DeleteAbandonedPartials(string backupFolder)
+    {
+        var cutoff = DateTime.UtcNow - AbandonedPartialAge;
+        foreach (var file in Directory.EnumerateFiles(backupFolder, FilePrefix + "*" + PartialSuffix))
+        {
+            try
+            {
+                if (File.GetLastWriteTimeUtc(file) < cutoff)
+                    File.Delete(file);
+            }
+            catch (Exception ex) when (IsIoProblem(ex)) { /* Tried again on the next backup. */ }
+        }
     }
 
     /// <summary>

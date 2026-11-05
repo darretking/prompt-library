@@ -1,6 +1,8 @@
 using System.Threading;
 using System.Windows;
 using System.Windows.Forms.Integration;
+using System.Windows.Threading;
+using PromptLibrary.Core.Storage;
 
 namespace PromptLibrary.App;
 
@@ -12,6 +14,7 @@ public partial class App : Application
 {
     private const string MutexName = @"Local\PromptLibrary.SingleInstance";
     private const string ShowEventName = @"Local\PromptLibrary.Show";
+    private static readonly TimeSpan CrashCleanupTimeout = TimeSpan.FromSeconds(3);
 
     private Mutex? _singleInstance;
     private bool _ownsMutex;
@@ -35,6 +38,7 @@ public partial class App : Application
         WindowsFormsHost.EnableWindowsFormsInterop();
 
         _host = new AppHost();
+        HandleCrashes(_host);
         if (!_host.Start())
             return; // Start has already shown the problem and shut the app down.
 
@@ -57,6 +61,45 @@ public partial class App : Application
         _singleInstance?.Dispose();
         _showSignal?.Dispose();
         base.OnExit(e);
+    }
+
+    /// <summary>
+    /// An exception nothing caught: <see cref="AppHost.OnCrash"/> logs it, keeps unsaved work and removes the tray
+    /// icon, then the app still dies (nothing is marked handled: its state can't be trusted any more). A task whose
+    /// exception nobody looked at is only logged.
+    /// </summary>
+    private void HandleCrashes(AppHost host)
+    {
+        DispatcherUnhandledException += (_, e) => host.OnCrash(e.Exception);
+
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            var exception = e.ExceptionObject as Exception ?? new Exception($"Unknown error: {e.ExceptionObject}");
+            if (Dispatcher.CheckAccess())
+            {
+                host.OnCrash(exception);
+                return;
+            }
+
+            // A background thread: the clean-up belongs on the UI thread, if it still answers in time.
+            try
+            {
+                Dispatcher.Invoke(() => host.OnCrash(exception), DispatcherPriority.Send, CancellationToken.None,
+                    CrashCleanupTimeout);
+            }
+            catch (Exception)
+            {
+                // The UI thread is gone or failing too; at least log it below.
+            }
+            if (!host.HasCrashed)
+                CrashLog.Append(Paths.CrashLogFile, exception, DateTime.Now);
+        };
+
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            CrashLog.Append(Paths.CrashLogFile, e.Exception, DateTime.Now);
+            e.SetObserved();
+        };
     }
 
     /// <summary>Waits on a background thread for a second launch and shows the main window on the UI thread.</summary>

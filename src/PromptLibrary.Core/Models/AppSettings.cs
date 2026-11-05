@@ -26,6 +26,9 @@ public class AppSettings
     /// <summary>Unsaved edits were written to this recovery file at the last exit; the next start says so once.</summary>
     public string? RecoveredEditsFile { get; set; }
 
+    /// <summary>Library changes that couldn't be saved were written to this copy at the last exit; the next start says so once.</summary>
+    public string? RecoveredLibraryFile { get; set; }
+
     /// <summary>File names of the copies restores made of the library first (labelled in the Restore window).</summary>
     public List<string> PreRestoreBackupFiles { get; set; } = [];
 }

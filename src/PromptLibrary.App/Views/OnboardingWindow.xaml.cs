@@ -15,12 +15,15 @@ public partial class OnboardingWindow : Window
 {
     private readonly AppHost _host;
     private readonly UserCloseTracker _closes;
+    private readonly CloseQuestion _closeQuestion;
     private bool _closingForExit;
+    private bool _leaveConfirmed;
 
     public OnboardingWindow(AppHost host)
     {
         _host = host;
         _closes = new UserCloseTracker(this, host);
+        _closeQuestion = new CloseQuestion(this);
         InitializeComponent();
 
         ViewModel = new OnboardingViewModel(host);
@@ -72,6 +75,12 @@ public partial class OnboardingWindow : Window
         Close();
     }
 
+    /// <summary>True while "Leave setup?" is pending or open.</summary>
+    public bool IsAskingToClose => _closeQuestion.IsAsking;
+
+    /// <summary>Brings the open "Leave setup?" question to the front.</summary>
+    public void ActivateCloseQuestion() => _closeQuestion.Activate();
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         // The capture box handles its own Esc (cancel listening) before this sees it.
@@ -103,10 +112,20 @@ public partial class OnboardingWindow : Window
                 ViewModel.OnLeaveWhileBusy(); // "Finishing the backup… one moment."
                 return;
             }
-            if (ViewModel.AsksBeforeLeaving && !_host.IsSessionEnding
-                && !ConfirmDialog.Ask(this, "Leave setup? Your choices so far are kept.", "Leave", "Stay"))
+            if (ViewModel.AsksBeforeLeaving && !_leaveConfirmed && !_host.IsSessionEnding)
             {
-                e.Cancel = true;
+                // Asked once this close has been cancelled; Leave then closes for real.
+                _closeQuestion.CancelAndAsk(e,
+                    ask: () => !_closingForExit && IsVisible
+                               && ConfirmDialog.Ask(this, "Leave setup? Your choices so far are kept.", "Leave", "Stay")
+                               && !_closingForExit && !_host.IsExiting,
+                    onYes: () =>
+                    {
+                        _leaveConfirmed = true;
+                        _closes.MarkUserClose();
+                        Close();
+                    });
+                base.OnClosing(e);
                 return;
             }
             ViewModel.Leave();

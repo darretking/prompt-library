@@ -70,8 +70,15 @@ public partial class ConfirmDialog : Window
     /// false = don't save, null = cancel (also Esc and ×).
     /// </summary>
     public static bool? AskSaveChanges(Window? owner, string question)
-        => Show(new ConfirmDialog(question, "Save", "Cancel", danger: false,
-                alternative: "Don't save", linkText: null, linkAction: null), owner) switch
+        => Choose(owner, question, "Save", "Don't save", "Cancel");
+
+    /// <summary>
+    /// A question with three answers: true = <paramref name="primary"/>, false = <paramref name="alternative"/>,
+    /// null = <paramref name="cancel"/> (also Esc and ×).
+    /// </summary>
+    public static bool? Choose(Window? owner, string message, string primary, string alternative, string cancel,
+        string? linkText = null, Action? linkAction = null)
+        => Show(new ConfirmDialog(message, primary, cancel, danger: false, alternative, linkText, linkAction), owner) switch
         {
             Choice.Primary => true,
             Choice.Alternative => false,

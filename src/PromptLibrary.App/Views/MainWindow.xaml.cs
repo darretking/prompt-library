@@ -16,12 +16,14 @@ public partial class MainWindow : Window, IDialogs
 {
     private readonly AppHost _host;
     private readonly UserCloseTracker _closes;
+    private readonly CloseQuestion _closeQuestion;
     private bool _exiting;
 
     public MainWindow(AppHost host)
     {
         _host = host;
         _closes = new UserCloseTracker(this, host);
+        _closeQuestion = new CloseQuestion(this);
         InitializeComponent();
         ViewModel = new MainViewModel(host, this);
         ViewModel.TitleFocusRequested += (_, _) => FocusLater(TitleBox);
@@ -47,6 +49,12 @@ public partial class MainWindow : Window, IDialogs
         Close();
     }
 
+    /// <summary>True while "Save changes?" for closing the window is pending or open.</summary>
+    public bool IsAskingToClose => _closeQuestion.IsAsking;
+
+    /// <summary>Brings the open "Save changes?" question to the front.</summary>
+    public void ActivateCloseQuestion() => _closeQuestion.Activate();
+
     protected override void OnClosing(CancelEventArgs e)
     {
         // Another program (the installer) closing us: the app exits without asking anything instead.
@@ -60,12 +68,14 @@ public partial class MainWindow : Window, IDialogs
         // already saved or recovered unsaved edits).
         if (!_exiting && !_host.IsSessionEnding)
         {
-            e.Cancel = true;
-            if (ViewModel.ConfirmDiscardOrSave())
-            {
-                Hide();
-                _host.OnMainWindowHidden(); // says once that the app is still running in the tray
-            }
+            // Closing only hides the window, after the question (asked once this close has been cancelled).
+            _closeQuestion.CancelAndAsk(e,
+                ask: () => !_exiting && IsVisible && ViewModel.ConfirmDiscardOrSave() && !_exiting && !_host.IsExiting,
+                onYes: () =>
+                {
+                    Hide();
+                    _host.OnMainWindowHidden(); // says once that the app is still running in the tray
+                });
         }
         base.OnClosing(e);
     }
