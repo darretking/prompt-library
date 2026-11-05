@@ -1,4 +1,5 @@
 using PromptLibrary.Core.Backup;
+using PromptLibrary.Core.Models;
 
 namespace PromptLibrary.Core.Tests;
 
@@ -82,18 +83,60 @@ public sealed class BackupLocationTests
     }
 
     [Fact]
-    public void PausedMessage_WithoutProvider_ShortPathOnly()
+    public void PausedMessage_WithoutProvider_NamesTheFolderAndAsksAboutTheDrive()
+        => Assert.Equal("Backups paused: Prompt Library Backups isn't available. Is the drive connected?",
+            BackupLocation.PausedMessage(@"D:\Some very long folder name\with more parts\Prompt Library Backups", null));
+
+    [Fact]
+    public void PausedMessage_WithoutProvider_DriveRootKeepsItsName()
+        => Assert.Equal(@"Backups paused: E:\ isn't available. Is the drive connected?", BackupLocation.PausedMessage(@"E:\", null));
+
+    [Theory]
+    [InlineData(@"D:\Backups\Prompt Library Backups", "Prompt Library Backups")]
+    [InlineData(@"D:\Backups\Prompt Library Backups\", "Prompt Library Backups")]
+    [InlineData(@"\\server\share\Backups", "Backups")]
+    [InlineData(@"E:\", @"E:\")]
+    public void FolderName_IsTheLastPartOfThePath(string folder, string expected)
+        => Assert.Equal(expected, BackupLocation.FolderName(folder));
+
+    [Fact]
+    public void BackedUpText_WithProvider_NamesTheProvider()
+        => Assert.Equal("Backed up to OneDrive.",
+            BackupLocation.BackedUpText(@"C:\Users\a\OneDrive\Prompt Library Backups", "OneDrive"));
+
+    [Fact]
+    public void BackedUpText_ChosenFolder_NamesTheFolderNotThePath()
+        => Assert.Equal("Backed up to bk.",
+            BackupLocation.BackedUpText(@"C:\Users\a\AppData\Local\Temp\scratchpad\rv2\bk", null));
+
+    [Fact]
+    public void PreRestoreCopies_AreRememberedByFileName_AndRecognisedInAnyFolder()
     {
-        Assert.Equal(@"Backups paused: Z:\nope isn't available.", BackupLocation.PausedMessage(@"Z:\nope", null));
+        var settings = new AppSettings();
+        BackupLocation.RememberPreRestoreCopy(settings, @"D:\Backups\PromptLibrary-backup-2026-11-05_023200.json");
+
+        Assert.True(BackupLocation.IsPreRestoreCopy(settings, @"E:\Moved\PromptLibrary-backup-2026-11-05_023200.json"));
+        Assert.False(BackupLocation.IsPreRestoreCopy(settings, @"D:\Backups\PromptLibrary-backup-2026-11-04_183000.json"));
     }
 
     [Fact]
-    public void PausedMessage_WithoutProvider_LongPathIsShortenedToFitTheBar()
+    public void PreRestoreCopies_KeepOnlyTheLatestNames()
     {
-        var folder = @"D:\Some very long folder name\with more parts\Prompt Library Backups";
-        var message = BackupLocation.PausedMessage(folder, null);
-        Assert.Equal($"Backups paused: {BackupLocation.ShortenMiddle(folder, 40)} isn't available.", message);
-        Assert.Contains("…", message);
+        var settings = new AppSettings();
+        for (var i = 0; i < BackupLocation.PreRestoreCopiesRemembered + 5; i++)
+            BackupLocation.RememberPreRestoreCopy(settings, $@"D:\B\PromptLibrary-backup-2026-11-05_0000{i:00}.json");
+
+        Assert.Equal(BackupLocation.PreRestoreCopiesRemembered, settings.PreRestoreBackupFiles.Count);
+        Assert.False(BackupLocation.IsPreRestoreCopy(settings, @"D:\B\PromptLibrary-backup-2026-11-05_000000.json"));
+        Assert.True(BackupLocation.IsPreRestoreCopy(settings,
+            $@"D:\B\PromptLibrary-backup-2026-11-05_0000{BackupLocation.PreRestoreCopiesRemembered + 4:00}.json"));
+    }
+
+    [Fact]
+    public void BackupRowNote_MarksPreRestoreCopies()
+    {
+        Assert.Equal("Made automatically before a restore", BackupLocation.BackupRowNote(isPreRestoreCopy: true));
+        Assert.Null(BackupLocation.BackupRowNote(isPreRestoreCopy: false));
     }
 
     [Fact]

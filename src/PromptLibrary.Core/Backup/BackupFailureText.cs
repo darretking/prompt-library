@@ -48,9 +48,12 @@ public static class BackupFailureText
         _ => "the backup file couldn't be written",
     };
 
-    /// <summary>With a cloud provider the sentence also says what to check; a chosen folder is named (shortened).</summary>
+    /// <summary>
+    /// With a cloud provider the sentence also says what to check; a chosen folder is named (shortened) and the
+    /// sentence suggests another folder.
+    /// </summary>
     public static string Message(string folder, string? providerName, BackupFailureReason reason)
         => providerName is null
-            ? $"Couldn't back up to {BackupLocation.ShortenMiddle(folder, FolderDisplayLength)}: {Reason(reason)}."
+            ? $"Couldn't back up to {BackupLocation.ShortenMiddle(folder, FolderDisplayLength)}: {Reason(reason)}. Choose another folder."
             : $"Couldn't back up to {providerName}: {Reason(reason)}. Check that {providerName} is running, then try again.";
 }

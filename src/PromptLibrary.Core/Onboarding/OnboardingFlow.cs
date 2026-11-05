@@ -31,7 +31,8 @@ public sealed class OnboardingFlow
 
     public bool ShowsSkipSetup => Step == OnboardingStep.Welcome;
 
-    public bool ShowsSkipBackups => Step == OnboardingStep.Backups;
+    /// <summary>Step 3's quiet way out, until backups are on (then Next simply continues).</summary>
+    public bool ShowsSkipBackups(bool backupsOn) => Step == OnboardingStep.Backups && !backupsOn;
 
     /// <summary>Moves to the next step; false on the last one (the caller finishes instead).</summary>
     public bool Next()

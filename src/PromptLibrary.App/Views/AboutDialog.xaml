@@ -1,0 +1,33 @@
+<Window x:Class="PromptLibrary.App.Views.AboutDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Style="{StaticResource AppWindow}"
+        Title="About Prompt Library"
+        AutomationProperties.Name="About Prompt Library"
+        Icon="/Assets/app.ico"
+        Width="400" SizeToContent="Height"
+        ResizeMode="NoResize" ShowInTaskbar="False">
+    <!-- Icon beside the name and version; where the prompts live, with a link to the folder; one Close button. -->
+    <StackPanel Margin="16">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Image Source="/Assets/app-icon.png" Width="48" Height="48" VerticalAlignment="Top"
+                   RenderOptions.BitmapScalingMode="HighQuality" AutomationProperties.Name="Prompt Library icon" />
+            <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
+                <TextBlock Text="Prompt Library" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="VersionText" Style="{StaticResource MutedText}" Margin="0,2,0,0" />
+            </StackPanel>
+        </Grid>
+
+        <TextBlock Text="Your prompts are stored on this PC." TextWrapping="Wrap" Margin="0,16,0,0" />
+        <Button x:Name="OpenFolderLink" Style="{StaticResource LinkButton}" Content="Open the folder"
+                HorizontalAlignment="Left" Margin="0,4,0,0" Click="OpenFolder_Click"
+                AutomationProperties.Name="Open the folder" />
+
+        <Button Content="Close" IsCancel="True" IsDefault="True" HorizontalAlignment="Right" Margin="0,24,0,0"
+                AutomationProperties.Name="Close" />
+    </StackPanel>
+</Window>

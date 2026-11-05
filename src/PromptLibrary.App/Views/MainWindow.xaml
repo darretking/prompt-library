@@ -21,8 +21,11 @@
             <MenuItem Header="_Delete" InputGestureText="Del" Click="DeleteCategory_Click" />
         </ContextMenu>
 
+        <!-- Local tab navigation inside each row: Tab from the selected row goes to its Rename and Delete buttons
+             before leaving the list (the list itself is still one Tab stop). -->
         <Style x:Key="CategoryRow" TargetType="ListBoxItem" BasedOn="{StaticResource RowItem}">
             <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+            <Setter Property="KeyboardNavigation.TabNavigation" Value="Local" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsAll}" Value="False">
                     <Setter Property="ContextMenu" Value="{StaticResource CategoryMenu}" />
@@ -143,17 +146,18 @@
                                             <TextBlock x:Name="CountText" Grid.Column="1" Text="{Binding Count}"
                                                        Style="{StaticResource MutedText}"
                                                        Margin="8,0,0,0" VerticalAlignment="Center" />
-                                            <!-- Rename / Delete on the selected or hovered row. The negative margin keeps
+                                            <!-- Rename / Delete on the selected, hovered or keyboard-focused row; Tab from
+                                                 the selected row reaches them (see CategoryRow). The negative margin keeps
                                                  the 24 px buttons from making the row taller. -->
                                             <StackPanel x:Name="RowActions" Grid.Column="2" Orientation="Horizontal"
                                                         Margin="4,-4,-8,-4" VerticalAlignment="Center"
                                                         Visibility="Collapsed">
                                                 <Button Style="{StaticResource IconButton}" Content="&#xE70F;"
-                                                        Focusable="False" Click="RenameCategory_Click"
+                                                        Click="RenameCategory_Click"
                                                         ToolTip="Rename (F2)"
                                                         AutomationProperties.Name="{Binding Name, StringFormat=Rename {0}}" />
                                                 <Button Style="{StaticResource IconButton}" Content="&#xE74D;"
-                                                        Focusable="False" Click="DeleteCategory_Click"
+                                                        Click="DeleteCategory_Click"
                                                         ToolTip="Delete (Del)"
                                                         AutomationProperties.Name="{Binding Name, StringFormat=Delete {0}}" />
                                             </StackPanel>
@@ -185,6 +189,14 @@
                                             <MultiDataTrigger.Conditions>
                                                 <Condition Binding="{Binding IsAll}" Value="False" />
                                                 <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True" />
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter TargetName="RowActions" Property="Visibility" Value="Visible" />
+                                            <Setter TargetName="CountText" Property="Visibility" Value="Collapsed" />
+                                        </MultiDataTrigger>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding IsAll}" Value="False" />
+                                                <Condition Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True" />
                                             </MultiDataTrigger.Conditions>
                                             <Setter TargetName="RowActions" Property="Visibility" Value="Visible" />
                                             <Setter TargetName="CountText" Property="Visibility" Value="Collapsed" />
@@ -323,7 +335,13 @@
                                       ItemsSource="{Binding CategoryChoices}"
                                       DisplayMemberPath="Name" SelectedValuePath="Id"
                                       SelectedValue="{Binding Editor.CategoryId}"
-                                      AutomationProperties.Name="Category" />
+                                      AutomationProperties.Name="Category">
+                                <ComboBox.ItemContainerStyle>
+                                    <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+                                        <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+                                    </Style>
+                                </ComboBox.ItemContainerStyle>
+                            </ComboBox>
                             <TextBlock Text="{Binding Editor.CategoryError}" Style="{StaticResource ErrorText}" />
                         </StackPanel>
 
@@ -360,8 +378,19 @@
                         </Grid>
 
                         <DockPanel Grid.Row="5" Margin="0,4,0,0">
-                            <TextBlock DockPanel.Dock="Right" Text="Ctrl+Tab inserts a tab" Style="{StaticResource MutedText}"
-                                       Margin="8,0,0,0" />
+                            <!-- Only while typing in the prompt box (Hidden, not Collapsed, so nothing moves). -->
+                            <TextBlock DockPanel.Dock="Right" Text="Ctrl+Tab inserts a tab" Margin="8,0,0,0">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+                                        <Setter Property="Visibility" Value="Hidden" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsKeyboardFocused, ElementName=PromptBox}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                             <TextBlock Text="{Binding Editor.TextError}" Style="{StaticResource ErrorText}" Margin="0" />
                         </DockPanel>
 
@@ -397,8 +426,21 @@
                 <WrapPanel TextElement.FontSize="12">
                     <TextBlock Text="{Binding BackupWarning}" TextWrapping="Wrap"
                                Foreground="{StaticResource Brush.WarnText}" Margin="0,0,8,0" />
-                    <Button Style="{StaticResource LinkButton}" Content="Set up backups"
-                            Command="{Binding SetUpBackupsCommand}" AutomationProperties.Name="Set up backups" />
+                    <!-- "Set up backups" when they're off; "Check backups" when a chosen folder can't be reached. -->
+                    <Button Command="{Binding SetUpBackupsCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource LinkButton}">
+                                <Setter Property="Content" Value="Check backups" />
+                                <Setter Property="AutomationProperties.Name" Value="Check backups" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding BackupWarningDetail}" Value="{x:Null}">
+                                        <Setter Property="Content" Value="Set up backups" />
+                                        <Setter Property="AutomationProperties.Name" Value="Set up backups" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                 </WrapPanel>
             </Border>
         </Grid>

@@ -66,11 +66,11 @@ public partial class ConfirmDialog : Window
            == Choice.Primary;
 
     /// <summary>
-    /// <c>Save changes to "title"?</c> with Save / Don't save / Cancel: true = save, false = don't save,
-    /// null = cancel (also Esc and ×).
+    /// <paramref name="question"/> (<c>Save changes to "title"?</c>) with Save / Don't save / Cancel: true = save,
+    /// false = don't save, null = cancel (also Esc and ×).
     /// </summary>
-    public static bool? AskSaveChanges(Window? owner, string title)
-        => Show(new ConfirmDialog($"Save changes to \"{title}\"?", "Save", "Cancel", danger: false,
+    public static bool? AskSaveChanges(Window? owner, string question)
+        => Show(new ConfirmDialog(question, "Save", "Cancel", danger: false,
                 alternative: "Don't save", linkText: null, linkAction: null), owner) switch
         {
             Choice.Primary => true,

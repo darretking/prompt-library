@@ -337,13 +337,10 @@ public sealed class AppHost : IDisposable
     private void ShowHotkeyConflictMessage()
         => Tray.ShowMessage(AppName, $"Shortcut {Settings.Hotkey} is in use by another app. Pick another in Settings.", isError: true);
 
-    /// <summary><c>Help → About Prompt Library</c>: the name, version and where the prompts are stored.</summary>
+    /// <summary><c>Help → About Prompt Library</c>: the name, version and a link to where the prompts are stored.</summary>
     public void ShowAbout()
-    {
-        var version = typeof(AppHost).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
-        ConfirmDialog.Inform(VisibleMainWindow,
-            $"{AppName}\nVersion {version}\n\nYour prompts are stored in {Paths.DataFolder}.");
-    }
+        => AboutDialog.Open(VisibleMainWindow, typeof(AppHost).Assembly.GetName().Version?.ToString(3) ?? "1.0.0",
+            Paths.DataFolder);
 
     /// <summary>Opens the Restore window (over Settings or the main window when one is open).</summary>
     public void OpenRestore()
@@ -513,12 +510,19 @@ public sealed class AppHost : IDisposable
             return $"The backup was restored but can't be read: {loaded.Error}";
 
         Library = loaded.Value!;
+        if (outcome.Result.BackupPath is { } preRestoreCopy)
+        {
+            BackupLocation.RememberPreRestoreCopy(Settings, preRestoreCopy); // labelled in the Restore window
+            SaveSettings();
+        }
         if (_started)
         {
+            var restored = $"Library restored from {BackupLocation.RelativeTimeText(backup.Timestamp, DateTime.Now, midSentence: true)}.";
             LibraryChanged?.Invoke(this, EventArgs.Empty);
             RefreshQuickMenu();
-            _mainWindow?.ViewModel.ReloadAfterRestore();
-            Tray.ShowMessage(AppName, $"Library restored from {BackupLocation.RelativeTimeText(backup.Timestamp, DateTime.Now, midSentence: true)}.");
+            // Created if need be (shown after the Restore window closes), so it can say so too.
+            (_mainWindow ??= new MainWindow(this)).ViewModel.ReloadAfterRestore(restored);
+            Tray.ShowMessage(AppName, restored);
         }
         return null;
     }
@@ -545,6 +549,10 @@ public sealed class AppHost : IDisposable
         Tray.ToolTipText = TooltipFor(Settings.Hotkey);
         return true;
     }
+
+    /// <summary>True if <paramref name="text"/> could be registered right now (nothing is kept registered).</summary>
+    public bool IsShortcutFree(string text)
+        => _hotkey is not null && HotkeyGesture.TryParse(text, out var gesture) && _hotkey.IsFree(gesture!);
 
     /// <summary>Lets go of the global shortcut while the user types a new one (so pressing it reaches the box).</summary>
     public void SuspendHotkey() => _hotkey?.Unregister();

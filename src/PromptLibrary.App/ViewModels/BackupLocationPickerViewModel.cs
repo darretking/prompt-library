@@ -48,7 +48,7 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
         PickCommand = new AsyncRelayCommand<BackupFolderCard?>(card =>
         {
             if (card is null) return Task.CompletedTask;
-            if (!_selectOnly) return BackUpToAsync(card.Folder, card.ProviderName, card.Name);
+            if (!_selectOnly) return BackUpToAsync(card.Folder, card.ProviderName);
             Select(card.Folder);
             return Task.CompletedTask;
         });
@@ -86,8 +86,12 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
         private set => SetProperty(ref _showDetecting, value);
     }
 
-    /// <summary>Detection finished and found nothing: the "No cloud folder found…" line and Refresh show.</summary>
-    public bool NothingFound => _detectedOnce && !_isDetecting && _detected.Count == 0;
+    /// <summary>
+    /// Detection finished, found nothing, and no folder is in use: the "No cloud folder found…" line and Refresh show.
+    /// (Once backups go somewhere, that line would only contradict the card in use.)
+    /// </summary>
+    public bool NothingFound
+        => _detectedOnce && !_isDetecting && _detected.Count == 0 && _host.Settings.BackupFolder is null;
 
     /// <summary>"Backing up…" while a chosen folder (one without a card) is being backed up.</summary>
     public string? ProgressText
@@ -166,7 +170,7 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
     public async Task<bool> BackUpSelectedAsync()
     {
         if (SelectedCard is not { } card || card.IsInUse) return true;
-        return await BackUpToAsync(card.Folder, card.ProviderName, card.Name);
+        return await BackUpToAsync(card.Folder, card.ProviderName);
     }
 
     private void Select(string? folder)
@@ -181,14 +185,14 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
     {
         var folder = _chooseFolder(_host.Settings.BackupFolder);
         if (folder is null) return;
-        await BackUpToAsync(folder, BackupLocation.ProviderFor(folder, _detected), folder);
+        await BackUpToAsync(folder, BackupLocation.ProviderFor(folder, _detected));
     }
 
     /// <summary>
     /// Backs up to the folder; on success it becomes the backup folder (and, in select-only mode, the selection),
     /// on failure nothing changes. True on success.
     /// </summary>
-    private async Task<bool> BackUpToAsync(string folder, string? providerName, string where)
+    private async Task<bool> BackUpToAsync(string folder, string? providerName)
     {
         if (_isBusy) return false;
         SetBusy(true);
@@ -220,13 +224,14 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
         RebuildCards();
         if (result.Success)
         {
-            ResultText = $"Backed up to {where}.";
-            if (card is null && IsOnSystemDrive(folder))
+            ResultText = BackupLocation.BackedUpText(folder, providerName);
+            // Every time a chosen folder on this PC is used (not only the first time it gets a card).
+            if (providerName is null && IsOnSystemDrive(folder))
                 NoteText = LocalFolderNote;
         }
         else
         {
-            _retry = () => BackUpToAsync(folder, providerName, where);
+            _retry = () => BackUpToAsync(folder, providerName);
             ResultText = BackupFailureText.Message(folder, providerName, result.Reason);
             ResultIsError = true;
             if (_host.SlowPickedFolderBackup is { } stillRunning)

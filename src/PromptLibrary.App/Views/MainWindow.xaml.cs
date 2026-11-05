@@ -83,7 +83,7 @@ public partial class MainWindow : Window, IDialogs
 
     // ---- IDialogs ------------------------------------------------------------------------------
 
-    public bool? AskSaveChanges(string title) => ConfirmDialog.AskSaveChanges(this, title);
+    public bool? AskSaveChanges(string question) => ConfirmDialog.AskSaveChanges(this, question);
 
     public bool ConfirmDestructive(string message, string action)
         => ConfirmDialog.Ask(this, message, action, "Cancel", danger: true);

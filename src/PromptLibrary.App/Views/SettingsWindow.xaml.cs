@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using PromptLibrary.Core.Hotkeys;
 
 namespace PromptLibrary.App.Views;
 
@@ -11,7 +12,6 @@ namespace PromptLibrary.App.Views;
 public partial class SettingsWindow : Window
 {
     private const string ShortcutIdle = "Opens your prompt menu from any app.";
-    private const string ShortcutInUse = "That shortcut is in use by another app.";
     private static readonly int[] KeepChoices = [10, 30, 90, 365];
 
     private readonly AppHost _host;
@@ -27,7 +27,7 @@ public partial class SettingsWindow : Window
         if (host.HotkeyRegistered)
             SetShortcutStatus(ShortcutIdle, isError: false);
         else
-            SetShortcutStatus(ShortcutInUse, isError: true);
+            SetShortcutStatus(ShortcutInUseText(), isError: true);
 
         // While listening, the current shortcut is let go so pressing it reaches the box.
         ShortcutField.ListeningChanged += (_, listening) =>
@@ -67,13 +67,16 @@ public partial class SettingsWindow : Window
         ShortcutField.Shortcut = _host.Settings.Hotkey;
         if (!registered)
         {
-            SetShortcutStatus(ShortcutInUse, isError: true);
+            SetShortcutStatus(ShortcutInUseText(), isError: true);
             return;
         }
 
         _host.SaveSettings(); // a failure to write is reported by the host; the shortcut works for this run
         SetShortcutStatus($"Saved. Press {_host.Settings.Hotkey} in any app to try it.", isError: false);
     }
+
+    /// <summary><c>That shortcut is in use by another app. Try another, like Ctrl+Alt+L.</c> (a shortcut that is free now).</summary>
+    private string ShortcutInUseText() => ShortcutSuggestion.InUseText(_host.IsShortcutFree);
 
     private void SetShortcutStatus(string text, bool isError)
     {

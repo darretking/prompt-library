@@ -10,22 +10,36 @@
     <Window.Resources>
         <!-- Damaged backups stay focusable (and readable by screen readers) but can't be restored. -->
         <Style x:Key="BackupRow" TargetType="ListBoxItem" BasedOn="{StaticResource RowItem}">
-            <Setter Property="AutomationProperties.Name" Value="{Binding Text}" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
             <EventSetter Event="MouseDoubleClick" Handler="Row_MouseDoubleClick" />
         </Style>
 
         <DataTemplate x:Key="BackupRowTemplate">
-            <TextBlock Text="{Binding Text}" TextTrimming="CharacterEllipsis">
-                <TextBlock.Style>
-                    <Style TargetType="TextBlock">
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsReadable}" Value="False">
-                                <Setter Property="Foreground" Value="{StaticResource Brush.Muted}" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </TextBlock.Style>
-            </TextBlock>
+            <StackPanel>
+                <TextBlock Text="{Binding Text}" TextTrimming="CharacterEllipsis">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsReadable}" Value="False">
+                                    <Setter Property="Foreground" Value="{StaticResource Brush.Muted}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <!-- "Made automatically before a restore" under the copy a restore made first. -->
+                <TextBlock Text="{Binding Note}" Margin="0,2,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Note}" Value="{x:Null}">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </StackPanel>
         </DataTemplate>
 
         <!-- A quiet show/hide header: chevron (right when closed, down when open) and a semibold label. -->

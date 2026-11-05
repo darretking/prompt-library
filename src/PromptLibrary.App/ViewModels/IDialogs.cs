@@ -5,8 +5,8 @@ namespace PromptLibrary.App.ViewModels;
 /// <summary>The questions <see cref="MainViewModel"/> asks the user; the main window shows them.</summary>
 public interface IDialogs
 {
-    /// <summary><c>Save changes to "title"?</c> — true = Save, false = Don't save, null = Cancel.</summary>
-    bool? AskSaveChanges(string title);
+    /// <summary><paramref name="question"/> (e.g. <c>Save changes to "title"?</c>) — true = Save, false = Don't save, null = Cancel.</summary>
+    bool? AskSaveChanges(string question);
 
     /// <summary>
     /// A question about something that can't be undone, e.g. <c>Delete "title"?</c> with a red

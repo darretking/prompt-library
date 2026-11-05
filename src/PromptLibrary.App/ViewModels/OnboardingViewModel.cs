@@ -28,6 +28,7 @@ public sealed class OnboardingViewModel : ObservableObject
     private bool _shortcutStatusIsError;
     private bool _startWithWindows;
     private bool _pasteAfterCopy;
+    private bool _showFinishingBackup;
 
     public OnboardingViewModel(AppHost host)
     {
@@ -39,7 +40,7 @@ public sealed class OnboardingViewModel : ObservableObject
 
         NextCommand = new AsyncRelayCommand(NextAsync, () => !IsBusy);
         BackCommand = new RelayCommand(() => Move(_flow.Back()), () => !IsBusy);
-        SkipSetupCommand = new RelayCommand(() => CloseRequested?.Invoke(this, EventArgs.Empty));
+        SkipSetupCommand = new RelayCommand(() => CloseRequested?.Invoke(this, EventArgs.Empty), () => !IsBusy);
         SkipBackupsCommand = new RelayCommand(() => Move(_flow.Next()), () => !IsBusy);
         ChangeShortcutCommand = new RelayCommand(StartChangingShortcut);
     }
@@ -72,7 +73,15 @@ public sealed class OnboardingViewModel : ObservableObject
     public bool CanGoBack => _flow.CanGoBack;
     public string PrimaryText => _flow.PrimaryText;
     public bool ShowSkipSetup => _flow.ShowsSkipSetup;
-    public bool ShowSkipBackups => _flow.ShowsSkipBackups;
+    /// <summary>"Skip backups for now", until a backup has worked (then Next simply continues).</summary>
+    public bool ShowSkipBackups => _flow.ShowsSkipBackups(backupsOn: _host.Settings.BackupFolder is not null);
+
+    /// <summary>Esc or × was pressed while a backup runs: <c>Finishing the backup… one moment.</c> shows until it ends.</summary>
+    public bool ShowFinishingBackup
+    {
+        get => _showFinishingBackup;
+        private set => SetProperty(ref _showFinishingBackup, value);
+    }
 
     // Step 2: shortcut
     public string Hotkey => _host.Settings.Hotkey;
@@ -164,8 +173,13 @@ public sealed class OnboardingViewModel : ObservableObject
         {
             if (e.PropertyName == nameof(BackupLocationPickerViewModel.IsBusy))
                 NotifyBusyChanged();
+            else if (e.PropertyName == nameof(BackupLocationPickerViewModel.ResultText))
+                OnPropertyChanged(nameof(ShowSkipBackups)); // a backup that worked turns backups on
         };
     }
+
+    /// <summary>Leaving (Esc or ×) was refused because a backup is running: say why until it has finished.</summary>
+    public void OnLeaveWhileBusy() => ShowFinishingBackup = IsBusy;
 
     /// <summary>
     /// The global shortcut was pressed. On step 2 the wizard takes it (the ✓ line shows) and true is returned;
@@ -281,6 +295,9 @@ public sealed class OnboardingViewModel : ObservableObject
     {
         NextCommand.NotifyCanExecuteChanged();
         BackCommand.NotifyCanExecuteChanged();
+        SkipSetupCommand.NotifyCanExecuteChanged();
         SkipBackupsCommand.NotifyCanExecuteChanged();
+        if (!IsBusy)
+            ShowFinishingBackup = false;
     }
 }

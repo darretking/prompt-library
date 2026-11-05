@@ -14,7 +14,7 @@ public class OnboardingFlowTests
         Assert.Equal("Step 1 of 4", flow.StepText);
         Assert.False(flow.CanGoBack);
         Assert.True(flow.ShowsSkipSetup);
-        Assert.False(flow.ShowsSkipBackups);
+        Assert.False(flow.ShowsSkipBackups(backupsOn: false));
         Assert.Equal("Next", flow.PrimaryText);
     }
 
@@ -62,8 +62,12 @@ public class OnboardingFlowTests
         var flow = AtStep(step);
 
         Assert.Equal(skipSetup, flow.ShowsSkipSetup);
-        Assert.Equal(skipBackups, flow.ShowsSkipBackups);
+        Assert.Equal(skipBackups, flow.ShowsSkipBackups(backupsOn: false));
     }
+
+    [Fact]
+    public void SkipBackups_IsHiddenOnceBackupsAreOn()
+        => Assert.False(AtStep(OnboardingStep.Backups).ShowsSkipBackups(backupsOn: true));
 
     [Theory]
     [InlineData(OnboardingStep.Welcome, true, false)]

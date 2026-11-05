@@ -1,12 +1,11 @@
 using System.Globalization;
+using PromptLibrary.Core.Models;
 
 namespace PromptLibrary.Core.Backup;
 
 /// <summary>Small rules and texts about the backup folder, shared by Settings, Restore and the main window.</summary>
 public static class BackupLocation
 {
-    private const int PausedPathLength = 40;
-
     /// <summary>
     /// True when neither the folder nor its parent exists, e.g. a cloud drive that is signed out or a USB
     /// drive that is unplugged. (A missing folder with an existing parent is fine: the first backup creates it.)
@@ -48,12 +47,46 @@ public static class BackupLocation
 
     /// <summary>
     /// The main window's paused bar: <c>Backups paused: &lt;provider&gt; isn't available. Is it signed in?</c>, or without a
-    /// provider <c>Backups paused: &lt;folder&gt; isn't available.</c> with the folder shortened so the bar fits the window.
+    /// provider <c>Backups paused: &lt;folder name&gt; isn't available. Is the drive connected?</c> (the full path is in
+    /// the bar's tooltip).
     /// </summary>
     public static string PausedMessage(string folder, string? provider)
         => provider is null
-            ? $"Backups paused: {ShortenMiddle(folder, PausedPathLength)} isn't available."
+            ? $"Backups paused: {FolderName(folder)} isn't available. Is the drive connected?"
             : $"Backups paused: {provider} isn't available. Is it signed in?";
+
+    /// <summary>The picker's success line: <c>Backed up to OneDrive.</c>, or for a chosen folder its name only.</summary>
+    public static string BackedUpText(string folder, string? provider) => $"Backed up to {provider ?? FolderName(folder)}.";
+
+    /// <summary>The last part of a folder path (<c>D:\Backups\Prompts</c> → <c>Prompts</c>); a drive root stays whole.</summary>
+    public static string FolderName(string folder)
+    {
+        var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(folder));
+        return string.IsNullOrEmpty(name) ? folder : name;
+    }
+
+    /// <summary>How many pre-restore copies are remembered (see <see cref="RememberPreRestoreCopy"/>).</summary>
+    public const int PreRestoreCopiesRemembered = 50;
+
+    /// <summary>
+    /// Records the file name of the copy a restore made of the library first, so the Restore window can label it.
+    /// The file keeps the normal backup name (so it is pruned like any other backup); only the latest
+    /// <see cref="PreRestoreCopiesRemembered"/> names are kept. The caller saves the settings.
+    /// </summary>
+    public static void RememberPreRestoreCopy(AppSettings settings, string backupPath)
+    {
+        var names = settings.PreRestoreBackupFiles;
+        names.Add(Path.GetFileName(backupPath));
+        if (names.Count > PreRestoreCopiesRemembered)
+            names.RemoveRange(0, names.Count - PreRestoreCopiesRemembered);
+    }
+
+    /// <summary>True when <paramref name="backupPath"/> is a copy a restore made first (matched by file name).</summary>
+    public static bool IsPreRestoreCopy(AppSettings settings, string backupPath)
+        => settings.PreRestoreBackupFiles.Contains(Path.GetFileName(backupPath), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The muted second line of a Restore window row, or null.</summary>
+    public static string? BackupRowNote(bool isPreRestoreCopy) => isPreRestoreCopy ? "Made automatically before a restore" : null;
 
     /// <summary><c>&lt;folder&gt; isn't available. Is &lt;provider&gt; signed in?</c> (the question only with a provider).</summary>
     public static string UnavailableText(string folder, string? provider)

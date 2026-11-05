@@ -100,6 +100,7 @@ public partial class OnboardingWindow : Window
             if (ViewModel.IsBusy && !_host.IsSessionEnding)
             {
                 e.Cancel = true;
+                ViewModel.OnLeaveWhileBusy(); // "Finishing the backup… one moment."
                 return;
             }
             if (ViewModel.AsksBeforeLeaving && !_host.IsSessionEnding

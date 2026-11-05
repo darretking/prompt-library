@@ -120,6 +120,10 @@
                     <TextBlock Style="{StaticResource Body}" Margin="0,0,0,16"
                                Text="If this PC breaks, your prompts are safe. Prompt Library saves a copy here once a day." />
                     <views:BackupLocationPicker x:Name="Picker" SelectsWithoutBackingUp="True" />
+                    <!-- Esc or × while the backup runs: leaving waits for it, and says so. -->
+                    <TextBlock Text="Finishing the backup… one moment." Style="{StaticResource MutedText}"
+                               Margin="0,8,0,0" AutomationProperties.LiveSetting="Polite"
+                               Visibility="{Binding ShowFinishingBackup, Converter={StaticResource BoolToVisibility}}" />
                 </StackPanel>
 
                 <!-- Step 4: Ready -->
@@ -142,7 +146,10 @@
                               AutomationProperties.Name="Start Prompt Library when Windows starts" />
                     <CheckBox Margin="0,8,0,0" IsChecked="{Binding PasteAfterCopy}"
                               Content="Paste into the app I was using"
-                              AutomationProperties.Name="Paste into the app I was using" />
+                              AutomationProperties.Name="Paste into the app I was using"
+                              AutomationProperties.HelpText="After you pick a prompt from the shortcut menu, it's pasted where you were typing. Turn off to only copy." />
+                    <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="24,2,0,0"
+                               Text="After you pick a prompt from the shortcut menu, it's pasted where you were typing. Turn off to only copy." />
                 </StackPanel>
             </Grid>
         </ScrollViewer>

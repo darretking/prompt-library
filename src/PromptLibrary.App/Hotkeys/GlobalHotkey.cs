@@ -11,6 +11,7 @@ namespace PromptLibrary.App.Hotkeys;
 public sealed class GlobalHotkey : IDisposable
 {
     private const int HotkeyId = 1;
+    private const int ProbeId = 2; // only for IsFree; never left registered
     private const int WM_HOTKEY = 0x0312;
     private const uint MOD_NOREPEAT = 0x4000;
     private static readonly IntPtr HWND_MESSAGE = new(-3);
@@ -37,6 +38,16 @@ public sealed class GlobalHotkey : IDisposable
         var modifiers = (uint)gesture.Modifiers | MOD_NOREPEAT;
         _registered = RegisterHotKey(_window.Handle, HotkeyId, modifiers, VirtualKey(gesture.Key));
         return _registered;
+    }
+
+    /// <summary>True if no app (this one included) owns the shortcut now: registers it on a spare id and lets it go.</summary>
+    public bool IsFree(HotkeyGesture gesture)
+    {
+        var modifiers = (uint)gesture.Modifiers | MOD_NOREPEAT;
+        if (!RegisterHotKey(_window.Handle, ProbeId, modifiers, VirtualKey(gesture.Key)))
+            return false;
+        UnregisterHotKey(_window.Handle, ProbeId);
+        return true;
     }
 
     public void Unregister()

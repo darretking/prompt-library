@@ -19,6 +19,7 @@ public sealed class MainViewModel : ObservableObject
     private const string AppTitle = "Prompt Library";
     private static readonly StringComparer NameOrder = StringComparer.CurrentCultureIgnoreCase;
     private static readonly TimeSpan StatusDuration = TimeSpan.FromSeconds(6);
+    private static readonly TimeSpan RestoredStatusDuration = TimeSpan.FromSeconds(4);
 
     private readonly AppHost _host;
     private readonly IDialogs _dialogs;
@@ -76,9 +77,14 @@ public sealed class MainViewModel : ObservableObject
         };
 
         _statusTimer = new DispatcherTimer { Interval = StatusDuration };
-        _statusTimer.Tick += (_, _) => StatusText = null;
+        _statusTimer.Tick += (_, _) =>
+        {
+            _statusTimer.Stop();
+            StatusText = null;
+        };
 
         RefreshAll();
+        OpenFirstPromptIfNone(); // the window opens on a prompt, not on an empty editor
     }
 
     /// <summary>Raised after a new prompt is started, so the view can put the cursor in Title.</summary>
@@ -236,14 +242,16 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// If the editor has unsaved changes, asks <c>Save changes to "title"?</c>: Save saves (false if that fails),
-    /// Don't save throws the changes away, Cancel returns false. True when it's fine to move on.
+    /// If the editor has unsaved changes, asks <c>Save changes to "saved title"?</c> (or <c>… to this new prompt?</c>):
+    /// Save saves (false if that fails), Don't save throws the changes away, Cancel returns false. True when it's
+    /// fine to move on.
     /// </summary>
     public bool ConfirmDiscardOrSave()
     {
         if (_editor is not { IsDirty: true } editor) return true;
 
-        switch (_dialogs.AskSaveChanges(editor.DisplayTitle))
+        var savedTitle = _host.Library.Prompts.FirstOrDefault(p => p.Id == editor.PromptId)?.Title;
+        switch (_dialogs.AskSaveChanges(EditorText.SaveChangesQuestion(savedTitle)))
         {
             case true:
                 return Save();
@@ -294,13 +302,16 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>
     /// The library was replaced by a restore: close the editor (its saved values are out of date; any unsaved
-    /// edits were offered for saving before the restore) and rebuild everything.
+    /// edits were offered for saving before the restore), rebuild everything, open the first prompt and show
+    /// <paramref name="restoredText"/> (<c>Library restored from …</c>) under the categories for 4 s.
     /// </summary>
-    public void ReloadAfterRestore()
+    public void ReloadAfterRestore(string restoredText)
     {
         _unwritten = null;
         Editor = null;
         RefreshAll();
+        OpenFirstPromptIfNone();
+        ShowStatus(restoredText, RestoredStatusDuration);
     }
 
     // ---- Categories ----------------------------------------------------------------------------
@@ -686,11 +697,19 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedPrompt));
     }
 
-    private void ShowStatus(string text)
+    private void ShowStatus(string text, TimeSpan? duration = null)
     {
         StatusText = text;
         _statusTimer.Stop();
+        _statusTimer.Interval = duration ?? StatusDuration;
         _statusTimer.Start();
+    }
+
+    /// <summary>Opens the first prompt in the list when no prompt (or new prompt) is open.</summary>
+    private void OpenFirstPromptIfNone()
+    {
+        if (_editor is null && Prompts.FirstOrDefault() is { } first)
+            OpenPrompt(first);
     }
 
     /// <summary>
@@ -744,6 +763,7 @@ public sealed class MainViewModel : ObservableObject
         if (!EditorSurvivesCategory(_selectedCategory?.Id))
             Editor = null;
         RefreshPrompts();
+        OpenFirstPromptIfNone(); // choosing a category shows its first prompt
     }
 
     private void OpenPrompt(Prompt prompt)

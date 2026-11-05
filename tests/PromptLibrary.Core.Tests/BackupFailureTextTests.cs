@@ -36,7 +36,7 @@ public class BackupFailureTextTests
     public void Message_CustomFolder_NamesTheShortenedFolder()
     {
         var folder = @"D:\" + new string('x', 80) + @"\Backups";
-        Assert.Equal($"Couldn't back up to {BackupLocation.ShortenMiddle(folder, 56)}: Windows didn't allow writing there.",
+        Assert.Equal($"Couldn't back up to {BackupLocation.ShortenMiddle(folder, 56)}: Windows didn't allow writing there. Choose another folder.",
             BackupFailureText.Message(folder, null, BackupFailureReason.AccessDenied));
     }
 

@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using PromptLibrary.Core.Models;
 
 namespace PromptLibrary.App.Views;
@@ -16,11 +17,13 @@ public partial class MoveCategoryDialog : Window
         var prompts = promptCount == 1 ? "1 prompt" : $"{promptCount} prompts";
         var them = promptCount == 1 ? "it" : "them";
         MessageText.Text = $"\"{categoryName}\" has {prompts}. Move {them} to another category, then \"{categoryName}\" is deleted.";
-        TargetBox.ItemsSource = targets;
-        TargetBox.SelectedIndex = 0;
+        TargetBox.ItemsSource = targets; // nothing pre-selected: the user picks where the prompts go
 
         Loaded += (_, _) => TargetBox.Focus();
     }
+
+    private void TargetBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        => MoveButton.IsEnabled = TargetBox.SelectedItem is Category;
 
     /// <summary>The chosen category, set when the dialog closes with "Move and delete".</summary>
     public Guid? SelectedCategoryId { get; private set; }

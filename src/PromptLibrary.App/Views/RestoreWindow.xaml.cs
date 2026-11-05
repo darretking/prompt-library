@@ -83,7 +83,9 @@ public partial class RestoreWindow : Window
             EmptyPanel.Visibility = Visibility.Collapsed;
             var rows = ToRows(backups);
             BackupList.ItemsSource = rows;
-            BackupList.SelectedItem = rows.FirstOrDefault(r => r.IsReadable);
+            // The newest ordinary backup, not the copy a restore just made of the library it replaced.
+            BackupList.SelectedItem = rows.FirstOrDefault(r => r is { IsReadable: true, Note: null })
+                                      ?? rows.FirstOrDefault(r => r.IsReadable);
             FocusSelectedRow();
         }
     }
@@ -92,15 +94,17 @@ public partial class RestoreWindow : Window
     private async Task ShowSafetyCopiesAsync()
     {
         var copies = await Task.Run(() => _host.ListBackups(Paths.SafetyBackupsFolder));
-        SafetyList.ItemsSource = ToRows(copies);
+        SafetyList.ItemsSource = ToRows(copies, labelPreRestoreCopies: false); // the group says what they are
         SafetyToggle.Visibility = copies.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         if (copies.Count == 0) SafetyToggle.IsChecked = false;
     }
 
-    private static List<BackupRow> ToRows(IReadOnlyList<BackupInfo> backups)
+    private List<BackupRow> ToRows(IReadOnlyList<BackupInfo> backups, bool labelPreRestoreCopies = true)
     {
         var now = DateTime.Now;
-        return backups.Select(b => new BackupRow(b, BackupLocation.BackupRowText(b, now))).ToList();
+        return backups.Select(b => new BackupRow(b, BackupLocation.BackupRowText(b, now),
+                BackupLocation.BackupRowNote(labelPreRestoreCopies && BackupLocation.IsPreRestoreCopy(_host.Settings, b.Path))))
+            .ToList();
     }
 
     private void ShowEmpty(string text, bool offerSetUp = false)
@@ -194,9 +198,13 @@ public partial class RestoreWindow : Window
         ErrorText.Text = error;
     }
 
-    /// <summary>One row: <c>Yesterday, 18:30 · 12 prompts</c> (or <c>… · Damaged — can't restore</c>).</summary>
-    private sealed record BackupRow(BackupInfo Info, string Text)
+    /// <summary>
+    /// One row: <c>Yesterday, 18:30 · 12 prompts</c> (or <c>… · Damaged — can't restore</c>), with the muted
+    /// <c>Made automatically before a restore</c> under a copy a restore made first.
+    /// </summary>
+    private sealed record BackupRow(BackupInfo Info, string Text, string? Note)
     {
         public bool IsReadable => Info.PromptCount >= 0;
+        public string AutomationName => Note is null ? Text : $"{Text}, {Note.ToLowerInvariant()}";
     }
 }

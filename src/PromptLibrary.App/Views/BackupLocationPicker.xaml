@@ -115,18 +115,24 @@
 
         <TextBlock Text="{Binding ProgressText}" Style="{StaticResource HiddenWhenNull}" Margin="0,8,0,0" />
 
-        <WrapPanel Margin="0,8,0,0">
-            <WrapPanel.Style>
-                <Style TargetType="WrapPanel">
+        <!-- ✓ in its own column so it stays beside the text when the text wraps; Try again after the text. -->
+        <Grid Margin="0,8,0,0">
+            <Grid.Style>
+                <Style TargetType="Grid">
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding ResultText}" Value="{x:Null}">
                             <Setter Property="Visibility" Value="Collapsed" />
                         </DataTrigger>
                     </Style.Triggers>
                 </Style>
-            </WrapPanel.Style>
+            </Grid.Style>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
             <!-- ✓ before a success ("Backed up to OneDrive."), none before a failure. -->
-            <Path Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center" Data="M1.5,7.5 L5.5,11.5 L12.5,3"
+            <Path Width="14" Height="14" Margin="0,2,6,0" VerticalAlignment="Top" Data="M1.5,7.5 L5.5,11.5 L12.5,3"
                   Stroke="{StaticResource Brush.Brand}" StrokeThickness="2">
                 <Path.Style>
                     <Style TargetType="Path">
@@ -138,7 +144,8 @@
                     </Style>
                 </Path.Style>
             </Path>
-            <TextBlock Text="{Binding ResultText}" TextWrapping="Wrap" Margin="0,0,8,0">
+            <TextBlock Grid.Column="1" Text="{Binding ResultText}" TextWrapping="Wrap" Margin="0,0,8,0"
+                       AutomationProperties.LiveSetting="Polite">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
                         <Setter Property="Foreground" Value="{StaticResource Brush.Ink}" />
@@ -150,10 +157,11 @@
                     </Style>
                 </TextBlock.Style>
             </TextBlock>
-            <Button Style="{StaticResource LinkButton}" Content="Try again" Command="{Binding TryAgainCommand}"
+            <Button Grid.Column="2" Style="{StaticResource LinkButton}" Content="Try again" Command="{Binding TryAgainCommand}"
+                    VerticalAlignment="Top"
                     Visibility="{Binding ShowTryAgain, Converter={StaticResource BoolToVisibility}}"
                     AutomationProperties.Name="Try the backup again" />
-        </WrapPanel>
+        </Grid>
         <TextBlock Text="{Binding NoteText}" Style="{StaticResource HiddenWhenNull}" />
         <TextBlock Text="{Binding LastBackupText}" Style="{StaticResource HiddenWhenNull}" />
 

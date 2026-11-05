@@ -12,12 +12,21 @@
         <TextBlock x:Name="MessageText" TextWrapping="Wrap" Margin="0,0,0,16" />
 
         <TextBlock Text="Move prompts to" Style="{StaticResource FieldLabel}" />
-        <ComboBox x:Name="TargetBox" DisplayMemberPath="Name" AutomationProperties.Name="Move prompts to" />
+        <!-- Nothing is chosen at first, so the prompts never go somewhere by accident; Move and delete waits. -->
+        <ComboBox x:Name="TargetBox" DisplayMemberPath="Name" AutomationProperties.Name="Move prompts to"
+                  SelectionChanged="TargetBox_SelectionChanged">
+            <ComboBox.ItemContainerStyle>
+                <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+                    <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+                </Style>
+            </ComboBox.ItemContainerStyle>
+        </ComboBox>
         <TextBlock Text="No prompts are deleted." Style="{StaticResource MutedText}" Margin="0,4,0,0" />
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
             <Button Content="Cancel" IsCancel="True" Margin="0,0,8,0" AutomationProperties.Name="Cancel" />
-            <Button Style="{StaticResource PrimaryButton}" Content="Move and delete" IsDefault="True"
+            <Button x:Name="MoveButton" Style="{StaticResource PrimaryButton}" Content="Move and delete" IsDefault="True"
+                    IsEnabled="False"
                     Click="Move_Click" AutomationProperties.Name="Move and delete" />
         </StackPanel>
     </StackPanel>
