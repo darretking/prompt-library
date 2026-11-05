@@ -1,286 +1,209 @@
-<!-- Header -->
 <div align="center">
 
-  <img src="docs/images/logo.png" alt="Prompt Library logo" width="120" height="120" />
-  <h1>Prompt Library</h1>
+<img src="docs/images/logo.png" alt="Prompt Library" width="112" height="112" />
 
-  <p>
-    All your AI prompts in one place. Press a shortcut in any app, pick a prompt, and it's pasted right where you were typing.
-  </p>
+# Prompt Library
 
-<!-- Badges -->
+### Your best AI prompts, one shortcut away.
+
+Press <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>P</kbd> in any app, pick a prompt, and it's pasted right where you were typing.<br/>
+ChatGPT, Claude, Copilot, your terminal, your IDE: one library for all of them.
+
 <p>
-  <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-4338CA" alt="Platform: Windows 10 | 11" />
-  <img src="https://img.shields.io/badge/.NET-10-512BD4" alt=".NET 10" />
-  <img src="https://img.shields.io/badge/UI-WPF-4338CA" alt="WPF" />
-  <img src="https://img.shields.io/badge/tests-xUnit-F5A524" alt="Tests: xUnit" />
-  <img src="https://img.shields.io/badge/version-1.0.0-4338CA" alt="Version 1.0.0" />
-  <img src="https://img.shields.io/badge/license-to%20be%20decided-lightgrey" alt="License: to be decided" />
+  <a href="https://github.com/darretking/prompt-library/releases/latest"><img src="https://img.shields.io/badge/Download_for_Windows-4338CA?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
 </p>
 
-<h4>
-    <a href="#camera-screenshots">Screenshots</a>
-  <span> · </span>
-    <a href="docs/manual-test-checklist.md">Test checklist</a>
-  <span> · </span>
-    <a href="https://github.com/darretking/prompt-library/issues/new?labels=bug">Report a bug</a>
-  <span> · </span>
-    <a href="https://github.com/darretking/prompt-library/issues/new?labels=enhancement">Request a feature</a>
-  </h4>
+<p>
+  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-4338CA" alt="Windows 10 and 11" />
+  <img src="https://img.shields.io/badge/no%20account-no%20tracking-F5A524" alt="No account, no tracking" />
+  <img src="https://img.shields.io/badge/installs%20without-admin%20rights-1B2230" alt="Installs without admin rights" />
+  <img src="https://img.shields.io/badge/version-1.0.0-4338CA" alt="Version 1.0.0" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-4338CA" alt="License: GPL-3.0" /></a>
+</p>
+
+<img src="docs/images/hero-main-window.png" alt="Prompt Library: categories on the left, prompts in the middle, the selected prompt on the right with a Copy prompt button" width="900" />
+
 </div>
 
-<br />
+<br/>
 
-<!-- Table of Contents -->
-# :notebook_with_decorative_cover: Table of contents
+## Stop hunting for that prompt
 
-- [About the project](#star2-about-the-project)
-  * [Screenshots](#camera-screenshots)
-  * [Tech stack](#space_invader-tech-stack)
-  * [Features](#dart-features)
-  * [Colour reference](#art-colour-reference)
-  * [Environment variables](#key-environment-variables)
-- [Getting started](#toolbox-getting-started)
-  * [Prerequisites](#bangbang-prerequisites)
-  * [Installation](#gear-installation)
-  * [Running tests](#test_tube-running-tests)
-  * [Run locally](#running-run-locally)
-  * [Deployment](#triangular_flag_on_post-deployment)
-- [Usage](#eyes-usage)
-- [Where your data lives](#floppy_disk-where-your-data-lives)
-- [Roadmap](#compass-roadmap)
-- [Contributing](#wave-contributing)
-- [FAQ](#grey_question-faq)
-- [License](#warning-license)
-- [Contact](#handshake-contact)
-- [Acknowledgements](#gem-acknowledgements)
+You've written a prompt that works. Then it disappears into a notes app, a chat history, a text file on the desktop, a doc you can't find. Next time you need it, you rewrite it from memory, and it's never quite as good.
 
-<!-- About the Project -->
-## :star2: About the project
+**Prompt Library keeps every prompt in one place and puts it in front of you the moment you need it,** without leaving the app you're in.
 
-Prompts tend to end up scattered across documents, notes apps and chat histories. Prompt Library is a small Windows tray app that keeps them in one library, organised by category, and gets any of them into the app you're working in (a terminal, a browser, your IDE, Claude Code) with one shortcut.
+<br/>
 
-<!-- Screenshots -->
-### :camera: Screenshots
+## How it works
+
+<table>
+  <tr>
+    <td width="33%" align="center"><h3>1. Press the shortcut</h3><kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>P</kbd><br/>in any app: browser, terminal, IDE, chat window.</td>
+    <td width="33%" align="center"><h3>2. Pick a prompt</h3>A menu opens at your mouse. Choose a category, then the prompt.</td>
+    <td width="33%" align="center"><h3>3. It's pasted</h3>Straight into the box you were typing in. Edit it and hit send.</td>
+  </tr>
+</table>
 
 <div align="center">
-  <img src="docs/images/main-window.png" alt="Main window: categories, prompts and the prompt editor" />
-  <br /><br />
-  <img src="docs/images/setup-wizard.png" alt="First-run setup: trying the shortcut" />
+  <img src="docs/images/quick-menu.png" alt="The Prompt Library menu open over another app, showing categories and prompts" width="640" />
 </div>
 
-<!-- TechStack -->
-### :space_invader: Tech stack
+<br/>
+
+## Everything you need, nothing you don't
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>⚡ Works in every app</h3>
+      <p>One shortcut, everywhere. No browser extension, no plugin per tool, no copy-paste dance. If you can type in it, Prompt Library can paste into it.</p>
+    </td>
+    <td width="50%" valign="top">
+      <h3>🔎 Find any prompt in a second</h3>
+      <p>Search across titles, descriptions and the prompt text itself. Organise prompts into your own categories: Coding, Marketing, Testing, whatever fits how you work.</p>
+    </td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/copied.png" alt="A prompt open in the editor, just copied" /></td>
+    <td><img src="docs/images/search.png" alt="Searching prompts" /></td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>✍️ Write once, reuse forever</h3>
+      <p>A clean editor that keeps your prompt exactly as you wrote it: line breaks, tabs, code blocks, quotes and emoji. What you see is exactly what gets pasted.</p>
+    </td>
+    <td width="50%" valign="top">
+      <h3>☁️ Backups that set themselves up</h3>
+      <p>Prompt Library finds your OneDrive, Google Drive, Dropbox or iCloud Drive folder by itself. One click, and your library is backed up every day. A new PC? Restore it in seconds.</p>
+    </td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/edit-prompt.png" alt="Editing a prompt" /></td>
+    <td><img src="docs/images/settings.png" alt="Settings with cloud backup turned on" /></td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>🛟 Never lose your work</h3>
+      <p>Every save is written safely to disk. Before any restore, your current library is kept as a safety copy. Unsaved edits are rescued even if Windows logs off or an update closes the app.</p>
+    </td>
+    <td width="50%" valign="top">
+      <h3>🔒 Private by default</h3>
+      <p>No account. No sign-in. No tracking. No servers. Your prompts live on your PC and in the backup folder you choose, and nowhere else.</p>
+    </td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/restore.png" alt="Restoring a backup" /></td>
+    <td><img src="docs/images/categories.png" alt="Your own categories" /></td>
+  </tr>
+</table>
+
+<br/>
+
+## Ready in under a minute
+
+Install it, and a short setup gets you going: try the shortcut, pick where backups go, and you're done. Twelve example prompts are included so you can start straight away.
+
+<table>
+  <tr>
+    <td><img src="docs/images/installer-welcome.png" alt="Installer: one click to install, no admin rights" /></td>
+    <td><img src="docs/images/installer-finish.png" alt="Installer: done, launch Prompt Library" /></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td><img src="docs/images/setup-welcome.png" alt="Setup, step 1: welcome" /></td>
+    <td><img src="docs/images/setup-shortcut.png" alt="Setup, step 2: try the shortcut" /></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/setup-backups.png" alt="Setup, step 3: choose where backups go" /></td>
+    <td><img src="docs/images/setup-done.png" alt="Setup, step 4: you're all set" /></td>
+  </tr>
+</table>
+
+<br/>
+
+## Made for people who use AI every day
+
+- **Developers** with go-to prompts for code review, refactoring, tests and debugging, pasted straight into Claude Code, Copilot Chat or the terminal.
+- **Marketers and writers** reusing tone guides, briefs and templates across ChatGPT, Claude and Gemini.
+- **Anyone** who's tired of rewriting the same instructions from memory.
+
+<br/>
+
+## Get started
+
+1. **[Download the installer](https://github.com/darretking/prompt-library/releases/latest)** (`PromptLibrary-Setup.msi`).
+2. **Run it.** It installs just for you, so no admin rights are needed.
+3. **Follow the short setup**, then press <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>P</kbd> anywhere.
 
 <details>
-  <summary>App</summary>
-  <ul>
-    <li><a href="https://learn.microsoft.com/dotnet/core/whats-new/dotnet-10/overview">.NET 10</a> (C#)</li>
-    <li><a href="https://learn.microsoft.com/dotnet/desktop/wpf/">WPF</a> for the windows, WinForms <code>NotifyIcon</code> for the tray and native quick menu</li>
-    <li><a href="https://learn.microsoft.com/dotnet/communitytoolkit/mvvm/">CommunityToolkit.Mvvm</a></li>
-    <li>Win32 interop: <code>RegisterHotKey</code>, <code>SendInput</code>, low-level keyboard hook (only while choosing a shortcut)</li>
-  </ul>
+  <summary>Windows says "Windows protected your PC"?</summary>
+  <br/>
+  The installer isn't code-signed yet, so SmartScreen doesn't recognise the publisher. Choose <b>More info</b>, then <b>Run anyway</b>.
 </details>
 
 <details>
-  <summary>Storage</summary>
-  <ul>
-    <li>Human-readable JSON (<code>System.Text.Json</code>), written atomically and flushed to disk</li>
-    <li>Backups as dated JSON copies in a OneDrive, Google Drive, Dropbox, iCloud Drive or any other folder</li>
-  </ul>
+  <summary>Prefer a single file, no installer?</summary>
+  <br/>
+  Build <code>PromptLibrary.exe</code> yourself (see <a href="docs/DEVELOPMENT.md">Developing Prompt Library</a>) and run it. It's self-contained: no .NET install needed.
+</details>
+
+<br/>
+
+## Questions
+
+<details>
+  <summary><b>Which apps does it work with?</b></summary>
+  <br/>
+  Any app where you can type: browsers (ChatGPT, Claude, Gemini, Copilot on the web), Claude Code, VS Code, Windows Terminal, Notepad, Word, Slack. The one exception is apps running as administrator. Windows doesn't let normal apps type into them, so the prompt is copied and you press <kbd>Ctrl</kbd> + <kbd>V</kbd>.
 </details>
 
 <details>
-  <summary>Testing</summary>
-  <ul>
-    <li><a href="https://xunit.net/">xUnit</a> for the Core library (storage, editing, search, backups, cloud detection, paste rules, onboarding flow, edge cases)</li>
-    <li>A <a href="docs/manual-test-checklist.md">manual checklist</a> and <a href="docs/edge-cases.md">edge-case list</a> for things only a real desktop can show</li>
-  </ul>
+  <summary><b>Can I just copy, without the automatic paste?</b></summary>
+  <br/>
+  Yes. Turn off "Paste into the app I was using" in Settings, and picking a prompt only copies it.
 </details>
 
 <details>
-  <summary>Packaging</summary>
-  <ul>
-    <li>Single-file, self-contained <code>PromptLibrary.exe</code> (win-x64)</li>
-    <li>Per-user MSI built with <a href="https://wixtoolset.org/">WiX Toolset v5</a> (from NuGet, nothing to install)</li>
-  </ul>
+  <summary><b>Can I change the shortcut?</b></summary>
+  <br/>
+  Yes, in Settings → Change. If another app already uses the keys you press, Prompt Library tells you and suggests a free combination.
 </details>
 
-<!-- Features -->
-### :dart: Features
+<details>
+  <summary><b>Why not a right-click menu inside other apps?</b></summary>
+  <br/>
+  Windows doesn't allow one app to add items to another app's right-click menu. A single shortcut works the same everywhere instead.
+</details>
 
-- **One shortcut, any app.** `Ctrl+Alt+P` opens a native menu at your mouse: category, then prompt.
-- **Auto-paste.** Picking a prompt copies it and pastes it where you were typing. Turn it off to only copy.
-- **Simple library.** Title, description, category and prompt text, with search across all of them. Line breaks, tabs, quotes, code blocks and emoji are kept exactly.
-- **Backups that set themselves up.** OneDrive (personal and work), Google Drive (any drive letter or language), Dropbox and iCloud Drive are found automatically; one click runs the first backup. Backups run daily and on exit, and any of them can be restored.
-- **Safe by design.** Atomic, flushed saves; a safety copy before every restore; unsaved edits are never silently lost, even if the app is closed by an installer, a logoff or a crash.
-- **First-run setup** in four steps, and an installer that needs no admin rights.
+<details>
+  <summary><b>What happens if my PC dies?</b></summary>
+  <br/>
+  If backups are on, install Prompt Library on the new PC, open <b>File → Restore from backup…</b> and pick your cloud folder. Everything comes back.
+</details>
 
-<!-- Color Reference -->
-### :art: Colour reference
+<details>
+  <summary><b>Does uninstalling delete my prompts?</b></summary>
+  <br/>
+  No. Uninstalling removes the app and keeps your prompts and backups.
+</details>
 
-| Colour | Hex | Used for |
-| --- | --- | --- |
-| Brand (indigo) | ![#4338CA](https://placehold.co/15x15/4338CA/4338CA.png) `#4338CA` | Copy button, selection edge, focus ring, links, app icon |
-| Brand soft | ![#E8E7FB](https://placehold.co/15x15/E8E7FB/E8E7FB.png) `#E8E7FB` | Selected list item |
-| Accent (amber) | ![#F5A524](https://placehold.co/15x15/F5A524/F5A524.png) `#F5A524` | Icon bookmark, onboarding illustration |
-| Ink | ![#1B2230](https://placehold.co/15x15/1B2230/1B2230.png) `#1B2230` | Primary text |
-| Window | ![#F6F7F9](https://placehold.co/15x15/F6F7F9/F6F7F9.png) `#F6F7F9` | Window background |
+<details>
+  <summary><b>Is it free?</b></summary>
+  <br/>
+  Yes. No account, no subscription. It's open source under the GNU GPL v3: you can use, study, change and share it, and anyone who shares a changed version must share its source code too.
+</details>
 
-The full style guide is in [docs/design/ui-style.md](docs/design/ui-style.md).
+<br/>
 
-<!-- Env Variables -->
-### :key: Environment variables
+## For developers
 
-None are needed to use the app. For development only (Debug builds):
+Prompt Library is a C# / WPF app on .NET 10 with a fully tested core library. Build instructions, the project layout, the installer and the roadmap are in **[Developing Prompt Library](docs/DEVELOPMENT.md)**. Ideas and bug reports are welcome in [issues](https://github.com/darretking/prompt-library/issues).
 
-`PROMPTLIBRARY_DEBUG_NO_CLOUDS=1`: hides detected cloud folders, so testing never touches your real OneDrive, Google Drive, Dropbox or iCloud.
+<br/>
 
-<!-- Getting Started -->
-## :toolbox: Getting started
-
-<!-- Prerequisites -->
-### :bangbang: Prerequisites
-
-- Windows 10 or 11 (x64)
-- To build: the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-- For cloud backups (optional): OneDrive (built into Windows), Google Drive for desktop, Dropbox or iCloud for Windows
-
-<!-- Installation -->
-### :gear: Installation
-
-Run `PromptLibrary-Setup.msi`. It installs just for you (no admin prompt) to `%LOCALAPPDATA%\Programs\Prompt Library`, adds **Prompt Library** to the Start menu and to Settings → Apps, and its last page starts the app, whose setup walks you through the shortcut and backups.
-
-The installer isn't code-signed yet, so Windows SmartScreen may show "Windows protected your PC". Choose **More info**, then **Run anyway**.
-
-To update, run a newer installer: a running Prompt Library is closed and replaced, and your prompts and settings are kept.
-
-<!-- Running Tests -->
-### :test_tube: Running tests
-
-```bash
-dotnet test
-```
-
-Things only a real desktop can check (auto-paste, notifications, display scaling) are in [docs/manual-test-checklist.md](docs/manual-test-checklist.md).
-
-<!-- Run Locally -->
-### :running: Run locally
-
-Clone the project
-
-```bash
-git clone https://github.com/darretking/prompt-library.git
-```
-
-Go to the project folder
-
-```bash
-cd prompt-library
-```
-
-Build
-
-```bash
-dotnet build
-```
-
-Run
-
-```bash
-dotnet run --project src/PromptLibrary.App
-```
-
-<!-- Deployment -->
-### :triangular_flag_on_post: Deployment
-
-Single self-contained exe (`publish/PromptLibrary.exe`, about 75 MB):
-
-```bash
-dotnet publish src/PromptLibrary.App -c Release -o publish
-```
-
-Installer (`artifacts/PromptLibrary-Setup.msi`):
-
-```powershell
-.\build\build-installer.ps1
-```
-
-The installer takes its version from the exe: bump `<Version>` in `src/PromptLibrary.App/PromptLibrary.App.csproj` for each release, or pass `-Version 1.0.1` for a one-off build. Installer page art is drawn by `python build/make-installer-bitmaps.py` (needs Pillow).
-
-<!-- Usage -->
-## :eyes: Usage
-
-1. Press **`Ctrl+Alt+P`** in any app, or click the tray icon.
-2. Pick a category, then a prompt.
-3. It's pasted where you were typing. With auto-paste off, press `Ctrl+V` yourself.
-
-Manage prompts from the tray menu → **Open Prompt Library…**: add, edit, search, move and delete prompts and categories. Change the shortcut, backups, auto-paste and start-with-Windows in **Settings**. Restore a backup from **File → Restore from backup…**.
-
-Apps running as administrator can't be pasted into (a Windows rule); the prompt is still copied, and the app tells you to press `Ctrl+V`.
-
-<!-- Data -->
-## :floppy_disk: Where your data lives
-
-`%APPDATA%\PromptLibrary\`
-
-- `library.json`: your prompts and categories (backed up).
-- `settings.json`: this PC's settings (not backed up).
-- `Recovered\`: unsaved edits rescued after an unexpected close, if any.
-
-Uninstalling (Settings → Apps → Prompt Library → Uninstall) removes the app, its shortcut and its start-with-Windows entry, and **keeps your prompts and backups**.
-
-<!-- Roadmap -->
-## :compass: Roadmap
-
-* [x] Prompt library with categories, search and editor
-* [x] Global shortcut, native quick menu and auto-paste
-* [x] Cloud backups with automatic detection, and restore
-* [x] First-run setup and per-user installer
-* [ ] Import existing prompts from files and other tools
-* [ ] Fill-in placeholders (like `{product}`) before pasting
-* [ ] Code-signed installer
-* [ ] App-level automated tests and a tidier `AppHost` (backup coordinator split)
-
-<!-- Contributing -->
-## :wave: Contributing
-
-Ideas and bug reports are welcome through [issues](https://github.com/darretking/prompt-library/issues). For code changes, open an issue first to talk it through, then send a pull request with tests for anything in `src/PromptLibrary.Core`.
-
-<!-- FAQ -->
-## :grey_question: FAQ
-
-- **Can I right-click in another app and get my prompts?**
-
-  + Windows doesn't let one app add items to other apps' right-click menus, so Prompt Library uses a shortcut and the tray icon instead. They work the same in every app.
-
-- **Why didn't it paste into my app?**
-
-  + Apps running as administrator block pasted input from normal apps. The prompt is on your clipboard; press `Ctrl+V`. Holding `Ctrl` or `Alt` while picking also copies only.
-
-- **Pasting a long prompt into a terminal ran some lines. Why?**
-
-  + Plain shells treat each line break as Enter. Windows Terminal warns before multi-line pastes; chat boxes and Claude Code handle them fine. You can turn auto-paste off in Settings.
-
-- **What happens if my PC dies?**
-
-  + Turn on backups during setup (or in Settings). Reinstall, open **File → Restore from backup…**, and pick your cloud folder.
-
-<!-- License -->
-## :warning: License
-
-To be decided.
-
-<!-- Contact -->
-## :handshake: Contact
-
-GitHub: [@darretking](https://github.com/darretking)
-
-Project link: [https://github.com/darretking/prompt-library](https://github.com/darretking/prompt-library)
-
-<!-- Acknowledgments -->
-## :gem: Acknowledgements
-
-- [Awesome README template](https://github.com/Louis3797/awesome-readme-template) for this README's layout
-- [Shields.io](https://shields.io/) for the badges
-- [WiX Toolset](https://wixtoolset.org/) for the installer
+<div align="center">
+  <sub>Made by <a href="https://github.com/darretking">@darretking</a> · Free and open source under the <a href="LICENSE">GNU GPL v3</a></sub>
+</div>
