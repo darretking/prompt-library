@@ -167,7 +167,7 @@ public sealed class AppHost : IDisposable
         Tray.DoubleClicked += (_, _) => ShowMainWindow();
         Tray.ExitRequested += (_, _) => ExitApp();
         Tray.UpdateRequested += (_, _) => Updates?.OpenDialog();
-        Tray.Rebuild(QuickMenuBuilder.Build(Library));
+        RefreshQuickMenu();
         _started = true;
 
         _hotkey = new GlobalHotkey();
@@ -260,6 +260,7 @@ public sealed class AppHost : IDisposable
             var version = AppVersion.FromSystemVersion(typeof(AppHost).Assembly.GetName().Version ?? new Version(0, 0, 0));
             Team = new TeamLibraryService(_http, version.ToString(), Paths.TeamCacheFile, Settings, () => Library,
                 SaveSettings, () => DateTimeOffset.Now, ex => CrashLog.Append(Paths.CrashLogFile, ex, DateTime.Now));
+            Team.Changed += (_, _) => RefreshQuickMenu();
             Team.Start();
         }
         catch (Exception ex)
@@ -314,7 +315,8 @@ public sealed class AppHost : IDisposable
     }
 
     /// <summary>Rebuilds the quick menu from the in-memory library (e.g. after an unsaved change was rolled back).</summary>
-    public void RefreshQuickMenu() => Tray.Rebuild(QuickMenuBuilder.Build(Library));
+    public void RefreshQuickMenu()
+        => Tray.Rebuild(QuickMenuBuilder.Build(Library, Team?.Team?.Content, Settings));
 
     /// <summary>Saves settings; if the file can't be written the user is told and false is returned.</summary>
     public bool SaveSettings()
@@ -339,7 +341,8 @@ public sealed class AppHost : IDisposable
     private async void OnPromptPicked(PromptPick pick)
     {
         if (_exiting) return;
-        var prompt = Library.Prompts.FirstOrDefault(p => p.Id == pick.Id);
+        var prompt = Library.Prompts.FirstOrDefault(p => p.Id == pick.Id)
+                     ?? Team?.Team?.Content.Prompts.FirstOrDefault(p => p.Id == pick.Id);
         if (prompt is null) return;
         if (!_clipboard.TryCopy(prompt.Text))
         {

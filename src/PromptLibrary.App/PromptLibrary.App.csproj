@@ -33,6 +33,7 @@
       <_Parameter1>UpdateRepositoryName</_Parameter1>
       <_Parameter2>$(UpdateRepositoryName)</_Parameter2>
     </AssemblyAttribute>
+    <InternalsVisibleTo Include="PromptLibrary.App.Tests" />
   </ItemGroup>
 
   <!-- Single-file, self-contained publish (dotnet publish -c Release). Release only, so Debug builds and

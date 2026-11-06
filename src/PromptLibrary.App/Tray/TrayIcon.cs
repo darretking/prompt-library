@@ -12,9 +12,11 @@ public sealed class TrayIcon : IDisposable
 {
     private const int TooltipMaxLength = 127;
 
-    private readonly Forms.NotifyIcon _notifyIcon;
+    private readonly Forms.NotifyIcon? _notifyIcon;
     private readonly Forms.ContextMenuStrip _menu = new();
-    private readonly System.Drawing.Icon _icon;
+    private readonly System.Drawing.Icon? _icon;
+    private System.Drawing.Image? _teamImage;
+    private System.Drawing.Image? _pinImage;
 
     // A hidden top-level window that we bring to the foreground before showing the menu.
     // While our app owns the foreground, clicking anywhere else deactivates it and closes the menu.
@@ -45,10 +47,14 @@ public sealed class TrayIcon : IDisposable
     // "Update to 1.0.2…" while an update is available; kept across Rebuild.
     private string? _updateItemText;
 
-    public TrayIcon(string tooltip)
+    public TrayIcon(string tooltip) : this(tooltip, headless: false) { }
+
+    /// <summary>Headless (tests): the menu exists but there is no notification-area icon.</summary>
+    internal TrayIcon(string tooltip, bool headless)
     {
         _menuOwner.CreateHandle(new Forms.CreateParams());
         _menu.Closed += OnMenuClosed;
+        if (headless) return;
 
         _icon = LoadAppIcon();
         _notifyIcon = new Forms.NotifyIcon { Icon = _icon, Visible = true };
@@ -78,39 +84,57 @@ public sealed class TrayIcon : IDisposable
 
     public string ToolTipText
     {
-        set => _notifyIcon.Text = value.Length > TooltipMaxLength ? value[..TooltipMaxLength] : value;
+        set
+        {
+            if (_notifyIcon is not null)
+                _notifyIcon.Text = value.Length > TooltipMaxLength ? value[..TooltipMaxLength] : value;
+        }
     }
 
-    public void Rebuild(IReadOnlyList<QuickMenuCategory> categories)
+    /// <summary>Rebuilds the menu: Pinned, then the team block (when a team library is connected), then your
+    /// own categories, then Settings, Open and Exit.</summary>
+    public void Rebuild(QuickMenu menu)
     {
-        // Dispose the old items so their handles do not pile up on every save.
+        // Dispose the old items so their handles do not pile up on every save, then the icons they used.
         var old = _menu.Items.Cast<Forms.ToolStripItem>().ToList();
         _menu.Items.Clear();
         foreach (var item in old) item.Dispose();
+        _teamImage?.Dispose();
+        _pinImage?.Dispose();
+        var scale = Math.Max(1.0, _menu.DeviceDpi / 96.0);
+        _teamImage = TrayImages.Team(scale);
+        _pinImage = TrayImages.Pin(scale);
 
-        if (categories.Count == 0)
+        // Headings show only when a team block exists, so a solo menu looks as it always did.
+        var hasTeam = menu.Team.Count > 0;
+        var sections = new List<List<Forms.ToolStripItem>>
         {
-            _menu.Items.Add(new Forms.ToolStripMenuItem("No prompts yet") { Enabled = false });
-        }
+            menu.Pinned.Select(p => (Forms.ToolStripItem)PromptItem(p, pinned: true)).ToList(),
+        };
 
-        foreach (var category in categories)
+        if (hasTeam)
         {
-            var categoryItem = new Forms.ToolStripMenuItem(MenuText.ForMenu(category.Name));
-            foreach (var prompt in category.Prompts)
+            var team = new List<Forms.ToolStripItem>();
+            if (menu.TeamCollapsed)
             {
-                var id = prompt.Id;
-                var promptItem = new Forms.ToolStripMenuItem(MenuText.ForMenu(prompt.Title));
-                promptItem.Click += (_, _) =>
-                {
-                    PromptClicked?.Invoke(this, new PromptPick(id, _pasteTarget));
-                    ReturnFocus();
-                };
-                categoryItem.DropDownItems.Add(promptItem);
+                var all = new Forms.ToolStripMenuItem("Team prompts") { Image = _teamImage };
+                foreach (var category in menu.Team) all.DropDownItems.Add(CategoryItem(category));
+                team.Add(all);
             }
-            _menu.Items.Add(categoryItem);
+            else
+            {
+                team.Add(Heading("Team prompts"));
+                team.AddRange(menu.Team.Select(CategoryItem));
+            }
+            sections.Add(team);
         }
 
-        _menu.Items.Add(new Forms.ToolStripSeparator());
+        var yours = new List<Forms.ToolStripItem>();
+        if (hasTeam) yours.Add(Heading("Your prompts"));
+        yours.AddRange(menu.Yours.Select(CategoryItem));
+        if (yours.Count == 0 && menu.Pinned.Count == 0)
+            yours.Add(new Forms.ToolStripMenuItem("No prompts yet") { Enabled = false });
+        sections.Add(yours);
 
         var settings = new Forms.ToolStripMenuItem("Settings…");
         settings.Click += (_, _) =>
@@ -118,7 +142,6 @@ public sealed class TrayIcon : IDisposable
             _returnFocusTo = IntPtr.Zero; // the Settings window takes focus instead
             SettingsRequested?.Invoke(this, EventArgs.Empty);
         };
-        _menu.Items.Add(settings);
 
         var open = new Forms.ToolStripMenuItem("Open Prompt Library…");
         open.Click += (_, _) =>
@@ -126,7 +149,6 @@ public sealed class TrayIcon : IDisposable
             _returnFocusTo = IntPtr.Zero; // the main window takes focus instead
             OpenRequested?.Invoke(this, EventArgs.Empty);
         };
-        _menu.Items.Add(open);
 
         var exit = new Forms.ToolStripMenuItem("Exit");
         exit.Click += (_, _) =>
@@ -136,9 +158,46 @@ public sealed class TrayIcon : IDisposable
             System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
                 () => ExitRequested?.Invoke(this, EventArgs.Empty));
         };
-        _menu.Items.Add(exit);
+        sections.Add([settings, open, exit]);
+
+        // One separator between non-empty sections: never doubled, leading or trailing.
+        var first = true;
+        foreach (var section in sections.Where(x => x.Count > 0))
+        {
+            if (!first) _menu.Items.Add(new Forms.ToolStripSeparator());
+            first = false;
+            foreach (var item in section) _menu.Items.Add(item);
+        }
 
         AddUpdateItem();
+    }
+
+    /// <summary>The menu strip, for tests.</summary>
+    internal Forms.ContextMenuStrip MenuStrip => _menu;
+
+    private static Forms.ToolStripMenuItem Heading(string text) => new(text) { Enabled = false };
+
+    private Forms.ToolStripMenuItem CategoryItem(QuickMenuCategory category)
+    {
+        var categoryItem = new Forms.ToolStripMenuItem(MenuText.ForMenu(category.Name));
+        foreach (var prompt in category.Prompts)
+            categoryItem.DropDownItems.Add(PromptItem(prompt, pinned: false));
+        if (category.Prompts.Any(p => p.IsTeam)) categoryItem.Image = _teamImage;
+        return categoryItem;
+    }
+
+    private Forms.ToolStripMenuItem PromptItem(QuickMenuPrompt prompt, bool pinned)
+    {
+        var id = prompt.Id;
+        var item = new Forms.ToolStripMenuItem(MenuText.ForMenu(prompt.Title));
+        if (pinned) item.Image = _pinImage;
+        else if (prompt.IsTeam) item.Image = _teamImage;
+        item.Click += (_, _) =>
+        {
+            PromptClicked?.Invoke(this, new PromptPick(id, _pasteTarget));
+            ReturnFocus();
+        };
+        return item;
     }
 
     /// <summary>Shows "Update to X…" (and a separator) at the top of the menu; null removes it.</summary>
@@ -193,16 +252,18 @@ public sealed class TrayIcon : IDisposable
     public void ShowMessage(string title, string text, bool isError = false, Action? onClick = null)
     {
         _balloonClick = onClick;
-        _notifyIcon.ShowBalloonTip(3000, title, text, isError ? Forms.ToolTipIcon.Error : Forms.ToolTipIcon.None);
+        _notifyIcon?.ShowBalloonTip(3000, title, text, isError ? Forms.ToolTipIcon.Error : Forms.ToolTipIcon.None);
     }
 
     public void Dispose()
     {
         // Hide before disposing so no ghost icon stays in the notification area.
-        _notifyIcon.Visible = false;
-        _notifyIcon.Dispose();
+        if (_notifyIcon is not null) _notifyIcon.Visible = false;
+        _notifyIcon?.Dispose();
         _menu.Dispose();
-        _icon.Dispose();
+        _teamImage?.Dispose();
+        _pinImage?.Dispose();
+        _icon?.Dispose();
         _menuOwner.DestroyHandle();
     }
 
