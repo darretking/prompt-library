@@ -191,7 +191,6 @@ public sealed class MainViewModelTeamTests : IDisposable
         vm.ShowTeamCommand.Execute(null);
         Assert.True(vm.ShowMarkAllSeen);
         var row = vm.Prompts.First(r => r.Id == prompt.Id);
-        if (vm.Editor?.PromptId == prompt.Id) vm.SelectedPrompt = vm.Prompts.First(r => r.Id != prompt.Id);
         Assert.Equal("New", row.MarkerText);
         var saves = host.SettingsSaves;
 
@@ -327,6 +326,59 @@ public sealed class MainViewModelTeamTests : IDisposable
 
         vm.PinCommand.Execute(row);
         Assert.DoesNotContain(hiddenId, host.Settings.PinnedPromptIds);
+    });
+
+    [Fact]
+    public void AutoOpen_KeepsMarker_UserOpenClearsIt() => Sta.Run(() =>
+    {
+        // "Complaint reply" sorts first, so switching to the Team side opens it by itself: that isn't the user
+        // opening it, so it stays New (and the switch keeps its dot) until they choose it.
+        var host = NewHost(withTeam: true);
+        var first = TeamPrompt(host, "Complaint reply");
+        host.Settings.SeenTeamPrompts.Remove(first.Id);
+        var vm = new MainViewModel(host, new FakeDialogs());
+
+        vm.ShowTeamCommand.Execute(null);
+
+        Assert.Equal(first.Id, vm.Editor!.PromptId);
+        Assert.Equal(TeamMarker.New, TeamUserState.MarkerFor(host.Settings, first));
+        Assert.Equal("New", vm.Prompts.First(r => r.Id == first.Id).MarkerText);
+        Assert.True(vm.TeamHasUnseen);
+
+        // Choosing a category opens its first prompt by itself too.
+        vm.SelectedCategory = vm.Categories.First(c => c.Name == "Support");
+        Assert.Equal(TeamMarker.New, TeamUserState.MarkerFor(host.Settings, first));
+
+        vm.SelectedCategory = vm.Categories.First(c => c.IsAll);
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Id != first.Id);
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Id == first.Id);
+
+        Assert.Equal(TeamMarker.None, TeamUserState.MarkerFor(host.Settings, first));
+        Assert.False(vm.TeamHasUnseen);
+    });
+
+    [Fact]
+    public void CachedCopy_BeforeFirstRead_ShowsOnlineHeader() => Sta.Run(() =>
+    {
+        // Start loads the offline copy (status Offline until a read works), but nothing has failed yet: the header
+        // reads as usual, with no "can't reach" and no Retry.
+        var joined = NewHost(withTeam: true);
+        joined.Team!.Dispose();
+        var host = new FakeHost();
+        host.Settings.TeamSource = joined.Settings.TeamSource;
+        host.Settings.TeamBaselineTaken = true;
+        var service = NewService(host);
+        host.Team = service;
+        service.Start();
+        Assert.NotNull(service.Team);
+        Assert.Null(service.StatusMessage);
+        var vm = new MainViewModel(host, new FakeDialogs());
+
+        vm.ShowTeamCommand.Execute(null);
+
+        Assert.False(vm.IsTeamOffline);
+        Assert.StartsWith("Acme best practice · updated ", vm.TeamHeaderText);
+        Assert.Null(vm.TeamHeaderDetail);
     });
 
     // ---- Helpers -------------------------------------------------------------------------------

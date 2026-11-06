@@ -167,7 +167,7 @@ public sealed class MainViewModel : ObservableObject
         {
             if (!TeamConnected || IsTeamLoading) return null;
             if (_team!.Service is not { Team: { } library } service) return "Can't reach the team library";
-            return service.Status == TeamStatus.Offline
+            return IsTeamOffline
                 ? $"Last updated {When(service.LastChecked ?? library.UpdatedAt)} · can't reach the team library"
                 : $"{library.Name} · updated {When(library.UpdatedAt)}";
         }
@@ -176,14 +176,19 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Why the last read failed (the offline header's tooltip), or null.</summary>
     public string? TeamHeaderDetail => IsTeamOffline ? _team!.Service.StatusMessage : null;
 
-    /// <summary>True while the team source can't be read and the last good copy is shown (the header offers Retry).</summary>
     /// <summary>
     /// "Loading team prompts…": connected, with no copy loaded yet and the first read not back (it says why when it
     /// fails, which ends loading).
     /// </summary>
     public bool IsTeamLoading => TeamConnected && !TeamLoaded && _team!.Service.StatusMessage is null;
 
-    public bool IsTeamOffline => TeamConnected && !IsTeamLoading && _team!.Service.Status == TeamStatus.Offline;
+    /// <summary>
+    /// True once a read of the team source has failed (<see cref="TeamLibraryService.StatusMessage"/> says why): the last
+    /// good copy, if any, is shown and the header offers Retry. The offline copy loaded at start, before any read has
+    /// come back, isn't offline yet.
+    /// </summary>
+    public bool IsTeamOffline => TeamConnected && !IsTeamLoading && _team!.Service.Status == TeamStatus.Offline
+                                 && _team.Service.StatusMessage is not null;
 
     /// <summary>
     /// The muted "Read only" in the Team header (tooltip "You can't change files in this folder"), where Edit team
@@ -1020,7 +1025,12 @@ public sealed class MainViewModel : ObservableObject
         OpenFirstPromptIfNone(); // choosing a category shows its first prompt
     }
 
-    private void OpenPrompt(Prompt prompt)
+    /// <summary>
+    /// Opens <paramref name="prompt"/> in the editor. Only an open the user asked for (<paramref name="byUser"/>: a row
+    /// or search result they chose) clears a team prompt's New / Updated marker; the first prompt a side, category or
+    /// refresh opens by itself stays marked until it is chosen.
+    /// </summary>
+    private void OpenPrompt(Prompt prompt, bool byUser = false)
     {
         if (!CurrentDocument.Library.Prompts.Contains(prompt)) return; // deleted meanwhile
         var editor = PromptEditorViewModel.ForPrompt(prompt);
@@ -1028,7 +1038,7 @@ public sealed class MainViewModel : ObservableObject
         Editor = editor;
         _selectedPrompt = Prompts.FirstOrDefault(r => ReferenceEquals(r.Prompt, prompt));
         OnPropertyChanged(nameof(SelectedPrompt));
-        if (CurrentDocument.IsTeam) MarkOpenedSeen(prompt);
+        if (byUser && CurrentDocument.IsTeam) MarkOpenedSeen(prompt);
     }
 
     private void RebuildCategories(Guid? selectId)
@@ -1123,7 +1133,7 @@ public sealed class MainViewModel : ObservableObject
         if (side == _side)
         {
             if (openPromptId is { } id && CurrentDocument.Library.Prompts.FirstOrDefault(p => p.Id == id) is { } same)
-                OpenPrompt(same);
+                OpenPrompt(same, byUser: true);
             return true;
         }
         if (side == LibrarySide.Team && !TeamConnected) return false;
@@ -1152,7 +1162,7 @@ public sealed class MainViewModel : ObservableObject
         RefreshPrompts();
 
         if ((openPromptId ?? promptId) is { } open && CurrentDocument.Library.Prompts.FirstOrDefault(p => p.Id == open) is { } prompt)
-            OpenPrompt(prompt);
+            OpenPrompt(prompt, byUser: openPromptId is not null); // a search result the user chose, or the side's last prompt
         else
             OpenFirstPromptIfNone();
         RaiseSideState();
@@ -1163,7 +1173,7 @@ public sealed class MainViewModel : ObservableObject
     private void OpenRow(PromptRow row)
     {
         if (row.IsTeam == IsTeamSide)
-            OpenPrompt(row.Prompt);
+            OpenPrompt(row.Prompt, byUser: true);
         else
             SwitchSide(row.IsTeam ? LibrarySide.Team : LibrarySide.Yours, row.Id);
     }
