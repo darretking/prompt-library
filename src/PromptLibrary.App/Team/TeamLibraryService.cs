@@ -24,9 +24,9 @@ public sealed record TeamJoinResult(bool Success, string? Message);
 
 /// <summary>
 /// Owns the team library on this PC: joins, leaves and starts one, keeps the offline copy, refreshes it at start,
-/// hourly, on a file-change notice and on request, and makes guarded saves for editors. Reads never block the UI
-/// thread (except the short local-file re-read after a refused save). Lives on the UI thread; <see cref="Changed"/>
-/// is raised there. No background failure escapes: each is logged and the last good copy stays.
+/// hourly, on a file-change notice and on request, and makes guarded saves for editors. All file and network access
+/// runs in background tasks; results, settings changes and <see cref="Changed"/> happen on the UI thread only. No
+/// background failure escapes: each is logged and the last good copy stays.
 /// </summary>
 public sealed class TeamLibraryService : IDisposable
 {
@@ -45,13 +45,15 @@ public sealed class TeamLibraryService : IDisposable
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
     private readonly DispatcherTimer _hourly;
     private readonly DispatcherTimer _debounce;
-    private readonly object _sync = new();
 
     private FileSystemWatcher? _watcher;
     private string? _json;
     private bool _held;
     private bool _deferred;
     private bool _disposed;
+
+    // Bumped by every read and every change of the loaded copy; only the newest read may apply.
+    private int _generation;
 
     public TeamLibraryService(HttpClient http, string appVersion, string cachePath, AppSettings settings,
         Func<Library> personal, Func<bool> saveSettings, Func<DateTimeOffset> now, Action<Exception> log,
@@ -82,7 +84,7 @@ public sealed class TeamLibraryService : IDisposable
     /// <summary>Where the team library comes from, or null when none is joined.</summary>
     public TeamSource? Source { get; private set; }
 
-    /// <summary>Hash of the file content <see cref="Team"/> was loaded from; the guard for <see cref="Save"/>.</summary>
+    /// <summary>Hash of the file content <see cref="Team"/> was loaded from; the editor captures it when editing starts and passes it to <see cref="SaveAsync"/>.</summary>
     public string? CurrentHash { get; private set; }
 
     /// <summary>When the team library itself was last updated (from its file), or null when not loaded.</summary>
@@ -106,8 +108,8 @@ public sealed class TeamLibraryService : IDisposable
     public event EventHandler? Changed;
 
     /// <summary>
-    /// Loads the offline copy at once (status Offline until a read works), starts the hourly timer and the file
-    /// watcher, and refreshes in the background.
+    /// Loads the offline copy at once (status Offline until a read works), starts the hourly timer and refreshes in
+    /// the background. The file watcher starts with that first read, once the folder is known to exist.
     /// </summary>
     public void Start()
     {
@@ -124,8 +126,6 @@ public sealed class TeamLibraryService : IDisposable
                     CurrentHash = TeamFile.Hash(cached.Json);
                     LastChecked = cached.FetchedAt;
                 }
-                UpdateEditing();
-                StartWatching();
                 RaiseChanged();
             }
             _hourly.Start();
@@ -138,22 +138,10 @@ public sealed class TeamLibraryService : IDisposable
         if (Source is not null) _ = RequestRefreshAsync();
     }
 
-    /// <summary>Reads the source now (Retry). Never throws. Ignores a hold.</summary>
-    public async Task RefreshAsync()
-    {
-        try
-        {
-            if (Source is not { } source) return;
-            var result = await _reader.ReadAsync(source, CancellationToken.None);
-            Apply(source, result);
-        }
-        catch (Exception ex)
-        {
-            _log(ex);
-        }
-    }
+    /// <summary>Reads the source now (Retry, or a reload the user is waiting for). Never throws. Ignores a hold.</summary>
+    public Task RefreshAsync() => RunRefreshAsync(force: true);
 
-    /// <summary>An automatic refresh (timer or file watcher): deferred while held, otherwise as <see cref="RefreshAsync"/>.</summary>
+    /// <summary>An automatic refresh (timer or file watcher): deferred while held, otherwise a normal read.</summary>
     public Task RequestRefreshAsync()
     {
         if (_held)
@@ -161,16 +149,19 @@ public sealed class TeamLibraryService : IDisposable
             _deferred = true;
             return Task.CompletedTask;
         }
-        return RefreshAsync();
+        return RunRefreshAsync(force: false);
     }
 
-    /// <summary>Holds automatic refreshes while the team library is being edited; releasing runs one if any were deferred.</summary>
+    /// <summary>
+    /// Holds automatic refreshes while the team library is being edited (a read still in flight then only records
+    /// that a refresh is owed); releasing runs one if any were deferred.
+    /// </summary>
     public void HoldRefresh(bool hold)
     {
         _held = hold;
         if (hold || !_deferred) return;
         _deferred = false;
-        _ = RefreshAsync();
+        _ = RunRefreshAsync(force: false);
     }
 
     /// <summary>
@@ -183,26 +174,8 @@ public sealed class TeamLibraryService : IDisposable
         {
             if (TeamSource.FromInput(input) is not { } source) return new TeamJoinResult(false, InvalidInputMessage);
 
-            var result = await _reader.ReadAsync(source, CancellationToken.None);
-            if (result.Status != TeamReadStatus.Ok || result.Team is null || result.Json is null)
-                return new TeamJoinResult(false, result.Message ?? "Can't read that team library.");
-
-            if (Source is not null && Source != source)
-            {
-                var old = Team?.Content ?? new Library();
-                TeamUserState.Prune(_settings, _personal(), old);
-                TeamUserState.ClearTeam(_settings, old);
-                TeamCache.Delete(_cachePath);
-                Team = null;
-                _json = null;
-                CurrentHash = null;
-            }
-
-            _settings.TeamSource = source.Location;
-            Source = source;
-            StartWatching();
-            Apply(source, result); // caches, takes the baseline, prunes, saves settings and raises Changed
-            return new TeamJoinResult(true, null);
+            var snap = await ReadSnapshotAsync(source, needWatcher: true);
+            return await OnUi(() => ApplyJoin(source, snap));
         }
         catch (Exception ex)
         {
@@ -216,24 +189,23 @@ public sealed class TeamLibraryService : IDisposable
     {
         try
         {
+            _generation++; // reads still in flight are discarded
             StopWatching();
             var team = Team?.Content ?? new Library();
             TeamUserState.Prune(_settings, _personal(), team);
             TeamUserState.ClearTeam(_settings, team);
             _settings.TeamSource = null;
             TeamCache.Delete(_cachePath);
-            lock (_sync)
-            {
-                Team = null;
-                Source = null;
-                _json = null;
-                CurrentHash = null;
-                LastChecked = null;
-                StatusMessage = null;
-                Status = TeamStatus.NotConnected;
-                CanEdit = false;
-                ConflictCopies = [];
-            }
+            Team = null;
+            Source = null;
+            _json = null;
+            CurrentHash = null;
+            LastChecked = null;
+            StatusMessage = null;
+            Status = TeamStatus.NotConnected;
+            CanEdit = false;
+            ConflictCopies = [];
+            _deferred = false;
             _saveSettings();
         }
         catch (Exception ex)
@@ -247,38 +219,53 @@ public sealed class TeamLibraryService : IDisposable
     /// Starts a team library in <paramref name="folder"/> and, when it was created, joins it. When the folder already
     /// has one, nothing is joined and the result carries its name so the caller can offer to join it.
     /// </summary>
-    public TeamCreateResult Start(string folder, string name, IReadOnlyCollection<Guid> seedCategoryIds,
+    public async Task<TeamCreateResult> StartAsync(string folder, string name, IReadOnlyCollection<Guid> seedCategoryIds,
         bool addBusinessExamples = false)
     {
-        var created = _writer.Create(folder, name, _personal(), seedCategoryIds, addBusinessExamples);
-        if (created.Created)
+        try
         {
-            var joined = Task.Run(() => JoinAsync(created.FilePath)).GetAwaiter().GetResult();
-            if (!joined.Success) return created with { Created = false, Message = joined.Message };
+            var personal = _personal();
+            var created = await Task.Run(() => _writer.Create(folder, name, personal, seedCategoryIds, addBusinessExamples));
+            if (!created.Created) return created;
+            var joined = await JoinAsync(created.FilePath);
+            return joined.Success ? created : created with { Created = false, Message = joined.Message };
         }
-        return created;
+        catch (Exception ex)
+        {
+            _log(ex);
+            return new TeamCreateResult(false, Path.Combine(folder, TeamFile.FileName), null, "Couldn't start the team library.");
+        }
     }
 
     /// <summary>
-    /// Saves an edited team library over the shared file, only if the file is unchanged since it was loaded. When
-    /// someone else changed it, it is re-read at once (even while refreshes are held) and the refusal is returned.
+    /// Saves an edited team library over the shared file, only if the file still has <paramref name="baseHash"/>, the
+    /// <see cref="CurrentHash"/> the editor started editing from (so a refresh that landed during the edit can't
+    /// hide someone else's change). When it differs, the library is re-read at once (even while refreshes are held)
+    /// and the refusal is returned.
     /// </summary>
-    public TeamSaveResult Save(TeamLibrary edited)
+    public async Task<TeamSaveResult> SaveAsync(TeamLibrary edited, string? baseHash)
     {
-        if (Source is not { Kind: TeamSourceKind.File } source)
-            return new TeamSaveResult(TeamSaveStatus.Failed, null, "The team library can't be saved here.");
         try
         {
-            var result = _writer.Save(source.Location, edited, CurrentHash);
+            if (Source is not { Kind: TeamSourceKind.File } source)
+                return new TeamSaveResult(TeamSaveStatus.Failed, null, "The team library can't be saved here.");
+
+            var (result, json) = await Task.Run(() =>
+            {
+                var saved = _writer.Save(source.Location, edited, baseHash);
+                string? text = null;
+                if (saved.Status == TeamSaveStatus.Saved)
+                {
+                    try { text = File.ReadAllText(source.Location); }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+                }
+                return (saved, text);
+            });
+
             if (result.Status == TeamSaveStatus.Saved)
-            {
-                AfterOwnSave(source, edited, result.NewHash);
-            }
+                await OnUi(() => AfterOwnSave(source, edited, json, result.NewHash));
             else if (result.Status == TeamSaveStatus.ChangedByOther)
-            {
-                var read = Task.Run(() => _reader.ReadAsync(source, CancellationToken.None)).GetAwaiter().GetResult();
-                Apply(source, read);
-            }
+                await RunRefreshAsync(force: true);
             return result;
         }
         catch (Exception ex)
@@ -297,92 +284,164 @@ public sealed class TeamLibraryService : IDisposable
         StopWatching();
     }
 
-    private void AfterOwnSave(TeamSource source, TeamLibrary edited, string? newHash)
+    // What one background pass found: the read, whether the file is writable, the conflict copies, and (when asked
+    // for) a watcher already created. All file-system access happens here, off the UI thread.
+    private sealed record Snapshot(TeamReadResult Read, bool CanWrite, IReadOnlyList<string> Conflicts, FileSystemWatcher? Watcher);
+
+    private Task<Snapshot> ReadSnapshotAsync(TeamSource source, bool needWatcher)
+        => Task.Run(async () =>
+        {
+            var read = await _reader.ReadAsync(source, CancellationToken.None);
+            if (source.Kind != TeamSourceKind.File) return new Snapshot(read, false, [], null);
+            return new Snapshot(read, TeamWriter.CanWrite(source.Location), TeamWriter.FindConflictCopies(source.Location),
+                needWatcher ? CreateWatcher(source) : null);
+        });
+
+    private async Task RunRefreshAsync(bool force)
     {
+        try
+        {
+            if (Source is not { } source) return;
+            var generation = ++_generation;
+            var snap = await ReadSnapshotAsync(source, needWatcher: _watcher is null);
+            await OnUi(() => Apply(source, snap, generation, force));
+        }
+        catch (Exception ex)
+        {
+            _log(ex);
+        }
+    }
+
+    // Runs on the UI thread (directly when already there).
+    private Task OnUi(Action action)
+    {
+        if (_dispatcher.CheckAccess())
+        {
+            action();
+            return Task.CompletedTask;
+        }
+        return _dispatcher.InvokeAsync(action).Task;
+    }
+
+    private Task<T> OnUi<T>(Func<T> func)
+    {
+        if (_dispatcher.CheckAccess()) return Task.FromResult(func());
+        return _dispatcher.InvokeAsync(func).Task;
+    }
+
+    private TeamJoinResult ApplyJoin(TeamSource source, Snapshot snap)
+    {
+        var result = snap.Read;
+        if (result.Status != TeamReadStatus.Ok || result.Team is null || result.Json is null)
+        {
+            snap.Watcher?.Dispose();
+            return new TeamJoinResult(false, result.Message ?? "Can't read that team library.");
+        }
+
+        var generation = ++_generation; // reads of the old source still in flight are discarded
+        if (Source is not null && Source != source)
+        {
+            var old = Team?.Content ?? new Library();
+            TeamUserState.Prune(_settings, _personal(), old);
+            TeamUserState.ClearTeam(_settings, old);
+            TeamCache.Delete(_cachePath);
+            Team = null;
+            _json = null;
+            CurrentHash = null;
+        }
+
+        _settings.TeamSource = source.Location;
+        Source = source;
+        StopWatching();
+        Apply(source, snap, generation, force: true); // caches, takes the baseline, prunes, saves settings, raises Changed
+        return new TeamJoinResult(true, null);
+    }
+
+    private void AfterOwnSave(TeamSource source, TeamLibrary edited, string? json, string? newHash)
+    {
+        if (Source != source) return;
+        _generation++; // an older read still in flight must not roll the saved copy back
+
         // Compare with the copy before the save (re-parsed, so in-place edits of Team are seen).
         var before = _json is null ? null : TeamFile.Parse(_json).Content.Prompts.ToDictionary(p => p.Id, TeamUserState.Fingerprint);
         foreach (var p in edited.Content.Prompts)
             if (before is null || !before.TryGetValue(p.Id, out var fp) || fp != TeamUserState.Fingerprint(p))
                 TeamUserState.MarkSeen(_settings, p);
 
-        string? json = null;
-        try { json = File.ReadAllText(source.Location); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         if (json is null || TeamFile.Hash(json) != newHash) json = TeamFile.Serialize(edited);
 
-        lock (_sync)
-        {
-            Team = edited;
-            _json = json;
-            CurrentHash = newHash;
-            LastChecked = _now();
-            Status = TeamStatus.Connected;
-            StatusMessage = null;
-            try { TeamCache.Save(_cachePath, source, json, _now()); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
-            TeamUserState.Prune(_settings, _personal(), edited.Content);
-            UpdateEditing();
-        }
+        Team = edited;
+        _json = json;
+        CurrentHash = newHash;
+        LastChecked = _now();
+        Status = TeamStatus.Connected;
+        StatusMessage = null;
+        CanEdit = !edited.IsNewerSchema;
+        try { TeamCache.Save(_cachePath, source, json, _now()); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        TeamUserState.Prune(_settings, _personal(), edited.Content);
         _saveSettings();
         RaiseChanged();
     }
 
-    // Applies one read result (ignored if the source has changed meanwhile). A failed read keeps the last good copy.
-    private void Apply(TeamSource source, TeamReadResult result)
+    // Applies one read result on the UI thread. Dropped when the source changed or a newer read has started; while
+    // held (and not forced) it only records that a refresh is owed. A failed read keeps the last good copy.
+    private void Apply(TeamSource source, Snapshot snap, int generation, bool force)
     {
-        bool raise;
-        lock (_sync)
+        if (_disposed || Source != source || generation != _generation)
         {
-            if (Source != source) return;
-            var before = (Status, CurrentHash, StatusMessage, CanEdit, string.Join('|', ConflictCopies));
-            if (result.Status == TeamReadStatus.Ok && result.Team is not null && result.Json is not null)
-            {
-                TeamRefresh.Apply(result, _cachePath, source, _now());
-                Team = result.Team;
-                _json = result.Json;
-                CurrentHash = result.Hash;
-                LastChecked = _now();
-                Status = TeamStatus.Connected;
-                StatusMessage = null;
-
-                var settingsChanged = false;
-                if (!_settings.TeamBaselineTaken)
-                {
-                    TeamUserState.TakeBaseline(_settings, result.Team.Content);
-                    settingsChanged = true;
-                }
-                settingsChanged |= TeamUserState.Prune(_settings, _personal(), result.Team.Content);
-                if (settingsChanged || before.CurrentHash != result.Hash || _settings.TeamSource != source.Location)
-                {
-                    _settings.TeamSource = source.Location;
-                    settingsChanged = true;
-                }
-                if (settingsChanged) _saveSettings();
-            }
-            else
-            {
-                Status = TeamStatus.Offline;
-                StatusMessage = result.Message ?? "Can't reach the team library.";
-            }
-
-            UpdateEditing();
-            var after = (Status, CurrentHash, StatusMessage, CanEdit, string.Join('|', ConflictCopies));
-            raise = before != after;
+            snap.Watcher?.Dispose();
+            return;
         }
-        if (raise) RaiseChanged();
-    }
 
-    private void UpdateEditing()
-    {
-        if (Source is { Kind: TeamSourceKind.File } source)
+        if (snap.Watcher is not null)
         {
-            CanEdit = Team is not null && !Team.IsNewerSchema && TeamWriter.CanWrite(source.Location);
-            ConflictCopies = TeamWriter.FindConflictCopies(source.Location);
+            if (_watcher is null) _watcher = snap.Watcher;
+            else snap.Watcher.Dispose();
+        }
+
+        if (_held && !force)
+        {
+            _deferred = true;
+            return;
+        }
+
+        var result = snap.Read;
+        var before = (Status, CurrentHash, StatusMessage, CanEdit, string.Join('|', ConflictCopies));
+        if (result.Status == TeamReadStatus.Ok && result.Team is not null && result.Json is not null)
+        {
+            TeamRefresh.Apply(result, _cachePath, source, _now());
+            Team = result.Team;
+            _json = result.Json;
+            CurrentHash = result.Hash;
+            LastChecked = _now();
+            Status = TeamStatus.Connected;
+            StatusMessage = null;
+
+            var settingsChanged = false;
+            if (!_settings.TeamBaselineTaken)
+            {
+                TeamUserState.TakeBaseline(_settings, result.Team.Content);
+                settingsChanged = true;
+            }
+            settingsChanged |= TeamUserState.Prune(_settings, _personal(), result.Team.Content);
+            if (_settings.TeamSource != source.Location)
+            {
+                _settings.TeamSource = source.Location;
+                settingsChanged = true;
+            }
+            if (settingsChanged || before.CurrentHash != result.Hash) _saveSettings();
         }
         else
         {
-            CanEdit = false;
-            ConflictCopies = [];
+            Status = TeamStatus.Offline;
+            StatusMessage = result.Message ?? "Can't reach the team library.";
         }
+
+        CanEdit = source.Kind == TeamSourceKind.File && Team is not null && !Team.IsNewerSchema && snap.CanWrite;
+        ConflictCopies = snap.Conflicts;
+        var after = (Status, CurrentHash, StatusMessage, CanEdit, string.Join('|', ConflictCopies));
+        if (before != after) RaiseChanged();
     }
 
     private void RaiseChanged()
@@ -398,14 +457,14 @@ public sealed class TeamLibraryService : IDisposable
         catch (Exception ex) { _log(ex); }
     }
 
-    private void StartWatching()
+    // Created off the UI thread (it touches the folder). Null when the folder isn't there or can't be watched; the
+    // hourly refresh still runs, and a later read tries again.
+    private FileSystemWatcher? CreateWatcher(TeamSource source)
     {
-        StopWatching();
         try
         {
-            if (Source is not { Kind: TeamSourceKind.File } source) return;
             var folder = Path.GetDirectoryName(source.Location);
-            if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) return;
+            if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) return null;
 
             var watcher = new FileSystemWatcher(folder, "team-prompts*.json");
             FileSystemEventHandler onChange = (_, _) => ScheduleRefresh();
@@ -413,13 +472,13 @@ public sealed class TeamLibraryService : IDisposable
             watcher.Created += onChange;
             watcher.Deleted += onChange;
             watcher.Renamed += (_, _) => ScheduleRefresh();
-            watcher.Error += (_, _) => { }; // the hourly refresh still runs
+            watcher.Error += (_, _) => { };
             watcher.EnableRaisingEvents = true;
-            _watcher = watcher;
+            return watcher;
         }
         catch (Exception)
         {
-            StopWatching(); // fall back to the hourly refresh
+            return null;
         }
     }
 

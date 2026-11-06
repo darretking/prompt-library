@@ -24,8 +24,8 @@ public sealed class TeamLibraryServiceTests : IDisposable
 
     private string Cache => Path.Combine(_root, "cache", "team-cache.json");
 
-    private TeamLibraryService NewService()
-        => new(_http, "1.0.0", Cache, _settings, () => new Library(), () => { _settingsSaves++; return true; },
+    private TeamLibraryService NewService(HttpClient? http = null)
+        => new(http ?? _http, "1.0.0", Cache, _settings, () => new Library(), () => { _settingsSaves++; return true; },
             () => _now, _ => { }, TimeSpan.FromMilliseconds(50));
 
     private string MakeTeamFolder(string name, params string[] promptTitles)
@@ -168,7 +168,7 @@ public sealed class TeamLibraryServiceTests : IDisposable
         edited.Content.Prompts[0].Text = "New text";
         edited.Content.Prompts.Add(new Prompt { Id = Guid.NewGuid(), Title = "Added", CategoryId = edited.Content.Categories[0].Id });
 
-        var result = svc.Save(edited);
+        var result = Wait(svc.SaveAsync(edited, oldHash));
 
         Assert.Equal(TeamSaveStatus.Saved, result.Status);
         Assert.NotEqual(oldHash, svc.CurrentHash);
@@ -182,6 +182,7 @@ public sealed class TeamLibraryServiceTests : IDisposable
         var folder = MakeTeamFolder("acme", "One");
         using var svc = NewService();
         Wait(svc.JoinAsync(folder));
+        var baseHash = svc.CurrentHash;
         var path = Path.Combine(folder, TeamFile.FileName);
         var theirs = TeamFile.Parse(File.ReadAllText(path));
         theirs.Content.Prompts[0].Title = "Theirs";
@@ -192,7 +193,7 @@ public sealed class TeamLibraryServiceTests : IDisposable
         mine.Content.Prompts[0].Title = "Mine";
         svc.HoldRefresh(true);
 
-        var result = svc.Save(mine);
+        var result = Wait(svc.SaveAsync(mine, baseHash));
 
         Assert.Equal(TeamSaveStatus.ChangedByOther, result.Status);
         Assert.Equal("Theirs", svc.Team!.Content.Prompts[0].Title);
@@ -246,14 +247,159 @@ public sealed class TeamLibraryServiceTests : IDisposable
         Directory.CreateDirectory(folder);
         using var svc = NewService();
 
-        var created = svc.Start(folder, "Fresh", []);
+        var created = Wait(svc.StartAsync(folder, "Fresh", []));
         Assert.True(created.Created);
         Assert.Equal("Fresh", svc.Team!.Name);
 
         svc.Leave();
-        var again = svc.Start(folder, "Other", []);
+        var again = Wait(svc.StartAsync(folder, "Other", []));
         Assert.False(again.Created);
         Assert.Equal("Fresh", again.ExistingName);
         Assert.Null(svc.Source);
     });
+
+    private static void WriteTitle(string folder, string title)
+    {
+        var path = Path.Combine(folder, TeamFile.FileName);
+        var team = TeamFile.Parse(File.ReadAllText(path));
+        team.Content.Prompts[0].Title = title;
+        File.WriteAllText(path, TeamFile.Serialize(team));
+    }
+
+    [Fact]
+    public void Refresh_InFlightWhenHeld_AppliesNothingUntilReleased() => Sta.Run(() =>
+    {
+        var folder = MakeTeamFolder("acme", "One");
+        using var svc = NewService();
+        Wait(svc.JoinAsync(folder));
+        var hash = svc.CurrentHash;
+        WriteTitle(folder, "Changed elsewhere");
+
+        var inFlight = svc.RequestRefreshAsync(); // read started, not yet applied
+        svc.HoldRefresh(true);
+        Wait(inFlight);
+
+        Assert.Equal("One", svc.Team!.Content.Prompts[0].Title);
+        Assert.Equal(hash, svc.CurrentHash);
+
+        svc.HoldRefresh(false);
+        PumpUntil(() => svc.Team!.Content.Prompts[0].Title == "Changed elsewhere");
+        Assert.Equal("Changed elsewhere", svc.Team!.Content.Prompts[0].Title);
+    });
+
+    [Fact]
+    public void SaveAsync_OldBaseHashAfterRefreshLanded_IsChangedByOther() => Sta.Run(() =>
+    {
+        var folder = MakeTeamFolder("acme", "One");
+        using var svc = NewService();
+        Wait(svc.JoinAsync(folder));
+        var baseHash = svc.CurrentHash; // captured when editing started
+        WriteTitle(folder, "Theirs");
+        Wait(svc.RefreshAsync()); // CurrentHash has moved on meanwhile
+        var mine = TeamFile.Parse(File.ReadAllText(Path.Combine(folder, TeamFile.FileName)));
+        mine.Content.Prompts[0].Title = "Mine";
+
+        var result = Wait(svc.SaveAsync(mine, baseHash));
+
+        Assert.Equal(TeamSaveStatus.ChangedByOther, result.Status);
+        Assert.Equal("Theirs", TeamFile.Parse(File.ReadAllText(Path.Combine(folder, TeamFile.FileName))).Content.Prompts[0].Title);
+    });
+
+    [Fact]
+    public void Refresh_OlderSlowReadFinishingLast_DoesNotRollBack() => Sta.Run(() =>
+    {
+        static string Json(string title)
+        {
+            var team = new TeamLibrary { Name = "Web", UpdatedAt = DateTimeOffset.UnixEpoch };
+            var cat = new Category { Id = Guid.NewGuid(), Name = "C" };
+            team.Content.Categories.Add(cat);
+            team.Content.Prompts.Add(new Prompt { Id = Guid.Parse("11111111-1111-1111-1111-111111111111"), Title = title, CategoryId = cat.Id });
+            return TeamFile.Serialize(team);
+        }
+
+        var slow = new TaskCompletionSource<bool>();
+        var requests = 0;
+        using var http = new HttpClient(new Handler(async () =>
+        {
+            var n = Interlocked.Increment(ref requests);
+            if (n == 2) await slow.Task;
+            return Json(n == 2 ? "Old" : n == 1 ? "Join" : "New");
+        }));
+        using var svc = NewService(http);
+        Wait(svc.JoinAsync("https://example.com/team.json"));
+
+        var first = svc.RefreshAsync();
+        PumpUntil(() => Volatile.Read(ref requests) >= 2);
+        var second = svc.RefreshAsync();
+        Wait(second);
+        Assert.Equal("New", svc.Team!.Content.Prompts[0].Title);
+        var hash = svc.CurrentHash;
+
+        slow.SetResult(true);
+        Wait(first);
+
+        Assert.Equal("New", svc.Team!.Content.Prompts[0].Title);
+        Assert.Equal(hash, svc.CurrentHash);
+    });
+
+    [Fact]
+    public void Watcher_FileOverwritten_RefreshesWithoutCallingRefresh() => Sta.Run(() =>
+    {
+        var folder = MakeTeamFolder("acme", "One");
+        using (var first = NewService()) Wait(first.JoinAsync(folder));
+        using var svc = NewService();
+        svc.Start();
+        PumpUntil(() => svc.Status == TeamStatus.Connected);
+
+        WriteTitle(folder, "Changed elsewhere");
+
+        PumpUntil(() => svc.Team!.Content.Prompts[0].Title == "Changed elsewhere");
+        Assert.Equal("Changed elsewhere", svc.Team!.Content.Prompts[0].Title);
+    });
+
+    [Fact]
+    public void Watcher_WhileHeld_ChangesNothingUntilReleased() => Sta.Run(() =>
+    {
+        var folder = MakeTeamFolder("acme", "One");
+        using var svc = NewService();
+        Wait(svc.JoinAsync(folder));
+        svc.HoldRefresh(true);
+
+        WriteTitle(folder, "Changed elsewhere");
+        var until = DateTime.UtcNow.AddSeconds(1.5);
+        while (DateTime.UtcNow < until) { Thread.Sleep(20); Sta.DoEvents(); }
+        Assert.Equal("One", svc.Team!.Content.Prompts[0].Title);
+
+        svc.HoldRefresh(false);
+        PumpUntil(() => svc.Team!.Content.Prompts[0].Title == "Changed elsewhere");
+        Assert.Equal("Changed elsewhere", svc.Team!.Content.Prompts[0].Title);
+    });
+
+    [Fact]
+    public void Watcher_FolderMissingAtStart_StartsAfterFirstSuccessfulRead() => Sta.Run(() =>
+    {
+        var folder = Path.Combine(_root, "later");
+        _settings.TeamSource = Path.Combine(folder, TeamFile.FileName);
+        using var svc = NewService();
+        svc.Start();
+        PumpUntil(() => svc.StatusMessage is not null);
+        Assert.Equal(TeamStatus.Offline, svc.Status);
+
+        var made = MakeTeamFolder("later", "One");
+        Wait(svc.RefreshAsync());
+        Assert.Equal(TeamStatus.Connected, svc.Status);
+
+        WriteTitle(made, "Changed elsewhere");
+        PumpUntil(() => svc.Team!.Content.Prompts[0].Title == "Changed elsewhere");
+        Assert.Equal("Changed elsewhere", svc.Team!.Content.Prompts[0].Title);
+    });
+
+    private sealed class Handler(Func<Task<string>> body) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+            => new(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(await body(), System.Text.Encoding.UTF8, "application/json"),
+            };
+    }
 }

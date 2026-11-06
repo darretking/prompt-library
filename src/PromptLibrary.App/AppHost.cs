@@ -82,7 +82,7 @@ public sealed class AppHost : IDisposable
     public UpdateCoordinator? Updates { get; private set; }
 
     /// <summary>The team library (joined, offline copy, refresh, guarded saves); null until <see cref="Start"/> has run.</summary>
-    public TeamLibraryService Team { get; private set; } = null!;
+    public TeamLibraryService? Team { get; private set; }
 
     public Library Library { get; private set; } = new();
     public AppSettings Settings { get; private set; } = new();
