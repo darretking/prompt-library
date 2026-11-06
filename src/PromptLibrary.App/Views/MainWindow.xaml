@@ -13,6 +13,8 @@
         <KeyBinding Modifiers="Ctrl" Key="N" Command="{Binding NewPromptCommand}" />
         <KeyBinding Modifiers="Ctrl" Key="S" Command="{Binding SaveCommand}" />
         <KeyBinding Modifiers="Ctrl+Shift" Key="C" Command="{Binding CopyCommand}" />
+        <KeyBinding Modifiers="Ctrl" Key="D1" Command="{Binding ShowYoursCommand}" />
+        <KeyBinding Modifiers="Ctrl" Key="D2" Command="{Binding ShowTeamCommand}" />
     </Window.InputBindings>
 
     <Window.Resources>
@@ -27,14 +29,72 @@
             <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
             <Setter Property="KeyboardNavigation.TabNavigation" Value="Local" />
             <Style.Triggers>
-                <DataTrigger Binding="{Binding IsAll}" Value="False">
+                <!-- Team categories (read only) have no Rename or Delete. -->
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding IsAll}" Value="False" />
+                        <Condition Binding="{Binding CanEdit}" Value="True" />
+                    </MultiDataTrigger.Conditions>
                     <Setter Property="ContextMenu" Value="{StaticResource CategoryMenu}" />
+                </MultiDataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- A prompt row's right-click menu: Pin / Unpin, and for team prompts Hide from menu / Unhide. -->
+        <ContextMenu x:Key="PromptMenu" x:Shared="False">
+            <MenuItem Header="{Binding PinLabel}" IsEnabled="{Binding CanPin}" Click="PinPrompt_Click" />
+            <MenuItem Header="{Binding HideLabel}" Click="HidePrompt_Click"
+                      Visibility="{Binding IsTeam, Converter={StaticResource BoolToVisibility}}" />
+        </ContextMenu>
+
+        <Style x:Key="PromptRow" TargetType="ListBoxItem" BasedOn="{StaticResource RowItem}">
+            <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
+            <Setter Property="ContextMenu" Value="{StaticResource PromptMenu}" />
+        </Style>
+
+        <!-- A small Segoe Fluent icon beside text: the team icon (people), the pin, set by Text. -->
+        <Style x:Key="InlineGlyph" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource Font.Icons}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- One half of the "Your prompts | Team prompts" switch; Tag is true on the side shown. -->
+        <Style x:Key="SegmentButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.Ink}" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="3"
+                                Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource Brush.Window}" />
+                </Trigger>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="True">
+                    <Setter Property="Background" Value="{StaticResource Brush.BrandSoft}" />
+                    <Setter Property="Foreground" Value="{StaticResource Brush.Brand}" />
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                    <Setter Property="AutomationProperties.ItemStatus" Value="Shown" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
 
-        <Style x:Key="PromptRow" TargetType="ListBoxItem" BasedOn="{StaticResource RowItem}">
-            <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
+        <!-- Secondary editor buttons (Pin, Hide from menu, Make my copy): outline, a little narrower so the Team
+             row fits beside Copy prompt at the minimum window width. -->
+        <Style x:Key="EditorOutlineButton" TargetType="Button" BasedOn="{StaticResource OutlineButton}">
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="MinWidth" Value="64" />
+            <Setter Property="Margin" Value="0,0,8,0" />
         </Style>
 
         <!-- Shown while a category row is not being renamed. -->
@@ -104,10 +164,38 @@
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <Grid Grid.Row="1">
+            <!-- Once a team library is connected: the "Your prompts | Team prompts" switch over the three columns
+                 (Ctrl+1 / Ctrl+2). The Team half carries the team icon and a dot while something is new or updated. -->
+            <Border Grid.Row="1" Background="{StaticResource Brush.Rail}" Padding="16,8"
+                    BorderBrush="{StaticResource Brush.Line}" BorderThickness="0,0,0,1"
+                    Visibility="{Binding ShowSwitch, Converter={StaticResource BoolToVisibility}}">
+                <Border HorizontalAlignment="Left" Background="{StaticResource Brush.Surface}"
+                        BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
+                        CornerRadius="{StaticResource Radius}" Padding="2">
+                    <StackPanel Orientation="Horizontal" AutomationProperties.Name="Library">
+                        <Button Style="{StaticResource SegmentButton}" Content="Your prompts"
+                                Tag="{Binding IsYoursSide}" Command="{Binding ShowYoursCommand}"
+                                ToolTip="Your prompts (Ctrl+1)" AutomationProperties.Name="Your prompts" />
+                        <Button Style="{StaticResource SegmentButton}" Margin="2,0,0,0"
+                                Tag="{Binding IsTeamSide}" Command="{Binding ShowTeamCommand}"
+                                ToolTip="Team prompts (Ctrl+2)" AutomationProperties.Name="{Binding TeamSwitchName}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource InlineGlyph}" Text="&#xE716;" Margin="0,0,6,0" />
+                                <TextBlock Text="Team prompts" />
+                                <Ellipse Width="6" Height="6" Margin="6,0,0,0" VerticalAlignment="Top"
+                                         Fill="{StaticResource Brush.Brand}"
+                                         Visibility="{Binding TeamHasUnseen, Converter={StaticResource BoolToVisibility}}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </Border>
+
+            <Grid Grid.Row="2">
                 <!-- At the minimum window size the list column gives way so the editor keeps its 420 px. -->
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="180" />
@@ -181,6 +269,7 @@
                                         <MultiDataTrigger>
                                             <MultiDataTrigger.Conditions>
                                                 <Condition Binding="{Binding IsAll}" Value="False" />
+                                                <Condition Binding="{Binding CanEdit}" Value="True" />
                                                 <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True" />
                                             </MultiDataTrigger.Conditions>
                                             <Setter TargetName="RowActions" Property="Visibility" Value="Visible" />
@@ -189,6 +278,7 @@
                                         <MultiDataTrigger>
                                             <MultiDataTrigger.Conditions>
                                                 <Condition Binding="{Binding IsAll}" Value="False" />
+                                                <Condition Binding="{Binding CanEdit}" Value="True" />
                                                 <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True" />
                                             </MultiDataTrigger.Conditions>
                                             <Setter TargetName="RowActions" Property="Visibility" Value="Visible" />
@@ -197,6 +287,7 @@
                                         <MultiDataTrigger>
                                             <MultiDataTrigger.Conditions>
                                                 <Condition Binding="{Binding IsAll}" Value="False" />
+                                                <Condition Binding="{Binding CanEdit}" Value="True" />
                                                 <Condition Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True" />
                                             </MultiDataTrigger.Conditions>
                                             <Setter TargetName="RowActions" Property="Visibility" Value="Visible" />
@@ -230,22 +321,47 @@
                             </StackPanel>
                             <Button Style="{StaticResource TextButton}" Content="+ New category"
                                     Command="{Binding NewCategoryCommand}"
+                                    Visibility="{Binding ShowEditButtons, Converter={StaticResource BoolToVisibility}}"
                                     AutomationProperties.Name="New category" />
                         </StackPanel>
                     </Grid>
                 </Border>
 
-                <!-- Middle: search and prompt list -->
+                <!-- Middle: (Team header line), search and prompt list -->
                 <Border Grid.Column="1" Background="{StaticResource Brush.Window}"
                         BorderBrush="{StaticResource Brush.Line}" BorderThickness="0,0,1,0">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <Grid Grid.Row="0" Margin="16,16,16,8">
+                        <!-- Team side: "Acme best practice · updated today, 07:52", or the offline note with Retry. -->
+                        <StackPanel Grid.Row="0" Margin="16,16,16,0"
+                                    Visibility="{Binding ShowTeamHeader, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding TeamHeaderText}" Style="{StaticResource MutedText}"
+                                       TextWrapping="Wrap" ToolTip="{Binding TeamHeaderDetail}"
+                                       AutomationProperties.Name="{Binding TeamHeaderText}" />
+                            <WrapPanel TextElement.FontSize="12">
+                                <Button Style="{StaticResource LinkButton}" Content="Retry" Margin="0,4,12,0"
+                                        Command="{Binding RetryTeamCommand}"
+                                        ToolTip="Read the team library again"
+                                        Visibility="{Binding IsTeamOffline, Converter={StaticResource BoolToVisibility}}"
+                                        AutomationProperties.Name="Retry" />
+                                <TextBlock Text="Read only" Style="{StaticResource MutedText}" Margin="0,4,12,0"
+                                           ToolTip="You can't change files in this folder"
+                                           Visibility="{Binding ShowTeamReadOnlyNote, Converter={StaticResource BoolToVisibility}}" />
+                                <Button Style="{StaticResource LinkButton}" Content="Mark all as seen" Margin="0,4,12,0"
+                                        Command="{Binding MarkAllSeenCommand}"
+                                        Visibility="{Binding ShowMarkAllSeen, Converter={StaticResource BoolToVisibility}}"
+                                        AutomationProperties.Name="Mark all as seen" />
+                            </WrapPanel>
+                        </StackPanel>
+
+                        <Grid Grid.Row="1" Margin="16,16,16,8">
                             <TextBox x:Name="SearchBox" Style="{StaticResource PlaceholderBox}"
                                      Tag="Search prompts" Padding="6,0,28,0"
                                      Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
@@ -259,7 +375,14 @@
                                     ToolTip="Clear search (Esc)" AutomationProperties.Name="Clear search" />
                         </Grid>
 
-                        <ListBox x:Name="PromptList" Grid.Row="1" Style="{StaticResource PlainList}"
+                        <!-- Only while some team prompts are hidden from the menu: lists them greyed, each with Unhide. -->
+                        <CheckBox Grid.Row="2" Margin="16,0,16,8" Content="{Binding ShowHiddenText}"
+                                  IsChecked="{Binding ShowHiddenTeamPrompts}"
+                                  FocusVisualStyle="{StaticResource FocusRing}"
+                                  Visibility="{Binding ShowHiddenToggle, Converter={StaticResource BoolToVisibility}}"
+                                  AutomationProperties.Name="{Binding ShowHiddenText}" />
+
+                        <ListBox x:Name="PromptList" Grid.Row="3" Style="{StaticResource PlainList}"
                                  ItemsSource="{Binding Prompts}"
                                  SelectedItem="{Binding SelectedPrompt}"
                                  ItemContainerStyle="{StaticResource PromptRow}"
@@ -267,15 +390,52 @@
                                  AutomationProperties.Name="Prompts">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Style="{StaticResource PromptDescription}" />
-                                    </StackPanel>
+                                    <!-- Rows stay quiet: the team icon only in search results, then a New / Updated tag
+                                         and a small pin where they apply. Hidden rows (Show hidden) are greyed. -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <DockPanel>
+                                                <TextBlock DockPanel.Dock="Left" Style="{StaticResource InlineGlyph}"
+                                                           Text="&#xE716;" Margin="0,0,6,0" ToolTip="Team prompt"
+                                                           Visibility="{Binding ShowTeamIcon, Converter={StaticResource BoolToVisibility}}" />
+                                                <TextBlock x:Name="RowTitle" Text="{Binding Title}" FontWeight="SemiBold"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </DockPanel>
+                                            <TextBlock Style="{StaticResource PromptDescription}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top"
+                                                    Margin="8,0,0,0">
+                                            <Border x:Name="MarkerTag" Background="{StaticResource Brush.Surface}"
+                                                    BorderBrush="{StaticResource Brush.Brand}" BorderThickness="1"
+                                                    CornerRadius="{StaticResource Radius}" Padding="4,0"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding MarkerText}" FontSize="11" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource Brush.Brand}" />
+                                            </Border>
+                                            <TextBlock Style="{StaticResource InlineGlyph}" Text="&#xE718;"
+                                                       Margin="6,0,0,0" ToolTip="Pinned"
+                                                       Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding MarkerText}" Value="{x:Null}">
+                                            <Setter TargetName="MarkerTag" Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsHidden}" Value="True">
+                                            <Setter TargetName="RowTitle" Property="Foreground" Value="{StaticResource Brush.Muted}" />
+                                            <Setter TargetName="RowTitle" Property="FontWeight" Value="Normal" />
+                                            <Setter TargetName="RowTitle" Property="ToolTip" Value="Hidden from the menu (right-click to unhide)" />
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
 
-                        <StackPanel Grid.Row="1" Margin="16,8,16,0"
+                        <StackPanel Grid.Row="3" Margin="16,8,16,0"
                                     Visibility="{Binding ShowNoPromptsYet, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="No prompts yet" FontWeight="SemiBold" />
                             <Button x:Name="EmptyNewPromptButton" Content="New prompt" Command="{Binding NewPromptCommand}"
@@ -283,7 +443,18 @@
                                     ToolTip="New prompt (Ctrl+N)" AutomationProperties.Name="New prompt" />
                         </StackPanel>
 
-                        <StackPanel Grid.Row="1" Margin="16,8,16,0"
+                        <!-- Team side states: loading, empty, everything hidden. -->
+                        <TextBlock Grid.Row="3" Margin="16,8,16,0" Text="Loading team prompts…"
+                                   Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                                   AutomationProperties.LiveSetting="Polite"
+                                   Visibility="{Binding IsTeamLoading, Converter={StaticResource BoolToVisibility}}" />
+                        <TextBlock Grid.Row="3" Margin="16,8,16,0" Text="No team prompts yet." FontWeight="SemiBold"
+                                   TextWrapping="Wrap"
+                                   Visibility="{Binding ShowNoTeamPrompts, Converter={StaticResource BoolToVisibility}}" />
+                        <TextBlock Grid.Row="3" Margin="16,8,16,0" Text="{Binding AllHiddenText}" TextWrapping="Wrap"
+                                   Visibility="{Binding ShowAllHidden, Converter={StaticResource BoolToVisibility}}" />
+
+                        <StackPanel Grid.Row="3" Margin="16,8,16,0"
                                     Visibility="{Binding ShowNoMatches, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="{Binding NoMatchesText}" TextWrapping="Wrap" />
                             <Button Style="{StaticResource LinkButton}" Content="Clear search"
@@ -292,7 +463,7 @@
                                     AutomationProperties.Name="Clear search" />
                         </StackPanel>
 
-                        <Button Grid.Row="2" Style="{StaticResource TextButton}" Content="+ New prompt"
+                        <Button Grid.Row="4" Style="{StaticResource TextButton}" Content="+ New prompt"
                                 Margin="8,8,8,16" Command="{Binding NewPromptCommand}"
                                 Visibility="{Binding ShowNewPromptFooter, Converter={StaticResource BoolToVisibility}}"
                                 ToolTip="New prompt (Ctrl+N)" AutomationProperties.Name="New prompt" />
@@ -312,13 +483,31 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
-                            <!-- 64 = three lines, so a new prompt (with its heading) still fits at the minimum window height. -->
-                            <RowDefinition Height="*" MinHeight="64" />
+                            <!-- 64 = three lines, so a new prompt (with its heading) still fits at the minimum window height;
+                                 40 while the buttons take two lines (see MainWindow.ButtonRow_SizeChanged). -->
+                            <RowDefinition x:Name="SlipRow" Height="*" MinHeight="64" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
                         <StackPanel Grid.Row="0" Margin="0,0,0,16">
+                            <!-- A team prompt while the team library isn't being edited: one lock line, the fields
+                                 below are normal, selectable text that can't be changed. -->
+                            <DockPanel Margin="0,0,0,8">
+                                <DockPanel.Style>
+                                    <Style TargetType="DockPanel">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding LockLineText}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </DockPanel.Style>
+                                <TextBlock DockPanel.Dock="Left" Style="{StaticResource InlineGlyph}" Text="&#xE716;"
+                                           Foreground="{StaticResource Brush.Muted}" Margin="0,0,6,0" />
+                                <TextBlock Text="{Binding LockLineText}" Style="{StaticResource MutedText}"
+                                           TextWrapping="Wrap" AutomationProperties.Name="{Binding LockLineText}" />
+                            </DockPanel>
                             <!-- Says this is a new, not yet saved prompt. -->
                             <TextBlock Text="New prompt" FontWeight="SemiBold" Margin="0,0,0,4"
                                        Visibility="{Binding Editor.IsNew, Converter={StaticResource BoolToVisibility}}" />
@@ -326,6 +515,7 @@
                             <TextBox x:Name="TitleBox" Style="{StaticResource PlaceholderBox}" Tag="Untitled prompt"
                                      FontSize="18" FontWeight="SemiBold"
                                      Text="{Binding Editor.Title, UpdateSourceTrigger=PropertyChanged}"
+                                     IsReadOnly="{Binding Editor.IsReadOnly}"
                                      AutomationProperties.Name="Title" />
                             <TextBlock Text="{Binding Editor.TitleError}" Style="{StaticResource ErrorText}" />
                         </StackPanel>
@@ -333,6 +523,7 @@
                         <StackPanel Grid.Row="1" Margin="0,0,0,16">
                             <TextBlock Text="Description" Style="{StaticResource FieldLabel}" />
                             <TextBox Text="{Binding Editor.Description, UpdateSourceTrigger=PropertyChanged}"
+                                     IsReadOnly="{Binding Editor.IsReadOnly}"
                                      AutomationProperties.Name="Description" />
                         </StackPanel>
 
@@ -342,6 +533,7 @@
                                       ItemsSource="{Binding CategoryChoices}"
                                       DisplayMemberPath="Name" SelectedValuePath="Id"
                                       SelectedValue="{Binding Editor.CategoryId}"
+                                      Visibility="{Binding Editor.IsEditable, Converter={StaticResource BoolToVisibility}}"
                                       AutomationProperties.Name="Category">
                                 <ComboBox.ItemContainerStyle>
                                     <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
@@ -349,6 +541,10 @@
                                     </Style>
                                 </ComboBox.ItemContainerStyle>
                             </ComboBox>
+                            <!-- Read only: the category as plain text. -->
+                            <TextBlock Text="{Binding EditorCategoryName}" Padding="0,4"
+                                       AutomationProperties.Name="{Binding EditorCategoryName, StringFormat=Category {0}}"
+                                       Visibility="{Binding Editor.IsReadOnly, Converter={StaticResource BoolToVisibility}}" />
                             <TextBlock Text="{Binding Editor.CategoryError}" Style="{StaticResource ErrorText}" />
                         </StackPanel>
 
@@ -366,6 +562,7 @@
                                     CornerRadius="4,0,0,4" />
                             <TextBox x:Name="PromptBox" Style="{StaticResource SlipTextBox}" Margin="4,1,1,1"
                                      Text="{Binding Editor.Text, UpdateSourceTrigger=PropertyChanged}"
+                                     IsReadOnly="{Binding Editor.IsReadOnly}"
                                      PreviewKeyDown="PromptBox_PreviewKeyDown"
                                      AutomationProperties.Name="Prompt text"
                                      AutomationProperties.HelpText="Ctrl+Tab inserts a tab" />
@@ -391,9 +588,13 @@
                                     <Style TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
                                         <Setter Property="Visibility" Value="Hidden" />
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsKeyboardFocused, ElementName=PromptBox}" Value="True">
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding IsKeyboardFocused, ElementName=PromptBox}" Value="True" />
+                                                    <Condition Binding="{Binding Editor.IsReadOnly}" Value="False" />
+                                                </MultiDataTrigger.Conditions>
                                                 <Setter Property="Visibility" Value="Visible" />
-                                            </DataTrigger>
+                                            </MultiDataTrigger>
                                         </Style.Triggers>
                                     </Style>
                                 </TextBlock.Style>
@@ -401,24 +602,50 @@
                             <TextBlock Text="{Binding Editor.TextError}" Style="{StaticResource ErrorText}" Margin="0" />
                         </DockPanel>
 
-                        <Grid Grid.Row="6" Margin="0,16,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Button Grid.Column="0" Style="{StaticResource DangerOutlineButton}" Content="Delete"
-                                    HorizontalAlignment="Left" Command="{Binding DeleteCommand}"
-                                    ToolTip="Delete this prompt (Delete key in the list)"
-                                    AutomationProperties.Name="Delete prompt" />
-                            <Button Grid.Column="1" Style="{StaticResource SaveButton}" Content="{Binding Editor.SaveLabel}"
-                                    Margin="0,0,8,0"
-                                    Command="{Binding SaveCommand}" IsEnabled="{Binding Editor.IsDirty}"
-                                    ToolTip="Save (Ctrl+S)" AutomationProperties.Name="Save" />
-                            <Button Grid.Column="2" Style="{StaticResource PrimaryButton}" MinWidth="128"
-                                    Content="{Binding Editor.CopyLabel}"
-                                    Command="{Binding CopyCommand}" IsEnabled="{Binding Editor.CanCopy}"
-                                    ToolTip="Copy prompt (Ctrl+Shift+C)" AutomationProperties.Name="Copy prompt" />
+                        <!-- Left group outline, right group ending in the one filled button:
+                             Your prompts: Delete · Pin | Save · Copy prompt
+                             Team prompts: Pin · Hide from menu | Make my copy · Copy prompt -->
+                        <!-- Two groups; when both don't fit on one line (near the minimum width), the right group moves
+                             under the left one, still right-aligned (MainWindow.ArrangeButtonRow). -->
+                        <Grid x:Name="ButtonRow" Grid.Row="6" Margin="0,16,0,0" SizeChanged="ButtonRow_SizeChanged">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <StackPanel x:Name="LeftButtons" Orientation="Horizontal" HorizontalAlignment="Left"
+                                        SizeChanged="ButtonRow_SizeChanged">
+                                <Button Style="{StaticResource DangerOutlineButton}" Content="Delete"
+                                        Margin="0,0,8,0" Command="{Binding DeleteCommand}"
+                                        Visibility="{Binding ShowEditButtons, Converter={StaticResource BoolToVisibility}}"
+                                        ToolTip="Delete this prompt (Delete key in the list)"
+                                        AutomationProperties.Name="Delete prompt" />
+                                <Button Style="{StaticResource EditorOutlineButton}" Content="{Binding PinLabel}"
+                                        Command="{Binding PinCommand}" IsEnabled="{Binding CanPin}"
+                                        ToolTip="Pinned prompts show at the top of the shortcut menu"
+                                        AutomationProperties.Name="{Binding PinLabel}" />
+                                <Button Style="{StaticResource EditorOutlineButton}" Content="{Binding HideLabel}"
+                                        Command="{Binding HideCommand}"
+                                        Visibility="{Binding ShowTeamButtons, Converter={StaticResource BoolToVisibility}}"
+                                        ToolTip="Hidden prompts are left out of the shortcut menu"
+                                        AutomationProperties.Name="{Binding HideLabel}" />
+                            </StackPanel>
+                            <StackPanel x:Name="RightButtons" Orientation="Horizontal" HorizontalAlignment="Right"
+                                        SizeChanged="ButtonRow_SizeChanged">
+                                <Button Style="{StaticResource SaveButton}" Content="{Binding Editor.SaveLabel}"
+                                        Margin="0,0,8,0"
+                                        Command="{Binding SaveCommand}" IsEnabled="{Binding Editor.IsDirty}"
+                                        Visibility="{Binding ShowEditButtons, Converter={StaticResource BoolToVisibility}}"
+                                        ToolTip="Save (Ctrl+S)" AutomationProperties.Name="Save" />
+                                <Button Style="{StaticResource EditorOutlineButton}" Content="Make my copy"
+                                        Command="{Binding CopyToYoursCommand}"
+                                        Visibility="{Binding ShowTeamButtons, Converter={StaticResource BoolToVisibility}}"
+                                        ToolTip="Copy it into your prompts, where you can change it"
+                                        AutomationProperties.Name="Make my copy" />
+                                <Button Style="{StaticResource PrimaryButton}" MinWidth="128"
+                                        Content="{Binding Editor.CopyLabel}"
+                                        Command="{Binding CopyCommand}" IsEnabled="{Binding Editor.CanCopy}"
+                                        ToolTip="Copy prompt (Ctrl+Shift+C)" AutomationProperties.Name="Copy prompt" />
+                            </StackPanel>
                         </Grid>
                     </Grid>
                 </Grid>

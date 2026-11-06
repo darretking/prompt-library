@@ -212,7 +212,7 @@ public partial class MainWindow : Window, IDialogs
     /// </summary>
     private void PromptBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Tab || Keyboard.Modifiers != ModifierKeys.Control) return;
+        if (e.Key != Key.Tab || Keyboard.Modifiers != ModifierKeys.Control || PromptBox.IsReadOnly) return;
 
         var start = PromptBox.SelectionStart;
         PromptBox.SelectedText = "\t";
@@ -227,6 +227,31 @@ public partial class MainWindow : Window, IDialogs
             ViewModel.DeleteCommand.Execute(null);
             e.Handled = true;
         }
+    }
+
+    /// <summary>The row menu's Pin / Unpin.</summary>
+    private void PinPrompt_Click(object sender, RoutedEventArgs e)
+        => ViewModel.PinCommand.Execute(((FrameworkElement)sender).DataContext as PromptRow);
+
+    /// <summary>The row menu's Hide from menu / Unhide (team prompts only).</summary>
+    private void HidePrompt_Click(object sender, RoutedEventArgs e)
+        => ViewModel.HideCommand.Execute(((FrameworkElement)sender).DataContext as PromptRow);
+
+    // ---- Editor buttons ------------------------------------------------------------------------
+
+    /// <summary>
+    /// The editor's two button groups share one line when they fit; near the minimum width (the Team side's row is
+    /// the wider one) the right group, ending in Copy prompt, moves to a second line, still right-aligned. The slip
+    /// and the gap above the buttons then give up that line's height, so nothing is cut off at the minimum size.
+    /// </summary>
+    private void ButtonRow_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!e.WidthChanged) return;
+        var stacked = LeftButtons.ActualWidth + RightButtons.ActualWidth + 8 > ButtonRow.ActualWidth;
+        Grid.SetRow(RightButtons, stacked ? 1 : 0);
+        RightButtons.Margin = stacked ? new Thickness(0, 8, 0, 0) : new Thickness(0);
+        ButtonRow.Margin = new Thickness(0, stacked ? 8 : 16, 0, 0);
+        SlipRow.MinHeight = stacked ? 40 : 64;
     }
 
     // ---- Helpers -------------------------------------------------------------------------------

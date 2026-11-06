@@ -12,16 +12,20 @@ public sealed class CategoryItem : ObservableObject
     private string _editName = "";
     private string? _error;
 
-    public CategoryItem(Guid? id, string name, int count)
+    public CategoryItem(Guid? id, string name, int count, bool canEdit = true)
     {
         Id = id;
         Name = name;
         Count = count;
+        CanEdit = canEdit;
     }
 
     public Guid? Id { get; }
     public string Name { get; }
     public int Count { get; }
+
+    /// <summary>False on a read-only side (team prompts): no Rename or Delete.</summary>
+    public bool CanEdit { get; }
 
     /// <summary>True for the "All prompts" row, which can't be renamed or deleted.</summary>
     public bool IsAll => Id is null;

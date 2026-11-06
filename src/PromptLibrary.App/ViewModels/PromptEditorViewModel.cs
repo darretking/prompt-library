@@ -30,6 +30,7 @@ public sealed class PromptEditorViewModel : ObservableObject
     private string? _categoryError;
     private bool _showCopied;
     private bool _showSaved;
+    private bool _isReadOnly;
 
     private PromptEditorViewModel(Guid? promptId)
     {
@@ -68,6 +69,22 @@ public sealed class PromptEditorViewModel : ObservableObject
     public Guid? PromptId { get; private set; }
 
     public bool IsNew => PromptId is null;
+
+    /// <summary>
+    /// True for a team prompt while the team library isn't being edited: the fields show the saved text as normal,
+    /// selectable text and can't be changed.
+    /// </summary>
+    public bool IsReadOnly
+    {
+        get => _isReadOnly;
+        set
+        {
+            if (SetProperty(ref _isReadOnly, value)) OnPropertyChanged(nameof(IsEditable));
+        }
+    }
+
+    /// <summary>The opposite of <see cref="IsReadOnly"/> (for bindings).</summary>
+    public bool IsEditable => !_isReadOnly;
 
     public string Title
     {

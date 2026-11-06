@@ -3,10 +3,12 @@ using System.ComponentModel;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using PromptLibrary.App.Team;
 using PromptLibrary.Core.Backup;
 using PromptLibrary.Core.Editing;
 using PromptLibrary.Core.Models;
 using PromptLibrary.Core.Search;
+using PromptLibrary.Core.Team;
 
 namespace PromptLibrary.App.ViewModels;
 
@@ -15,6 +17,8 @@ namespace PromptLibrary.App.ViewModels;
 /// Everything shown and changed goes through <see cref="CurrentDocument"/>; every successful change is saved through
 /// its <see cref="ILibraryDocument.SaveLibrary"/> (a prompt's Save) or <see cref="ILibraryDocument.SaveLibraryChange"/>
 /// (category changes and deletions).
+/// Once a team library is loaded, a switch shows either Your prompts or Team prompts (read only, with Make my copy, Pin
+/// and Hide from menu); a search then covers both libraries.
 /// </summary>
 public sealed class MainViewModel : ObservableObject
 {
@@ -22,10 +26,12 @@ public sealed class MainViewModel : ObservableObject
     private static readonly StringComparer NameOrder = StringComparer.CurrentCultureIgnoreCase;
     private static readonly TimeSpan StatusDuration = TimeSpan.FromSeconds(6);
     private static readonly TimeSpan RestoredStatusDuration = TimeSpan.FromSeconds(4);
+    private static readonly TimeSpan FeedbackDuration = TimeSpan.FromSeconds(4);
 
     private readonly IMainHost _host;
     private readonly IDialogs _dialogs;
     private readonly PersonalDocument _personal;
+    private readonly TeamDocument? _team;
     private readonly DispatcherTimer _statusTimer;
     private string? _statusText;
 
@@ -34,7 +40,7 @@ public sealed class MainViewModel : ObservableObject
     private bool _searchKeepsEditor;
 
     private CategoryItem? _selectedCategory;
-    private Prompt? _selectedPrompt;
+    private PromptRow? _selectedPrompt;
     private string _searchText = "";
     private PromptEditorViewModel? _editor;
     private bool _isAddingCategory;
@@ -51,11 +57,27 @@ public sealed class MainViewModel : ObservableObject
     // "Don't save" restores it, so the change is never written later by another save.
     private PromptSnapshot? _unwritten;
 
+    private LibrarySide _side = LibrarySide.Yours;
+
+    // The category and prompt each side last showed, so switching back returns to them.
+    private readonly Dictionary<LibrarySide, (Guid? CategoryId, Guid? PromptId)> _remembered = new();
+
+    private bool _showHiddenTeamPrompts;
+
+    // True while a search covers both libraries (the rail shows All prompts); the category it showed before.
+    private bool _searchingBoth;
+    private Guid? _categoryBeforeSearch;
+
     public MainViewModel(IMainHost host, IDialogs dialogs)
     {
         _host = host;
         _dialogs = dialogs;
         _personal = new PersonalDocument(host);
+        if (host.Team is { } team)
+        {
+            _team = new TeamDocument(team);
+            team.Changed += (_, _) => OnTeamChanged();
+        }
 
         NewCategoryCommand = new RelayCommand(StartNewCategory);
         RenameCategoryCommand = new RelayCommand<CategoryItem?>(item => StartRename(item ?? SelectedCategory));
@@ -74,6 +96,13 @@ public sealed class MainViewModel : ObservableObject
         AboutCommand = new RelayCommand(_host.ShowAbout);
         OpenUpdateCommand = new RelayCommand(() => _host.Updates?.OpenDialog());
         CheckForUpdatesCommand = new AsyncRelayCommand(CheckForUpdatesAsync, () => _host.Updates is not null);
+        ShowYoursCommand = new RelayCommand(() => SwitchSide(LibrarySide.Yours));
+        ShowTeamCommand = new RelayCommand(() => SwitchSide(LibrarySide.Team));
+        CopyToYoursCommand = new RelayCommand(CopyToYours);
+        PinCommand = new RelayCommand<PromptRow?>(TogglePin);
+        HideCommand = new RelayCommand<PromptRow?>(ToggleHide);
+        MarkAllSeenCommand = new RelayCommand(MarkAllSeen);
+        RetryTeamCommand = new AsyncRelayCommand(() => _team?.Service.RefreshAsync() ?? Task.CompletedTask);
 
         if (_host.Updates is { } updates)
             updates.ReminderChanged += (_, _) =>
@@ -103,15 +132,155 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Raised after a new prompt is started, so the view can put the cursor in Title.</summary>
     public event EventHandler? TitleFocusRequested;
 
-    /// <summary>The library being shown and edited.</summary>
-    public ILibraryDocument CurrentDocument => _personal;
-
     public ObservableCollection<CategoryItem> Categories { get; } = new();
 
     /// <summary>The categories the editor's Category box offers (A–Z, no "All prompts").</summary>
     public ObservableCollection<Category> CategoryChoices { get; } = new();
 
-    public ObservableCollection<Prompt> Prompts { get; } = new();
+    public ObservableCollection<PromptRow> Prompts { get; } = new();
+
+    // ---- Your prompts | Team prompts ------------------------------------------------------------
+
+    /// <summary>The library being shown and edited: your prompts, or the team's.</summary>
+    public ILibraryDocument CurrentDocument => _side == LibrarySide.Team && _team is not null ? _team : _personal;
+
+    public LibrarySide Side => _side;
+    public bool IsTeamSide => _side == LibrarySide.Team;
+    public bool IsYoursSide => _side == LibrarySide.Yours;
+
+    /// <summary>The "Your prompts | Team prompts" switch: only once a team library is connected.</summary>
+    public bool ShowSwitch => TeamConnected;
+
+    /// <summary>Ctrl+1: shows Your prompts.</summary>
+    public IRelayCommand ShowYoursCommand { get; }
+
+    /// <summary>Ctrl+2: shows Team prompts (when a team library is loaded).</summary>
+    public IRelayCommand ShowTeamCommand { get; }
+
+    /// <summary>
+    /// The Team side's muted header line: <c>Acme best practice · updated today, 07:52</c>, or while the source can't
+    /// be read <c>Last updated today, 07:52 · can't reach the team library</c>. Null when no team library is loaded.
+    /// </summary>
+    public string? TeamHeaderText
+    {
+        get
+        {
+            if (!TeamConnected || IsTeamLoading) return null;
+            if (_team!.Service is not { Team: { } library } service) return "Can't reach the team library";
+            return service.Status == TeamStatus.Offline
+                ? $"Last updated {When(service.LastChecked ?? library.UpdatedAt)} · can't reach the team library"
+                : $"{library.Name} · updated {When(library.UpdatedAt)}";
+        }
+    }
+
+    /// <summary>Why the last read failed (the offline header's tooltip), or null.</summary>
+    public string? TeamHeaderDetail => IsTeamOffline ? _team!.Service.StatusMessage : null;
+
+    /// <summary>True while the team source can't be read and the last good copy is shown (the header offers Retry).</summary>
+    /// <summary>
+    /// "Loading team prompts…": connected, with no copy loaded yet and the first read not back (it says why when it
+    /// fails, which ends loading).
+    /// </summary>
+    public bool IsTeamLoading => TeamConnected && !TeamLoaded && _team!.Service.StatusMessage is null;
+
+    public bool IsTeamOffline => TeamConnected && !IsTeamLoading && _team!.Service.Status == TeamStatus.Offline;
+
+    /// <summary>
+    /// The muted "Read only" in the Team header (tooltip "You can't change files in this folder"), where Edit team
+    /// library would be when this PC can write to the team file.
+    /// </summary>
+    public bool ShowTeamReadOnlyNote => IsTeamSide && TeamLoaded && !_team!.Service.CanEdit;
+
+    /// <summary>The header line shows on the Team side.</summary>
+    public bool ShowTeamHeader => IsTeamSide && TeamHeaderText is not null;
+
+    /// <summary>The header's Retry: reads the team source now.</summary>
+    public IAsyncRelayCommand RetryTeamCommand { get; }
+
+    /// <summary>True while any team prompt is New or Updated (the switch shows a dot).</summary>
+    public bool TeamHasUnseen => TeamContent is { } team && TeamUserState.HasUnseen(_host.Settings, team);
+
+    /// <summary>The Team prompts switch's name for screen readers (says when something is new).</summary>
+    public string TeamSwitchName => TeamHasUnseen ? "Team prompts, new or updated prompts" : "Team prompts";
+
+    /// <summary>"Mark all as seen" in the Team header: only while something is unseen.</summary>
+    public bool ShowMarkAllSeen => IsTeamSide && TeamHasUnseen;
+
+    public IRelayCommand MarkAllSeenCommand { get; }
+
+    /// <summary>
+    /// Make my copy: copies the open team prompt into your category of the same name (created when missing) and
+    /// opens the copy on Your prompts.
+    /// </summary>
+    public IRelayCommand CopyToYoursCommand { get; }
+
+    /// <summary>Pin / Unpin the given row's prompt, or the editor's when null.</summary>
+    public IRelayCommand<PromptRow?> PinCommand { get; }
+
+    /// <summary>Hide from menu / Unhide the given team row's prompt, or the editor's when null.</summary>
+    public IRelayCommand<PromptRow?> HideCommand { get; }
+
+    /// <summary>"Show hidden (n)": lists the team prompts hidden from the menu, greyed, each with Unhide.</summary>
+    public bool ShowHiddenTeamPrompts
+    {
+        get => _showHiddenTeamPrompts;
+        set
+        {
+            if (!SetProperty(ref _showHiddenTeamPrompts, value)) return;
+            if (IsTeamSide)
+            {
+                RebuildCategories(_selectedCategory?.Id);
+                RefreshPrompts();
+            }
+        }
+    }
+
+    /// <summary>How many team prompts are hidden from the menu.</summary>
+    public int HiddenCount => TeamContent?.Prompts.Count(p => _host.Settings.HiddenTeamPromptIds.Contains(p.Id)) ?? 0;
+
+    /// <summary>"Show hidden (n)" sits under the search box on the Team side while something is hidden.</summary>
+    public bool ShowHiddenToggle => IsTeamSide && HiddenCount > 0;
+
+    public string ShowHiddenText => $"Show hidden ({HiddenCount})";
+
+    /// <summary><c>Team prompt · Acme best practice · read only</c> above a read-only team prompt; otherwise null.</summary>
+    public string? LockLineText => IsTeamSide && _editor is not null && CurrentDocument.IsReadOnly
+        ? $"Team prompt · {_team!.Name} · read only"
+        : null;
+
+    /// <summary>The editing buttons (Delete, Save) and editing in the rail and list: not on a read-only side.</summary>
+    public bool ShowEditButtons => !CurrentDocument.IsReadOnly;
+
+    /// <summary>The team member's buttons (Hide from menu, Make my copy).</summary>
+    public bool ShowTeamButtons => CurrentDocument.IsTeam && CurrentDocument.IsReadOnly;
+
+    /// <summary>The editor's Pin button: <c>Pin</c>, or <c>Unpin</c> when the open prompt is pinned.</summary>
+    public string PinLabel => EditorPromptId is { } id && _host.Settings.PinnedPromptIds.Contains(id) ? "Unpin" : "Pin";
+
+    /// <summary>A saved prompt that isn't hidden can be pinned (a hidden prompt can't).</summary>
+    public bool CanPin => EditorPromptId is { } id && !IsHiddenTeamPrompt(id);
+
+    /// <summary>The editor's <c>Hide from menu</c>, or <c>Unhide</c> when the open team prompt is hidden.</summary>
+    public string HideLabel => EditorPromptId is { } id && IsHiddenTeamPrompt(id) ? "Unhide" : "Hide from menu";
+
+    /// <summary>The open prompt's category name (shown as text while the editor is read only).</summary>
+    public string? EditorCategoryName => _editor?.CategoryId is { } id
+        ? CurrentDocument.Library.Categories.FirstOrDefault(c => c.Id == id)?.Name
+        : null;
+
+    private bool TeamConnected => _team?.Service.Source is not null;
+
+    private bool TeamLoaded => _team?.Service.Team is not null;
+
+    private Library? TeamContent => _team?.Service.Team?.Content;
+
+    private Guid? EditorPromptId => _editor is { IsNew: false } editor ? editor.PromptId : null;
+
+    private bool IsHiddenTeamPrompt(Guid id)
+        => TeamContent?.Prompts.Any(p => p.Id == id) == true && _host.Settings.HiddenTeamPromptIds.Contains(id);
+
+    private static string When(DateTimeOffset time)
+        => BackupLocation.RelativeTimeText(time.LocalDateTime, DateTime.Now, midSentence: true);
 
     public IRelayCommand NewCategoryCommand { get; }
     public IRelayCommand<CategoryItem?> RenameCategoryCommand { get; }
@@ -164,6 +333,7 @@ public sealed class MainViewModel : ObservableObject
         set
         {
             if (_refreshing || value is null || ReferenceEquals(value, _selectedCategory)) return;
+            if (_searchingBoth) EndSearchForCategory();
             if (EditorSurvivesCategory(value.Id) || _editor is not { IsDirty: true })
                 ShowCategory(value.Id);
             else
@@ -171,7 +341,7 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    public Prompt? SelectedPrompt
+    public PromptRow? SelectedPrompt
     {
         get => _selectedPrompt;
         set
@@ -187,19 +357,23 @@ public sealed class MainViewModel : ObservableObject
             }
 
             if (_editor is { IsDirty: true })
-                AfterAskingToSave(() => OpenPrompt(value), nameof(SelectedPrompt));
+                AfterAskingToSave(() => OpenRow(value), nameof(SelectedPrompt));
             else
-                OpenPrompt(value);
+                OpenRow(value);
         }
     }
 
-    /// <summary>Filters the list by title, description and text within the selected category.</summary>
+    /// <summary>
+    /// Filters the list by title, description and text: within the selected category, or across both libraries (the
+    /// rail showing All prompts) once a team library is loaded.
+    /// </summary>
     public string SearchText
     {
         get => _searchText;
         set
         {
             if (!SetProperty(ref _searchText, value ?? "")) return;
+            UpdateSearchingBoth();
             RefreshPrompts();
             OnPropertyChanged(nameof(HasSearchText));
             FollowSearch();
@@ -227,6 +401,7 @@ public sealed class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(HasEditor));
             OnPropertyChanged(nameof(HasNoEditor));
             OnPropertyChanged(nameof(WindowTitle));
+            RaiseEditorState();
         }
     }
 
@@ -236,18 +411,34 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>"Prompt Library", with a "• " prefix while the editor has unsaved changes.</summary>
     public string WindowTitle => _editor is { IsDirty: true } ? "• " + AppTitle : AppTitle;
 
-    public bool ShowNoPromptsYet => Prompts.Count == 0 && string.IsNullOrWhiteSpace(_searchText);
+    public bool ShowNoPromptsYet => !IsTeamSide && Prompts.Count == 0 && string.IsNullOrWhiteSpace(_searchText);
 
     /// <summary>The list's "+ New prompt" footer; hidden while the empty state shows its own New prompt button.</summary>
-    public bool ShowNewPromptFooter => !ShowNoPromptsYet;
+    public bool ShowNewPromptFooter => !CurrentDocument.IsReadOnly && !ShowNoPromptsYet;
+
+    /// <summary>The Team side's empty state: "No team prompts yet."</summary>
+    public bool ShowNoTeamPrompts => IsTeamSide && !IsTeamLoading && string.IsNullOrWhiteSpace(_searchText)
+                                     && CurrentDocument.Library.Prompts.Count == 0;
+
+    /// <summary>The Team side's list is empty only because what it would show is hidden from the menu.</summary>
+    public bool ShowAllHidden => IsTeamSide && !_showHiddenTeamPrompts && Prompts.Count == 0
+                                 && string.IsNullOrWhiteSpace(_searchText)
+                                 && PromptFilter.Apply(CurrentDocument.Library, _selectedCategory?.Id, null).Count > 0;
+
+    /// <summary>"All team prompts are hidden.", or "All prompts in this category are hidden." for one category.</summary>
+    public string AllHiddenText => _selectedCategory?.Id is null || HiddenCount == CurrentDocument.Library.Prompts.Count
+        ? "All team prompts are hidden."
+        : "All prompts in this category are hidden.";
 
     public bool ShowNoMatches => Prompts.Count == 0 && !string.IsNullOrWhiteSpace(_searchText);
     public string NoMatchesText => $"No prompts match \"{_searchText.Trim()}\".";
 
     /// <summary>What the editor area says when no prompt is open.</summary>
-    public string NoEditorText => CurrentDocument.Library.Prompts.Count == 0
-        ? "No prompts yet. Press Ctrl+N or choose New prompt."
-        : "Select a prompt, or create one.";
+    public string NoEditorText => IsTeamSide && CurrentDocument.IsReadOnly
+        ? IsTeamLoading ? "" : CurrentDocument.Library.Prompts.Count == 0 ? "No team prompts yet." : "Select a team prompt."
+        : CurrentDocument.Library.Prompts.Count == 0
+            ? "No prompts yet. Press Ctrl+N or choose New prompt."
+            : "Select a prompt, or create one.";
 
     /// <summary>A short muted confirmation under the categories, e.g. <c>Moved 2 prompts to Code review.</c>; null when none.</summary>
     public string? StatusText
@@ -338,6 +529,7 @@ public sealed class MainViewModel : ObservableObject
         RefreshPrompts();
         OnPropertyChanged(nameof(BackupWarning));
         OnPropertyChanged(nameof(ShowBackupWarning));
+        RaiseSideState();
     }
 
     /// <summary>
@@ -347,7 +539,7 @@ public sealed class MainViewModel : ObservableObject
     public bool ConfirmBeforeRestore()
     {
         if (!ConfirmDiscardOrSave()) return false;
-        return (_unwritten is null && !CurrentDocument.LibraryUnwritten) || _dialogs.ConfirmDestructive(
+        return (_unwritten is null && !_personal.LibraryUnwritten) || _dialogs.ConfirmDestructive(
             "Some of your changes couldn't be saved to disk. Restoring now will lose them.", "Restore anyway");
     }
 
@@ -360,6 +552,12 @@ public sealed class MainViewModel : ObservableObject
     {
         _unwritten = null;
         Editor = null;
+        if (IsTeamSide)
+        {
+            // The restore replaced your prompts: show them.
+            _remembered.Remove(LibrarySide.Yours);
+            SwitchSide(LibrarySide.Yours);
+        }
         RefreshAll();
         OpenFirstPromptIfNone();
         ShowStatus(restoredText, RestoredStatusDuration);
@@ -369,6 +567,7 @@ public sealed class MainViewModel : ObservableObject
 
     public void StartNewCategory()
     {
+        if (CurrentDocument.IsReadOnly) return;
         foreach (var item in Categories) item.IsRenaming = false;
         NewCategoryName = "";
         NewCategoryError = null;
@@ -384,6 +583,7 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Adds the typed category and selects it. False (with an inline message) if the name isn't valid.</summary>
     public bool CommitNewCategory()
     {
+        if (CurrentDocument.IsReadOnly) return false;
         var name = _newCategoryName.Trim();
         NewCategoryError = CategoryNameError(name, exceptId: null);
         if (NewCategoryError is not null) return false;
@@ -408,7 +608,7 @@ public sealed class MainViewModel : ObservableObject
 
     public void StartRename(CategoryItem? item)
     {
-        if (item is null || item.IsAll) return;
+        if (item is null || item.IsAll || CurrentDocument.IsReadOnly) return;
         CancelNewCategory();
         foreach (var other in Categories) other.IsRenaming = false;
         item.EditName = item.Name;
@@ -425,7 +625,7 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Renames the category to the typed name. False (with an inline message) if the name isn't valid.</summary>
     public bool CommitRename(CategoryItem item)
     {
-        if (!item.IsRenaming || item.Id is not { } id) return true;
+        if (!item.IsRenaming || item.Id is not { } id || CurrentDocument.IsReadOnly) return true;
 
         var name = item.EditName.Trim();
         if (name == item.Name)
@@ -455,7 +655,7 @@ public sealed class MainViewModel : ObservableObject
 
     public void DeleteCategory(CategoryItem? item)
     {
-        if (item?.Id is not { } id) return;
+        if (item?.Id is not { } id || CurrentDocument.IsReadOnly) return;
 
         var promptCount = NewLibraryEditor().PromptCount(id);
         Guid? moveTo = null;
@@ -512,6 +712,7 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     public void NewPrompt()
     {
+        if (CurrentDocument.IsReadOnly) return;
         if (!ConfirmDiscardOrSave()) return;
 
         var categoryId = _selectedCategory?.Id
@@ -536,7 +737,7 @@ public sealed class MainViewModel : ObservableObject
     public bool Save()
     {
         var editor = _editor;
-        if (editor is null || !editor.IsDirty) return true;
+        if (editor is null || !editor.IsDirty || CurrentDocument.IsReadOnly) return true;
         if (!editor.Validate()) return false;
 
         Guid promptId;
@@ -595,7 +796,7 @@ public sealed class MainViewModel : ObservableObject
     public void Delete()
     {
         var editor = _editor;
-        if (editor is null) return;
+        if (editor is null || CurrentDocument.IsReadOnly) return;
 
         if (editor.PromptId is not { } id)
         {
@@ -734,13 +935,15 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>True when the list shows search results that don't include the editor's prompt (or there's no editor).</summary>
     private bool SearchHidesEditor()
         => !string.IsNullOrWhiteSpace(_searchText)
-           && (_editor is null ? Prompts.Count > 0 : _editor.PromptId is not { } id || Prompts.All(p => p.Id != id));
+           && (_editor is null
+               ? Prompts.Any(r => r.IsTeam == IsTeamSide)
+               : _editor.PromptId is not { } id || Prompts.All(p => p.Id != id));
 
     private void OpenFirstMatch()
     {
-        if (Prompts.FirstOrDefault() is { } first)
+        if (Prompts.FirstOrDefault(r => r.IsTeam == IsTeamSide) is { } first)
         {
-            OpenPrompt(first);
+            OpenPrompt(first.Prompt);
             return;
         }
         Editor = null;
@@ -756,11 +959,11 @@ public sealed class MainViewModel : ObservableObject
         _statusTimer.Start();
     }
 
-    /// <summary>Opens the first prompt in the list when no prompt (or new prompt) is open.</summary>
+    /// <summary>Opens the first prompt of the shown side in the list when no prompt (or new prompt) is open.</summary>
     private void OpenFirstPromptIfNone()
     {
-        if (_editor is null && Prompts.FirstOrDefault() is { } first)
-            OpenPrompt(first);
+        if (_editor is null && Prompts.FirstOrDefault(r => r.IsTeam == IsTeamSide) is { } first)
+            OpenPrompt(first.Prompt);
     }
 
     /// <summary>
@@ -820,9 +1023,12 @@ public sealed class MainViewModel : ObservableObject
     private void OpenPrompt(Prompt prompt)
     {
         if (!CurrentDocument.Library.Prompts.Contains(prompt)) return; // deleted meanwhile
-        Editor = PromptEditorViewModel.ForPrompt(prompt);
-        _selectedPrompt = Prompts.Contains(prompt) ? prompt : null;
+        var editor = PromptEditorViewModel.ForPrompt(prompt);
+        editor.IsReadOnly = CurrentDocument.IsReadOnly;
+        Editor = editor;
+        _selectedPrompt = Prompts.FirstOrDefault(r => ReferenceEquals(r.Prompt, prompt));
         OnPropertyChanged(nameof(SelectedPrompt));
+        if (CurrentDocument.IsTeam) MarkOpenedSeen(prompt);
     }
 
     private void RebuildCategories(Guid? selectId)
@@ -834,10 +1040,12 @@ public sealed class MainViewModel : ObservableObject
         try
         {
             Categories.Clear();
-            Categories.Add(new CategoryItem(null, "All prompts", library.Prompts.Count));
+            var shown = library.Prompts.Where(IsListed).ToList();
+            var canEdit = !CurrentDocument.IsReadOnly;
+            Categories.Add(new CategoryItem(null, "All prompts", shown.Count, canEdit));
             foreach (var category in sorted)
                 Categories.Add(new CategoryItem(category.Id, category.Name,
-                    library.Prompts.Count(p => p.CategoryId == category.Id)));
+                    shown.Count(p => p.CategoryId == category.Id), canEdit));
 
             CategoryChoices.Clear();
             foreach (var category in sorted)
@@ -862,8 +1070,17 @@ public sealed class MainViewModel : ObservableObject
         try
         {
             Prompts.Clear();
-            foreach (var prompt in PromptFilter.Apply(CurrentDocument.Library, _selectedCategory?.Id, _searchText))
-                Prompts.Add(prompt);
+            if (_searchingBoth)
+            {
+                foreach (var hit in PromptFilter.Search(_personal.Library, TeamContent, _host.Settings, _searchText))
+                    Prompts.Add(NewRow(hit.Prompt, hit.IsTeam, showTeamIcon: hit.IsTeam));
+            }
+            else
+            {
+                foreach (var prompt in PromptFilter.Apply(CurrentDocument.Library, _selectedCategory?.Id, _searchText))
+                    if (IsListed(prompt))
+                        Prompts.Add(NewRow(prompt, CurrentDocument.IsTeam, showTeamIcon: false));
+            }
 
             // While the items were replaced the list box pushed null selections, and the binding may have left
             // its SelectedItem at the kept prompt with nothing actually selected. Re-raising an unchanged value is
@@ -883,12 +1100,319 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowNoMatches));
         OnPropertyChanged(nameof(NoMatchesText));
         OnPropertyChanged(nameof(NoEditorText));
+        OnPropertyChanged(nameof(ShowNoTeamPrompts));
+        OnPropertyChanged(nameof(ShowAllHidden));
+        OnPropertyChanged(nameof(AllHiddenText));
     }
 
     private void OnEditorChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(PromptEditorViewModel.IsDirty))
             OnPropertyChanged(nameof(WindowTitle));
+    }
+
+    // ---- Team side -----------------------------------------------------------------------------
+
+    /// <summary>
+    /// Shows <paramref name="side"/>, back on the category and prompt it showed last (or on
+    /// <paramref name="openPromptId"/>). Unsaved changes are offered for saving first; false when the user cancelled or
+    /// there's no team library to show. A search of both libraries keeps its text and results.
+    /// </summary>
+    private bool SwitchSide(LibrarySide side, Guid? openPromptId = null)
+    {
+        if (side == _side)
+        {
+            if (openPromptId is { } id && CurrentDocument.Library.Prompts.FirstOrDefault(p => p.Id == id) is { } same)
+                OpenPrompt(same);
+            return true;
+        }
+        if (side == LibrarySide.Team && !TeamConnected) return false;
+        if (!ConfirmDiscardOrSave())
+        {
+            RaiseSideState(); // puts the switch back on the side still shown
+            return false;
+        }
+
+        CancelNewCategory();
+        foreach (var item in Categories) item.IsRenaming = false;
+        _remembered[_side] = (_searchingBoth ? _categoryBeforeSearch : _selectedCategory?.Id, _editor?.PromptId);
+
+        _side = side;
+        Editor = null;
+        var (categoryId, promptId) = _remembered.GetValueOrDefault(side);
+        if (_searchingBoth)
+        {
+            _categoryBeforeSearch = categoryId;
+            RebuildCategories(null);
+        }
+        else
+        {
+            RebuildCategories(categoryId);
+        }
+        RefreshPrompts();
+
+        if ((openPromptId ?? promptId) is { } open && CurrentDocument.Library.Prompts.FirstOrDefault(p => p.Id == open) is { } prompt)
+            OpenPrompt(prompt);
+        else
+            OpenFirstPromptIfNone();
+        RaiseSideState();
+        return true;
+    }
+
+    /// <summary>Opens a list row; a row from the other library (a search result) switches to its side first.</summary>
+    private void OpenRow(PromptRow row)
+    {
+        if (row.IsTeam == IsTeamSide)
+            OpenPrompt(row.Prompt);
+        else
+            SwitchSide(row.IsTeam ? LibrarySide.Team : LibrarySide.Yours, row.Id);
+    }
+
+    /// <summary>
+    /// Make my copy: one click, no dialog. The copy (with a new id) goes into your category of the same name, which is
+    /// created when missing; then Your prompts shows it, open in the editor.
+    /// </summary>
+    private void CopyToYours()
+    {
+        if (!IsTeamSide || EditorPromptId is not { } id
+            || CurrentDocument.Library.Prompts.FirstOrDefault(p => p.Id == id) is not { } source) return;
+
+        var categoryName = (CurrentDocument.Library.Categories.FirstOrDefault(c => c.Id == source.CategoryId)?.Name
+                            ?? "Team prompts").Trim();
+        var personal = _personal.Library;
+        var editor = new LibraryEditor(personal, () => DateTimeOffset.Now);
+        Category category;
+        Prompt copy;
+        try
+        {
+            category = personal.Categories.FirstOrDefault(c =>
+                           string.Equals(c.Name.Trim(), categoryName, StringComparison.OrdinalIgnoreCase))
+                       ?? editor.AddCategory(categoryName);
+            copy = editor.AddPrompt(category.Id, source.Title, source.Description, source.Text);
+        }
+        catch (ArgumentException ex)
+        {
+            _dialogs.ShowMessage(ex.Message);
+            return;
+        }
+
+        _personal.SaveLibraryChange(); // on failure the copy stays and is written later (the host says so)
+        _remembered[LibrarySide.Yours] = (category.Id, copy.Id);
+        if (!SwitchSide(LibrarySide.Yours)) return;
+        ShowStatus($"Copied to your prompts · {category.Name}", FeedbackDuration);
+    }
+
+    /// <summary>Pins or unpins <paramref name="row"/>'s prompt (the editor's when null). Pins are capped at 10.</summary>
+    private void TogglePin(PromptRow? row)
+    {
+        if ((row?.Id ?? EditorPromptId) is not { } id) return;
+        var settings = _host.Settings;
+
+        if (settings.PinnedPromptIds.Contains(id))
+        {
+            TeamUserState.Unpin(settings, id);
+            ShowStatus("Unpinned", FeedbackDuration);
+        }
+        else
+        {
+            if (IsHiddenTeamPrompt(id)) return; // a hidden prompt can't be pinned
+            if (!TeamUserState.Pin(settings, id))
+            {
+                ShowStatus($"You can pin up to {TeamUserState.MaxPins} prompts.", FeedbackDuration);
+                return;
+            }
+            ShowStatus("Pinned", FeedbackDuration);
+        }
+
+        SaveTeamState();
+        foreach (var item in Prompts.Where(r => r.Id == id))
+            item.IsPinned = settings.PinnedPromptIds.Contains(id);
+        RaiseEditorState();
+    }
+
+    /// <summary>Hides a team prompt from the menu (which unpins it), or unhides it; the editor's when null.</summary>
+    private void ToggleHide(PromptRow? row)
+    {
+        var id = row?.Id ?? (IsTeamSide ? EditorPromptId : null);
+        if (id is not { } promptId || TeamContent?.Prompts.Any(p => p.Id == promptId) != true) return;
+        var settings = _host.Settings;
+
+        if (settings.HiddenTeamPromptIds.Contains(promptId))
+        {
+            TeamUserState.Unhide(settings, promptId);
+            ShowStatus("Unhidden", FeedbackDuration);
+        }
+        else
+        {
+            TeamUserState.Hide(settings, promptId);
+            ShowStatus("Hidden from the menu", FeedbackDuration);
+        }
+
+        SaveTeamState();
+        if (HiddenCount == 0) _showHiddenTeamPrompts = false;
+        if (IsTeamSide) RebuildCategories(_selectedCategory?.Id);
+        RefreshPrompts(); // a hidden prompt leaves the list; the editor keeps it open, offering Unhide
+        RaiseSideState();
+    }
+
+    private void MarkAllSeen()
+    {
+        if (TeamContent is not { } team) return;
+        TeamUserState.MarkAllSeen(_host.Settings, team);
+        SaveTeamState();
+        foreach (var row in Prompts.Where(r => r.IsTeam)) row.Marker = TeamMarker.None;
+        RaiseMarkerState();
+    }
+
+    /// <summary>Opening a New or Updated team prompt counts as seeing it.</summary>
+    private void MarkOpenedSeen(Prompt prompt)
+    {
+        var settings = _host.Settings;
+        if (TeamUserState.MarkerFor(settings, prompt) == TeamMarker.None) return;
+        TeamUserState.MarkSeen(settings, prompt);
+        SaveTeamState();
+        foreach (var row in Prompts.Where(r => r.Id == prompt.Id)) row.Marker = TeamMarker.None;
+        RaiseMarkerState();
+    }
+
+    /// <summary>Pins, hides and markers live in the settings, and the quick menu shows pins and hides.</summary>
+    private void SaveTeamState()
+    {
+        _host.SaveSettings();
+        _host.RefreshQuickMenu();
+    }
+
+    /// <summary>
+    /// The team library was refreshed, joined or left. A team prompt open unchanged follows the new copy; leaving
+    /// goes back to Your prompts.
+    /// </summary>
+    private void OnTeamChanged()
+    {
+        if (IsTeamSide && !TeamConnected)
+        {
+            Editor = null; // read only, so nothing unsaved is lost
+            SwitchSide(LibrarySide.Yours);
+            _remembered.Remove(LibrarySide.Team);
+        }
+
+        UpdateSearchingBoth();
+        if (IsTeamSide)
+        {
+            RefreshAll();
+            if (_editor is { IsDirty: false, PromptId: { } id } editor
+                && CurrentDocument.Library.Prompts.FirstOrDefault(p => p.Id == id) is { } fresh)
+            {
+                editor.LoadSaved(fresh);
+                editor.IsReadOnly = CurrentDocument.IsReadOnly;
+                RaiseEditorState();
+            }
+            OpenFirstPromptIfNone();
+        }
+        else if (_searchingBoth)
+        {
+            RefreshPrompts();
+        }
+        RaiseSideState();
+    }
+
+    /// <summary>
+    /// A search covers both libraries once a team library is loaded: the rail then shows All prompts, and the category
+    /// it showed comes back when the search is cleared (or the open prompt's category, so it stays in view).
+    /// </summary>
+    private void UpdateSearchingBoth()
+    {
+        var both = TeamLoaded && !string.IsNullOrWhiteSpace(_searchText);
+        if (both == _searchingBoth) return;
+        _searchingBoth = both;
+
+        if (both)
+        {
+            _categoryBeforeSearch = _selectedCategory?.Id;
+            SetRailSelection(null);
+            return;
+        }
+
+        var target = _categoryBeforeSearch;
+        if (target is not null && _editor?.CategoryId is { } editorCategory && editorCategory != target)
+            target = editorCategory;
+        SetRailSelection(target);
+    }
+
+    /// <summary>Choosing a category while searching both libraries ends the search; the category then shows as usual.</summary>
+    private void EndSearchForCategory()
+    {
+        _searchingBoth = false;
+        _searchText = "";
+        _searchKeepsEditor = false;
+        OnPropertyChanged(nameof(SearchText));
+        OnPropertyChanged(nameof(HasSearchText));
+        RefreshPrompts();
+    }
+
+    /// <summary>Moves the rail's selection without changing the list or the editor.</summary>
+    private void SetRailSelection(Guid? id)
+    {
+        _selectedCategory = Categories.FirstOrDefault(c => c.Id == id) ?? Categories.FirstOrDefault();
+        OnPropertyChanged(nameof(SelectedCategory));
+    }
+
+    /// <summary>Whether the side's list shows <paramref name="prompt"/>: hidden team prompts only with Show hidden.</summary>
+    private bool IsListed(Prompt prompt)
+        => !CurrentDocument.IsTeam || _showHiddenTeamPrompts || !_host.Settings.HiddenTeamPromptIds.Contains(prompt.Id);
+
+    private PromptRow NewRow(Prompt prompt, bool isTeam, bool showTeamIcon)
+    {
+        var settings = _host.Settings;
+        return new PromptRow(prompt, isTeam,
+            isHidden: isTeam && settings.HiddenTeamPromptIds.Contains(prompt.Id),
+            isPinned: settings.PinnedPromptIds.Contains(prompt.Id),
+            marker: isTeam ? TeamUserState.MarkerFor(settings, prompt) : TeamMarker.None,
+            showTeamIcon);
+    }
+
+    private void RaiseEditorState()
+    {
+        OnPropertyChanged(nameof(LockLineText));
+        OnPropertyChanged(nameof(PinLabel));
+        OnPropertyChanged(nameof(CanPin));
+        OnPropertyChanged(nameof(HideLabel));
+        OnPropertyChanged(nameof(EditorCategoryName));
+    }
+
+    private void RaiseMarkerState()
+    {
+        OnPropertyChanged(nameof(TeamHasUnseen));
+        OnPropertyChanged(nameof(TeamSwitchName));
+        OnPropertyChanged(nameof(ShowMarkAllSeen));
+    }
+
+    private void RaiseSideState()
+    {
+        OnPropertyChanged(nameof(CurrentDocument));
+        OnPropertyChanged(nameof(Side));
+        OnPropertyChanged(nameof(IsTeamSide));
+        OnPropertyChanged(nameof(IsYoursSide));
+        OnPropertyChanged(nameof(ShowSwitch));
+        OnPropertyChanged(nameof(TeamHeaderText));
+        OnPropertyChanged(nameof(TeamHeaderDetail));
+        OnPropertyChanged(nameof(IsTeamLoading));
+        OnPropertyChanged(nameof(IsTeamOffline));
+        OnPropertyChanged(nameof(ShowTeamHeader));
+        OnPropertyChanged(nameof(ShowTeamReadOnlyNote));
+        OnPropertyChanged(nameof(ShowEditButtons));
+        OnPropertyChanged(nameof(ShowTeamButtons));
+        OnPropertyChanged(nameof(ShowHiddenTeamPrompts));
+        OnPropertyChanged(nameof(HiddenCount));
+        OnPropertyChanged(nameof(ShowHiddenToggle));
+        OnPropertyChanged(nameof(ShowHiddenText));
+        OnPropertyChanged(nameof(ShowNoPromptsYet));
+        OnPropertyChanged(nameof(ShowNewPromptFooter));
+        OnPropertyChanged(nameof(ShowNoTeamPrompts));
+        OnPropertyChanged(nameof(ShowAllHidden));
+        OnPropertyChanged(nameof(AllHiddenText));
+        OnPropertyChanged(nameof(NoEditorText));
+        RaiseMarkerState();
+        RaiseEditorState();
     }
 
     private static string Count(int count, string noun) => $"{count} {noun}{(count == 1 ? "" : "s")}";
