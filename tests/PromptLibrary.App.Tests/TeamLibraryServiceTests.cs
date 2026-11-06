@@ -24,9 +24,9 @@ public sealed class TeamLibraryServiceTests : IDisposable
 
     private string Cache => Path.Combine(_root, "cache", "team-cache.json");
 
-    private TeamLibraryService NewService(HttpClient? http = null)
+    private TeamLibraryService NewService(HttpClient? http = null, Func<string, TeamSource?>? parse = null)
         => new(http ?? _http, "1.0.0", Cache, _settings, () => new Library(), () => { _settingsSaves++; return true; },
-            () => _now, _ => { }, TimeSpan.FromMilliseconds(50));
+            () => _now, _ => { }, TimeSpan.FromMilliseconds(50), parse);
 
     private string MakeTeamFolder(string name, params string[] promptTitles)
     {
@@ -402,4 +402,41 @@ public sealed class TeamLibraryServiceTests : IDisposable
                 Content = new StringContent(await body(), System.Text.Encoding.UTF8, "application/json"),
             };
     }
+
+    [Fact]
+    public void Start_SavedSource_DoesNotTouchTheFileSystem() => Sta.Run(() =>
+    {
+        var calls = 0;
+        _settings.TeamSource = @"\unreachable-nas\team\team-prompts.json";
+        using var svc = NewService(parse: _ => { calls++; return null; });
+
+        svc.Start();
+
+        Assert.Equal(0, calls);
+        Assert.Equal(new TeamSource(TeamSourceKind.File, @"\unreachable-nas\team\team-prompts.json"), svc.Source);
+        Assert.Equal(TeamStatus.Offline, svc.Status);
+    });
+
+    [Fact]
+    public void Start_SavedLink_IsAUrlSource() => Sta.Run(() =>
+    {
+        _settings.TeamSource = "https://example.com/team.json";
+        using var svc = NewService(parse: _ => throw new InvalidOperationException());
+        svc.Start();
+        Assert.Equal(TeamSourceKind.Url, svc.Source!.Kind);
+    });
+
+    [Fact]
+    public void Join_ParsesTheInputOffTheUiThread() => Sta.Run(() =>
+    {
+        var uiThread = Environment.CurrentManagedThreadId;
+        int? parsedOn = null;
+        var folder = MakeTeamFolder("acme", "One");
+        using var svc = NewService(parse: input => { parsedOn = Environment.CurrentManagedThreadId; return TeamSource.FromInput(input); });
+
+        Assert.True(Wait(svc.JoinAsync(folder)).Success);
+
+        Assert.NotNull(parsedOn);
+        Assert.NotEqual(uiThread, parsedOn);
+    });
 }

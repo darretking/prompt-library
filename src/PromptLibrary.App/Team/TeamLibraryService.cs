@@ -34,6 +34,8 @@ public sealed class TeamLibraryService : IDisposable
     private static readonly TimeSpan DefaultDebounce = TimeSpan.FromSeconds(2);
     private const string InvalidInputMessage = "That isn't a folder, file or https link.";
 
+    // Turns typed input into a source; it touches the file system, so it only runs off the UI thread.
+    private readonly Func<string, TeamSource?> _parse;
     private readonly TeamReader _reader;
     private readonly string _cachePath;
     private readonly AppSettings _settings;
@@ -57,8 +59,9 @@ public sealed class TeamLibraryService : IDisposable
 
     public TeamLibraryService(HttpClient http, string appVersion, string cachePath, AppSettings settings,
         Func<Library> personal, Func<bool> saveSettings, Func<DateTimeOffset> now, Action<Exception> log,
-        TimeSpan? debounce = null)
+        TimeSpan? debounce = null, Func<string, TeamSource?>? parseInput = null)
     {
+        _parse = parseInput ?? TeamSource.FromInput;
         _reader = new TeamReader(http, appVersion);
         _cachePath = cachePath;
         _settings = settings;
@@ -115,8 +118,10 @@ public sealed class TeamLibraryService : IDisposable
     {
         try
         {
-            if (_settings.TeamSource is { Length: > 0 } saved && TeamSource.FromInput(saved) is { } source)
+            if (_settings.TeamSource is { Length: > 0 } saved && saved.StartsWith("https://", StringComparison.OrdinalIgnoreCase) is var isUrl)
             {
+                // The saved value is already normalised, so no file-system call (an unreachable share would hang startup).
+                var source = new TeamSource(isUrl ? TeamSourceKind.Url : TeamSourceKind.File, saved);
                 Source = source;
                 Status = TeamStatus.Offline;
                 if (TeamCache.Load(_cachePath) is { } cached && cached.Source == source)
@@ -172,7 +177,7 @@ public sealed class TeamLibraryService : IDisposable
     {
         try
         {
-            if (TeamSource.FromInput(input) is not { } source) return new TeamJoinResult(false, InvalidInputMessage);
+            if (await Task.Run(() => _parse(input)) is not { } source) return new TeamJoinResult(false, InvalidInputMessage);
 
             var snap = await ReadSnapshotAsync(source, needWatcher: true);
             return await OnUi(() => ApplyJoin(source, snap));
