@@ -1,3 +1,4 @@
+using PromptLibrary.App.Team;
 using PromptLibrary.Core.Models;
 
 namespace PromptLibrary.App.ViewModels;
@@ -21,4 +22,10 @@ public interface IDialogs
     Guid? ChooseMoveTarget(string categoryName, int promptCount, IReadOnlyList<Category> targets);
 
     void ShowMessage(string message);
+
+    /// <summary>
+    /// Restore an older version of the team library (or, with <paramref name="review"/>, review the other versions sync
+    /// left beside it). True when a version was restored.
+    /// </summary>
+    bool ShowTeamHistory(TeamLibraryService service, bool review);
 }

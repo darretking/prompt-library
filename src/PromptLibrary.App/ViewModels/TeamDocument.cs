@@ -6,7 +6,8 @@ namespace PromptLibrary.App.ViewModels;
 
 /// <summary>
 /// Team prompts: the loaded team library. Read only unless <see cref="IsEditing"/> is on (Edit team library); a save
-/// while editing goes to <see cref="TeamLibraryService.SaveAsync"/>, guarded by the hash editing started from.
+/// while editing goes to <see cref="TeamLibraryService.SaveAsync"/>, guarded by <see cref="BaseHash"/>. A team save
+/// never blocks: <see cref="SaveLibrary"/> only starts it, and <see cref="PendingSave"/> says how it went.
 /// </summary>
 public sealed class TeamDocument(TeamLibraryService service) : ILibraryDocument
 {
@@ -39,24 +40,40 @@ public sealed class TeamDocument(TeamLibraryService service) : ILibraryDocument
 
     public bool IsReadOnly => !_isEditing;
 
-    /// <summary>The <see cref="TeamLibraryService.CurrentHash"/> editing started from.</summary>
+    /// <summary>
+    /// The <see cref="TeamLibraryService.CurrentHash"/> of the copy being edited. Every change is saved at once, so
+    /// when the loaded copy is replaced (an own save, or a reload after a refused save) <see cref="Rebase"/> moves it on.
+    /// </summary>
     public string? BaseHash { get; private set; }
 
-    /// <summary>The save started by the last <see cref="SaveLibrary"/> while editing (its result says whether it was refused).</summary>
+    /// <summary>The save started by the last <see cref="SaveLibrary"/> or <see cref="SaveLibraryChange"/>; null when none was started.</summary>
     public Task<TeamSaveResult>? PendingSave { get; private set; }
 
-    /// <summary>Nothing is written while read only (false). While editing, starts the guarded save and returns true.</summary>
-    public bool SaveLibrary() => Save();
+    /// <summary>True while <see cref="PendingSave"/> is still writing.</summary>
+    public bool IsSaving => PendingSave is { IsCompleted: false };
 
-    public bool SaveLibraryChange() => Save();
+    /// <summary>
+    /// While editing, starts the guarded save (<see cref="PendingSave"/>). Always false: nothing is written yet when
+    /// it returns, so the caller keeps the editor unsaved until <see cref="PendingSave"/> reports
+    /// <see cref="TeamSaveStatus.Saved"/>. Nothing is started while read only.
+    /// </summary>
+    public bool SaveLibrary() => Start();
 
-    /// <summary>Always false: a team save is written or refused, never left half done in memory.</summary>
-    public bool LibraryUnwritten => false;
+    /// <inheritdoc cref="SaveLibrary"/>
+    public bool SaveLibraryChange() => Start();
 
-    private bool Save()
+    /// <summary>True while a save is writing; a team save is otherwise written or refused, never left half done.</summary>
+    public bool LibraryUnwritten => IsSaving;
+
+    /// <summary>The loaded copy was replaced (see <see cref="BaseHash"/>): saves now guard against its hash.</summary>
+    public void Rebase()
     {
-        if (!_isEditing || service.Team is not { } team) return false;
-        PendingSave = service.SaveAsync(team, BaseHash);
-        return true;
+        if (_isEditing) BaseHash = service.CurrentHash;
+    }
+
+    private bool Start()
+    {
+        PendingSave = _isEditing && service.Team is { } team ? service.SaveAsync(team, BaseHash) : null;
+        return false;
     }
 }

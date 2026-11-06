@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using PromptLibrary.App.Team;
 using PromptLibrary.App.ViewModels;
 using PromptLibrary.Core.Models;
 
@@ -108,6 +109,12 @@ public partial class MainWindow : Window, IDialogs
     {
         if (!_host.AsksNothing)
             ConfirmDialog.Inform(this, message);
+    }
+
+    public bool ShowTeamHistory(TeamLibraryService service, bool review)
+    {
+        var window = new TeamHistoryWindow(_host, service, review) { Owner = this };
+        return window.ShowDialog() == true;
     }
 
     // ---- Category rail -------------------------------------------------------------------------
@@ -236,6 +243,15 @@ public partial class MainWindow : Window, IDialogs
     /// <summary>The row menu's Hide from menu / Unhide (team prompts only).</summary>
     private void HidePrompt_Click(object sender, RoutedEventArgs e)
         => ViewModel.HideCommand.Execute(((FrameworkElement)sender).DataContext as PromptRow);
+
+    /// <summary>The Team header's ⋯: opens its menu under the button.</summary>
+    private void TeamMore_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { ContextMenu: { } menu } button) return;
+        menu.PlacementTarget = button;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        menu.IsOpen = true;
+    }
 
     // ---- Editor buttons ------------------------------------------------------------------------
 

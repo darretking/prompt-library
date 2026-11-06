@@ -104,6 +104,12 @@ public sealed class TeamLibraryService : IDisposable
     /// <summary>True when this PC can edit: a file source it can write to, loaded, and not made by a newer app.</summary>
     public bool CanEdit { get; private set; }
 
+    /// <summary>True when the write probe passed: a file source this PC can open for writing (whatever its schema).</summary>
+    public bool CanWrite { get; private set; }
+
+    /// <summary>True while an automatic refresh was asked for during a hold; releasing the hold runs it.</summary>
+    public bool HasHeldRefresh => _deferred;
+
     /// <summary>Other <c>team-prompts*.json</c> files next to the team file (sync conflict copies).</summary>
     public IReadOnlyList<string> ConflictCopies { get; private set; } = [];
 
@@ -209,6 +215,7 @@ public sealed class TeamLibraryService : IDisposable
             StatusMessage = null;
             Status = TeamStatus.NotConnected;
             CanEdit = false;
+            CanWrite = false;
             ConflictCopies = [];
             _deferred = false;
             _saveSettings();
@@ -277,6 +284,92 @@ public sealed class TeamLibraryService : IDisposable
         {
             _log(ex);
             return new TeamSaveResult(TeamSaveStatus.Failed, null, "Couldn't save the team library.");
+        }
+    }
+
+    /// <summary>
+    /// Puts the loaded copy back after a save failed, so changes that weren't written don't stay in
+    /// <see cref="Team"/> (where a later save, the shortcut menu or the window would pick them up).
+    /// </summary>
+    public void RevertToLoaded()
+    {
+        if (_json is null) return;
+        try
+        {
+            Team = TeamFile.Parse(_json);
+        }
+        catch (InvalidDataException ex)
+        {
+            _log(ex);
+            return;
+        }
+        RaiseChanged();
+    }
+
+    /// <summary>
+    /// The versions an editor can restore (see <see cref="TeamWriter.ListHistory"/>): sync conflict copies first, then
+    /// the history copies, newest first. Read in the background; empty for a link source or on any failure.
+    /// </summary>
+    public async Task<IReadOnlyList<TeamHistoryItem>> ListHistoryAsync()
+    {
+        try
+        {
+            if (Source is not { Kind: TeamSourceKind.File } source) return [];
+            return await Task.Run(() => _writer.ListHistory(source.Location));
+        }
+        catch (Exception ex)
+        {
+            _log(ex);
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Writes <paramref name="item"/> back over the team file (<see cref="TeamWriter.Restore"/>: the current version
+    /// gets a history copy first), guarded by <see cref="CurrentHash"/> like <see cref="SaveAsync"/>. A restore is the
+    /// editor's own save, so it marks nothing New or Updated on this PC. When the file changed meanwhile, the library
+    /// is re-read and the refusal is returned.
+    /// </summary>
+    public async Task<TeamSaveResult> RestoreAsync(TeamHistoryItem item)
+    {
+        try
+        {
+            if (Source is not { Kind: TeamSourceKind.File } source)
+                return new TeamSaveResult(TeamSaveStatus.Failed, null, "The team library can't be saved here.");
+
+            var expected = CurrentHash;
+            var (result, json, restored) = await Task.Run(() =>
+            {
+                var saved = _writer.Restore(source.Location, item, expected);
+                string? text = null;
+                TeamLibrary? team = null;
+                if (saved.Status == TeamSaveStatus.Saved)
+                {
+                    try
+                    {
+                        text = File.ReadAllText(source.Location);
+                        team = TeamFile.Parse(text);
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException) { }
+                }
+                return (saved, text, team);
+            });
+
+            if (result.Status == TeamSaveStatus.Saved)
+            {
+                if (restored is not null) await OnUi(() => AfterOwnSave(source, restored, json, result.NewHash));
+                else await RunRefreshAsync(force: true);
+            }
+            else if (result.Status == TeamSaveStatus.ChangedByOther)
+            {
+                await RunRefreshAsync(force: true);
+            }
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _log(ex);
+            return new TeamSaveResult(TeamSaveStatus.Failed, null, "Couldn't restore the team library.");
         }
     }
 
@@ -382,6 +475,7 @@ public sealed class TeamLibraryService : IDisposable
         Status = TeamStatus.Connected;
         StatusMessage = null;
         CanEdit = !edited.IsNewerSchema;
+        CanWrite = true;
         try { TeamCache.Save(_cachePath, source, json, _now()); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         TeamUserState.Prune(_settings, _personal(), edited.Content);
@@ -412,7 +506,7 @@ public sealed class TeamLibraryService : IDisposable
         }
 
         var result = snap.Read;
-        var before = (Status, CurrentHash, StatusMessage, CanEdit, string.Join('|', ConflictCopies));
+        var before = (Status, CurrentHash, StatusMessage, CanEdit, CanWrite, string.Join('|', ConflictCopies));
         if (result.Status == TeamReadStatus.Ok && result.Team is not null && result.Json is not null)
         {
             TeamRefresh.Apply(result, _cachePath, source, _now());
@@ -443,9 +537,10 @@ public sealed class TeamLibraryService : IDisposable
             StatusMessage = result.Message ?? "Can't reach the team library.";
         }
 
-        CanEdit = source.Kind == TeamSourceKind.File && Team is not null && !Team.IsNewerSchema && snap.CanWrite;
+        CanWrite = source.Kind == TeamSourceKind.File && snap.CanWrite;
+        CanEdit = CanWrite && Team is not null && !Team.IsNewerSchema;
         ConflictCopies = snap.Conflicts;
-        var after = (Status, CurrentHash, StatusMessage, CanEdit, string.Join('|', ConflictCopies));
+        var after = (Status, CurrentHash, StatusMessage, CanEdit, CanWrite, string.Join('|', ConflictCopies));
         if (before != after) RaiseChanged();
     }
 

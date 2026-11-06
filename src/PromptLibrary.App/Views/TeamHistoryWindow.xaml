@@ -1,0 +1,53 @@
+<Window x:Class="PromptLibrary.App.Views.TeamHistoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Style="{StaticResource AppWindow}"
+        Title="Restore an older version"
+        AutomationProperties.Name="Restore an older version"
+        Icon="/Assets/app.ico"
+        Width="480" SizeToContent="Height"
+        ResizeMode="NoResize">
+    <Window.Resources>
+        <Style x:Key="VersionRow" TargetType="ListBoxItem" BasedOn="{StaticResource RowItem}">
+            <Setter Property="AutomationProperties.Name" Value="{Binding Text}" />
+            <EventSetter Event="MouseDoubleClick" Handler="Row_MouseDoubleClick" />
+        </Style>
+    </Window.Resources>
+
+    <!-- The Restore window's layout: what's listed, the list (other versions from sync first, then the history,
+         newest first), any error, then Cancel and Restore. -->
+    <StackPanel x:Name="Root" Margin="16">
+        <TextBlock Text="Versions of the team library" Style="{StaticResource FieldLabel}" />
+        <TextBlock x:Name="NameText" Style="{StaticResource MutedText}" TextTrimming="CharacterEllipsis" />
+
+        <Border Margin="0,8,0,0" Height="240" Background="{StaticResource Brush.Surface}"
+                BorderBrush="{StaticResource Brush.Line}" BorderThickness="1" CornerRadius="{StaticResource Radius}">
+            <Grid>
+                <ListBox x:Name="VersionList" Style="{StaticResource PlainList}" Margin="0,4"
+                         ItemContainerStyle="{StaticResource VersionRow}"
+                         SelectionChanged="VersionList_SelectionChanged"
+                         AutomationProperties.Name="Versions">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Text}" TextTrimming="CharacterEllipsis" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <TextBlock x:Name="EmptyText" Margin="16" Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                           Visibility="Collapsed" />
+            </Grid>
+        </Border>
+
+        <TextBlock Text="Restoring keeps a copy of the current version first." Style="{StaticResource MutedText}"
+                   Margin="0,8,0,0" TextWrapping="Wrap" />
+
+        <TextBlock x:Name="ErrorText" Style="{StaticResource ErrorText}" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
+            <Button x:Name="CancelButton" Content="Cancel" IsCancel="True" Margin="0,0,8,0"
+                    AutomationProperties.Name="Cancel" />
+            <Button x:Name="RestoreButton" Style="{StaticResource PrimaryButton}" Content="Restore" IsDefault="True"
+                    IsEnabled="False" Click="Restore_Click" AutomationProperties.Name="Restore selected version" />
+        </StackPanel>
+    </StackPanel>
+</Window>

@@ -18,7 +18,9 @@ namespace PromptLibrary.App.ViewModels;
 /// its <see cref="ILibraryDocument.SaveLibrary"/> (a prompt's Save) or <see cref="ILibraryDocument.SaveLibraryChange"/>
 /// (category changes and deletions).
 /// Once a team library is loaded, a switch shows either Your prompts or Team prompts (read only, with Make my copy, Pin
-/// and Hide from menu); a search then covers both libraries.
+/// and Hide from menu); a search then covers both libraries. An editor can unlock the team library (Edit team library …
+/// Done): it is then edited like your prompts, each save going to everyone without blocking the window, and older
+/// versions can be restored.
 /// </summary>
 public sealed class MainViewModel : ObservableObject
 {
@@ -28,12 +30,22 @@ public sealed class MainViewModel : ObservableObject
     private static readonly TimeSpan RestoredStatusDuration = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan FeedbackDuration = TimeSpan.FromSeconds(4);
 
+    private const string ChangedByOtherMessage =
+        "Someone else changed the team library. It's been reloaded. Please make your change again.";
+    private const string NewerSchemaMessage =
+        "This team library was made with a newer Prompt Library. Update to edit it.";
+    private const string RemovesForEveryoneMessage = "This removes it for everyone. Delete?";
+
     private readonly IMainHost _host;
     private readonly IDialogs _dialogs;
     private readonly PersonalDocument _personal;
     private readonly TeamDocument? _team;
     private readonly DispatcherTimer _statusTimer;
+    private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
     private string? _statusText;
+
+    // True from the start of a team save until its outcome has been applied on the UI thread; changes wait for it.
+    private bool _teamSaving;
 
     // The user answered Cancel to "Save changes?" while the search was hiding the open prompt: the editor stays
     // and the search doesn't ask again until the editor changes or the search is cleared.
@@ -103,6 +115,10 @@ public sealed class MainViewModel : ObservableObject
         HideCommand = new RelayCommand<PromptRow?>(ToggleHide);
         MarkAllSeenCommand = new RelayCommand(MarkAllSeen);
         RetryTeamCommand = new AsyncRelayCommand(() => _team?.Service.RefreshAsync() ?? Task.CompletedTask);
+        EditTeamCommand = new RelayCommand(StartEditingTeam);
+        DoneEditingTeamCommand = new RelayCommand(() => StopEditingTeam());
+        TeamHistoryCommand = new RelayCommand(() => OpenTeamHistory(review: false));
+        ReviewConflictCommand = new RelayCommand(() => OpenTeamHistory(review: true));
 
         if (_host.Updates is { } updates)
             updates.ReminderChanged += (_, _) =>
@@ -286,6 +302,57 @@ public sealed class MainViewModel : ObservableObject
 
     private static string When(DateTimeOffset time)
         => BackupLocation.RelativeTimeText(time.LocalDateTime, DateTime.Now, midSentence: true);
+
+    // ---- Editing the team library ----------------------------------------------------------------
+
+    /// <summary>True while the team library is being edited (Edit team library … Done).</summary>
+    public bool IsEditingTeam => _team?.IsEditing == true;
+
+    /// <summary>"Edit team library" in the Team header: only when this PC can edit the file, and not while editing.</summary>
+    public bool ShowEditTeamButton => IsTeamSide && TeamLoaded && _team!.Service.CanEdit && !IsEditingTeam;
+
+    /// <summary>Edit team library: unlocks editing; automatic refreshes are held until Done.</summary>
+    public IRelayCommand EditTeamCommand { get; }
+
+    /// <summary>The edit bar's Done: locks the team library again and applies any refresh held meanwhile.</summary>
+    public IRelayCommand DoneEditingTeamCommand { get; }
+
+    /// <summary>The edit bar (the quiet warning-bar style) while the team library is being edited.</summary>
+    public bool ShowTeamEditBar => IsTeamSide && IsEditingTeam;
+
+    public string TeamEditBarText => "Editing team library: changes go to everyone";
+
+    /// <summary>
+    /// Why this PC can write to the team file but may not edit it (a newer app made it), or null. Shown under the
+    /// Team header in place of Edit team library.
+    /// </summary>
+    public string? TeamEditBlockedText => TeamLoaded && _team!.Service is { CanWrite: true, Team.IsNewerSchema: true }
+        ? NewerSchemaMessage
+        : null;
+
+    public bool ShowTeamEditBlocked => IsTeamSide && TeamEditBlockedText is not null;
+
+    /// <summary>The "Read only" note's tooltip: why this PC can't edit the team library.</summary>
+    public string TeamReadOnlyReason => TeamEditBlockedText ?? "You can't change files in this folder";
+
+    /// <summary>The Team header's ⋯ menu ("Restore an older version…"): for editors only.</summary>
+    public bool ShowTeamMoreMenu => IsTeamSide && TeamLoaded && _team!.Service.CanEdit;
+
+    /// <summary>"Restore an older version…": lists the team file's history (and any sync conflict copies) to restore one.</summary>
+    public IRelayCommand TeamHistoryCommand { get; }
+
+    /// <summary>The conflict notice's Review: the same list, with the other versions from sync first.</summary>
+    public IRelayCommand ReviewConflictCommand { get; }
+
+    /// <summary>"Two versions of the team library found" + Review: for editors, while file sync left a conflict copy.</summary>
+    public bool ShowConflictBar => IsTeamSide && TeamLoaded && _team!.Service.CanEdit && _team.Service.ConflictCopies.Count > 0;
+
+    public string ConflictBarText => "Two versions of the team library found";
+
+    /// <summary>The one Team notice bar shows while either notice applies; both share its line.</summary>
+    public bool ShowTeamBar => ShowTeamEditBar || ShowConflictBar;
+
+    public bool ShowBothTeamNotices => ShowTeamEditBar && ShowConflictBar;
 
     public IRelayCommand NewCategoryCommand { get; }
     public IRelayCommand<CategoryItem?> RenameCategoryCommand { get; }
@@ -511,6 +578,8 @@ public sealed class MainViewModel : ObservableObject
     public UnsavedEdit? SaveForExit()
     {
         if (CurrentUnsavedEdit() is not { } edit) return null;
+        // A team save can't finish before the exit, so a team edit goes to the recovery file instead.
+        if (CurrentDocument.IsTeam) return edit;
         return ExitEdits.Choose(edit) == ExitEditAction.Save && Save() ? null : edit;
     }
 
@@ -572,7 +641,7 @@ public sealed class MainViewModel : ObservableObject
 
     public void StartNewCategory()
     {
-        if (CurrentDocument.IsReadOnly) return;
+        if (CannotChange) return;
         foreach (var item in Categories) item.IsRenaming = false;
         NewCategoryName = "";
         NewCategoryError = null;
@@ -588,7 +657,7 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Adds the typed category and selects it. False (with an inline message) if the name isn't valid.</summary>
     public bool CommitNewCategory()
     {
-        if (CurrentDocument.IsReadOnly) return false;
+        if (CannotChange) return false;
         var name = _newCategoryName.Trim();
         NewCategoryError = CategoryNameError(name, exceptId: null);
         if (NewCategoryError is not null) return false;
@@ -605,7 +674,7 @@ public sealed class MainViewModel : ObservableObject
         }
 
         IsAddingCategory = false;
-        CurrentDocument.SaveLibraryChange(); // on failure the category stays and is written later (the host says so)
+        SaveChange(); // on failure the category stays and is written later (the host says so)
         RebuildCategories(_selectedCategory?.Id);
         SelectCategoryNow(category.Id);
         return true;
@@ -613,7 +682,7 @@ public sealed class MainViewModel : ObservableObject
 
     public void StartRename(CategoryItem? item)
     {
-        if (item is null || item.IsAll || CurrentDocument.IsReadOnly) return;
+        if (item is null || item.IsAll || CannotChange) return;
         CancelNewCategory();
         foreach (var other in Categories) other.IsRenaming = false;
         item.EditName = item.Name;
@@ -631,6 +700,7 @@ public sealed class MainViewModel : ObservableObject
     public bool CommitRename(CategoryItem item)
     {
         if (!item.IsRenaming || item.Id is not { } id || CurrentDocument.IsReadOnly) return true;
+        if (_teamSaving) return false; // the rename stays open until the save in progress is done
 
         var name = item.EditName.Trim();
         if (name == item.Name)
@@ -653,21 +723,22 @@ public sealed class MainViewModel : ObservableObject
         }
 
         item.IsRenaming = false;
-        CurrentDocument.SaveLibraryChange(); // on failure the new name stays and is written later (the host says so)
+        SaveChange(); // on failure the new name stays and is written later (the host says so)
         RebuildCategories(_selectedCategory?.Id);
         return true;
     }
 
     public void DeleteCategory(CategoryItem? item)
     {
-        if (item?.Id is not { } id || CurrentDocument.IsReadOnly) return;
+        if (item?.Id is not { } id || CannotChange) return;
 
         var promptCount = NewLibraryEditor().PromptCount(id);
         Guid? moveTo = null;
 
         if (promptCount == 0)
         {
-            if (!_dialogs.ConfirmDestructive($"Delete the category \"{item.Name}\"?", "Delete")) return;
+            var question = CurrentDocument.IsTeam ? RemovesForEveryoneMessage : $"Delete the category \"{item.Name}\"?";
+            if (!_dialogs.ConfirmDestructive(question, "Delete")) return;
         }
         else
         {
@@ -698,7 +769,7 @@ public sealed class MainViewModel : ObservableObject
         }
 
         _editor?.ReplaceCategory(id, moveTo);
-        CurrentDocument.SaveLibraryChange(); // on failure the deletion stays and is written later (the host says so)
+        SaveChange(); // on failure the deletion stays and is written later (the host says so)
 
         // Show where the prompts went; if the deleted category was empty, fall back to All prompts.
         var selectId = _selectedCategory?.Id == id ? moveTo : _selectedCategory?.Id;
@@ -717,7 +788,7 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     public void NewPrompt()
     {
-        if (CurrentDocument.IsReadOnly) return;
+        if (CannotChange) return;
         if (!ConfirmDiscardOrSave()) return;
 
         var categoryId = _selectedCategory?.Id
@@ -743,7 +814,9 @@ public sealed class MainViewModel : ObservableObject
     {
         var editor = _editor;
         if (editor is null || !editor.IsDirty || CurrentDocument.IsReadOnly) return true;
+        if (_teamSaving) return false; // the save in progress finishes first
         if (!editor.Validate()) return false;
+        var isTeam = CurrentDocument.IsTeam;
 
         Guid promptId;
         PromptSnapshot onDisk;
@@ -761,7 +834,9 @@ public sealed class MainViewModel : ObservableObject
             {
                 promptId = library.AddPrompt(editor.CategoryId!.Value, editor.Title, editor.Description, editor.Text).Id;
                 onDisk = PromptSnapshot.ForNewPrompt(promptId);
-                editor.MarkCreated(promptId); // a retry after a failed write must update, not add again
+                // A retry after a failed write must update, not add again. A team prompt counts as created only once
+                // the save has gone through: a refused save reloads the library without it, and the editor stays new.
+                if (!isTeam) editor.MarkCreated(promptId);
             }
         }
         catch (ArgumentException ex)
@@ -769,6 +844,14 @@ public sealed class MainViewModel : ObservableObject
             if (!editor.ShowValidationError(ex))
                 _dialogs.ShowMessage(ex.Message);
             return false;
+        }
+
+        if (isTeam)
+        {
+            CurrentDocument.SaveLibrary();
+            TrackTeamSave(() => AfterTeamPromptSaved(editor, promptId));
+            FollowEditorCategory(editor);
+            return false; // not written yet: the editor stays unsaved until the save reports back
         }
 
         var written = CurrentDocument.SaveLibrary();
@@ -779,13 +862,18 @@ public sealed class MainViewModel : ObservableObject
             editor.ShowSavedFeedback();
         }
 
-        // If the prompt moved out of the category being shown, follow it to its new category.
+        FollowEditorCategory(editor);
+        return written;
+    }
+
+    /// <summary>Rebuilds the lists after a prompt's Save; if the prompt moved out of the category shown, follows it.</summary>
+    private void FollowEditorCategory(PromptEditorViewModel editor)
+    {
         var showCategory = _selectedCategory?.Id is { } shown && shown != editor.CategoryId
             ? editor.CategoryId
             : _selectedCategory?.Id;
         RebuildCategories(showCategory);
         RefreshPrompts();
-        return written;
     }
 
     /// <summary>Copies what is in the editor now, unsaved edits included.</summary>
@@ -801,7 +889,7 @@ public sealed class MainViewModel : ObservableObject
     public void Delete()
     {
         var editor = _editor;
-        if (editor is null || CurrentDocument.IsReadOnly) return;
+        if (editor is null || CannotChange) return;
 
         if (editor.PromptId is not { } id)
         {
@@ -811,7 +899,8 @@ public sealed class MainViewModel : ObservableObject
         }
 
         var title = CurrentDocument.Library.Prompts.FirstOrDefault(p => p.Id == id)?.Title ?? editor.DisplayTitle;
-        if (!_dialogs.ConfirmDestructive($"Delete \"{title}\"?", "Delete")) return;
+        var question = CurrentDocument.IsTeam ? RemovesForEveryoneMessage : $"Delete \"{title}\"?";
+        if (!_dialogs.ConfirmDestructive(question, "Delete")) return;
 
         try
         {
@@ -825,7 +914,7 @@ public sealed class MainViewModel : ObservableObject
 
         if (_unwritten?.PromptId == id) _unwritten = null;
         Editor = null;
-        CurrentDocument.SaveLibraryChange(); // on failure the deletion stays and is written later (the host says so)
+        SaveChange(); // on failure the deletion stays and is written later (the host says so)
         RebuildCategories(_selectedCategory?.Id);
         RefreshPrompts();
     }
@@ -1137,7 +1226,8 @@ public sealed class MainViewModel : ObservableObject
             return true;
         }
         if (side == LibrarySide.Team && !TeamConnected) return false;
-        if (!ConfirmDiscardOrSave())
+        // Leaving the Team side ends editing it (Done), so refreshes aren't held while it isn't in view.
+        if (!ConfirmDiscardOrSave() || (_side == LibrarySide.Team && !StopEditingTeam(ask: false)))
         {
             RaiseSideState(); // puts the switch back on the side still shown
             return false;
@@ -1292,12 +1382,161 @@ public sealed class MainViewModel : ObservableObject
         _host.RefreshQuickMenu();
     }
 
+    // ---- Editing the team library (helpers) ----------------------------------------------------
+
+    /// <summary>Nothing can change: the side is read only, or a team save is still writing (changes wait for it).</summary>
+    private bool CannotChange => CurrentDocument.IsReadOnly || (CurrentDocument.IsTeam && _teamSaving);
+
+    /// <summary>Saves a change with no Save button (category changes, deletions); a team save reports back later.</summary>
+    private void SaveChange()
+    {
+        CurrentDocument.SaveLibraryChange();
+        if (CurrentDocument.IsTeam) TrackTeamSave();
+    }
+
+    /// <summary>
+    /// Waits (without blocking) for the team save just started, then applies its outcome on the UI thread: saved runs
+    /// <paramref name="onSaved"/> and says "Saved for everyone"; refused (someone else changed the file) or failed
+    /// shows why, with the library reloaded or put back to the copy on disk. The editor keeps whatever was typed.
+    /// </summary>
+    private void TrackTeamSave(Action? onSaved = null)
+    {
+        if (_team?.PendingSave is not { } pending) return;
+        _teamSaving = true;
+        pending.ContinueWith(task =>
+        {
+            var result = task.IsCompletedSuccessfully
+                ? task.Result
+                : new TeamSaveResult(TeamSaveStatus.Failed, null, "Couldn't save the team library.");
+            _dispatcher.BeginInvoke(() => FinishTeamSave(result, onSaved));
+        }, TaskScheduler.Default);
+    }
+
+    private void FinishTeamSave(TeamSaveResult result, Action? onSaved)
+    {
+        _teamSaving = false;
+        if (_team is not { } team) return;
+
+        switch (result.Status)
+        {
+            case TeamSaveStatus.Saved:
+                team.Rebase();
+                onSaved?.Invoke();
+                ShowStatus("Saved for everyone", FeedbackDuration);
+                break;
+            case TeamSaveStatus.ChangedByOther:
+                team.Rebase(); // the service has already re-read the file
+                _dialogs.ShowMessage(ChangedByOtherMessage);
+                break;
+            default:
+                team.Service.RevertToLoaded(); // what wasn't written doesn't stay in memory
+                _dialogs.ShowMessage(result.Message ?? "Couldn't save the team library.");
+                break;
+        }
+
+        if (IsTeamSide) ReloadTeamSide();
+        _host.RefreshQuickMenu();
+    }
+
+    /// <summary>
+    /// A team prompt's Save went through: the editor takes the saved prompt as its baseline. Anything typed while the
+    /// save was writing stays in the fields, still unsaved.
+    /// </summary>
+    private void AfterTeamPromptSaved(PromptEditorViewModel editor, Guid promptId)
+    {
+        if (!ReferenceEquals(_editor, editor) || _team?.Library.Prompts.FirstOrDefault(p => p.Id == promptId) is not { } saved)
+            return;
+
+        var (title, description, categoryId, text) = (editor.Title, editor.Description, editor.CategoryId, editor.Text);
+        if (editor.IsNew) editor.MarkCreated(promptId);
+        editor.LoadSaved(saved);
+        editor.Title = title;
+        editor.Description = description;
+        editor.CategoryId = categoryId;
+        editor.Text = text;
+        if (!editor.IsDirty) editor.ShowSavedFeedback();
+        RaiseEditorState();
+    }
+
+    /// <summary>
+    /// Rebuilds the Team side from the loaded copy. A prompt open without unsaved changes follows the new copy; one with
+    /// unsaved changes keeps them (a new prompt stays new).
+    /// </summary>
+    private void ReloadTeamSide()
+    {
+        RefreshAll();
+        if (_editor is { } editor)
+        {
+            if (editor is { IsDirty: false, PromptId: { } id }
+                && CurrentDocument.Library.Prompts.FirstOrDefault(p => p.Id == id) is { } fresh)
+                editor.LoadSaved(fresh);
+            editor.IsReadOnly = CurrentDocument.IsReadOnly;
+            RaiseEditorState();
+        }
+        OpenFirstPromptIfNone();
+    }
+
+    /// <summary>Edit team library: unlocks the Team side for editing and holds automatic refreshes until Done.</summary>
+    private void StartEditingTeam()
+    {
+        if (!IsTeamSide || _team is not { IsEditing: false } team || !TeamLoaded || !team.Service.CanEdit) return;
+        team.IsEditing = true;
+        team.Service.HoldRefresh(true);
+        ReloadTeamSide();
+        RaiseSideState();
+    }
+
+    /// <summary>
+    /// Done (or leaving the Team side): offers to save unsaved changes, locks the team library again and applies a
+    /// refresh held meanwhile ("Team prompts updated"). False when the user cancelled or a save is still writing.
+    /// </summary>
+    private bool StopEditingTeam(bool ask = true)
+    {
+        if (_team is not { IsEditing: true } team) return true;
+        if (_teamSaving || (ask && !ConfirmDiscardOrSave())) return false;
+
+        CancelNewCategory();
+        foreach (var item in Categories) item.IsRenaming = false;
+        if (_editor is { IsNew: true }) Editor = null; // a new, empty prompt can't stay open read only
+
+        team.IsEditing = false;
+        var held = team.Service.HasHeldRefresh;
+        team.Service.HoldRefresh(false);
+        if (IsTeamSide) ReloadTeamSide();
+        RaiseSideState();
+        if (held) ShowStatus("Team prompts updated", FeedbackDuration);
+        return true;
+    }
+
+    /// <summary>
+    /// "Restore an older version…" (or Review): after unsaved changes are dealt with, shows the team file's versions;
+    /// a restore reloads the Team side.
+    /// </summary>
+    private void OpenTeamHistory(bool review)
+    {
+        if (!IsTeamSide || _team is not { } team || !team.Service.CanEdit || _teamSaving) return;
+        if (!ConfirmDiscardOrSave()) return;
+        if (!_dialogs.ShowTeamHistory(team.Service, review)) return;
+
+        team.Rebase();
+        ReloadTeamSide();
+        RaiseSideState();
+        ShowStatus("Restored for everyone", FeedbackDuration);
+    }
+
     /// <summary>
     /// The team library was refreshed, joined or left. A team prompt open unchanged follows the new copy; leaving
     /// goes back to Your prompts.
     /// </summary>
     private void OnTeamChanged()
     {
+        if (!TeamConnected && _team is { IsEditing: true } editing)
+        {
+            editing.IsEditing = false;
+            editing.Service.HoldRefresh(false);
+        }
+        _team?.Rebase(); // while editing, saves now guard against the copy just loaded
+
         if (IsTeamSide && !TeamConnected)
         {
             Editor = null; // read only, so nothing unsaved is lost
@@ -1308,15 +1547,7 @@ public sealed class MainViewModel : ObservableObject
         UpdateSearchingBoth();
         if (IsTeamSide)
         {
-            RefreshAll();
-            if (_editor is { IsDirty: false, PromptId: { } id } editor
-                && CurrentDocument.Library.Prompts.FirstOrDefault(p => p.Id == id) is { } fresh)
-            {
-                editor.LoadSaved(fresh);
-                editor.IsReadOnly = CurrentDocument.IsReadOnly;
-                RaiseEditorState();
-            }
-            OpenFirstPromptIfNone();
+            ReloadTeamSide();
         }
         else if (_searchingBoth)
         {
@@ -1409,6 +1640,16 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsTeamOffline));
         OnPropertyChanged(nameof(ShowTeamHeader));
         OnPropertyChanged(nameof(ShowTeamReadOnlyNote));
+        OnPropertyChanged(nameof(TeamReadOnlyReason));
+        OnPropertyChanged(nameof(IsEditingTeam));
+        OnPropertyChanged(nameof(ShowEditTeamButton));
+        OnPropertyChanged(nameof(ShowTeamEditBar));
+        OnPropertyChanged(nameof(TeamEditBlockedText));
+        OnPropertyChanged(nameof(ShowTeamEditBlocked));
+        OnPropertyChanged(nameof(ShowTeamMoreMenu));
+        OnPropertyChanged(nameof(ShowConflictBar));
+        OnPropertyChanged(nameof(ShowTeamBar));
+        OnPropertyChanged(nameof(ShowBothTeamNotices));
         OnPropertyChanged(nameof(ShowEditButtons));
         OnPropertyChanged(nameof(ShowTeamButtons));
         OnPropertyChanged(nameof(ShowHiddenTeamPrompts));
