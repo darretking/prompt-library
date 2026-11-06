@@ -12,8 +12,9 @@ namespace PromptLibrary.App.ViewModels;
 
 /// <summary>
 /// State and actions of the main window: category rail, prompt list with search, and the editor.
-/// Every successful change is saved through <see cref="AppHost.SaveLibrary()"/> (a prompt's Save) or
-/// <see cref="AppHost.SaveLibraryChange"/> (category changes and deletions).
+/// Everything shown and changed goes through <see cref="CurrentDocument"/>; every successful change is saved through
+/// its <see cref="ILibraryDocument.SaveLibrary"/> (a prompt's Save) or <see cref="ILibraryDocument.SaveLibraryChange"/>
+/// (category changes and deletions).
 /// </summary>
 public sealed class MainViewModel : ObservableObject
 {
@@ -22,8 +23,9 @@ public sealed class MainViewModel : ObservableObject
     private static readonly TimeSpan StatusDuration = TimeSpan.FromSeconds(6);
     private static readonly TimeSpan RestoredStatusDuration = TimeSpan.FromSeconds(4);
 
-    private readonly AppHost _host;
+    private readonly IMainHost _host;
     private readonly IDialogs _dialogs;
+    private readonly PersonalDocument _personal;
     private readonly DispatcherTimer _statusTimer;
     private string? _statusText;
 
@@ -49,10 +51,11 @@ public sealed class MainViewModel : ObservableObject
     // "Don't save" restores it, so the change is never written later by another save.
     private PromptSnapshot? _unwritten;
 
-    public MainViewModel(AppHost host, IDialogs dialogs)
+    public MainViewModel(IMainHost host, IDialogs dialogs)
     {
         _host = host;
         _dialogs = dialogs;
+        _personal = new PersonalDocument(host);
 
         NewCategoryCommand = new RelayCommand(StartNewCategory);
         RenameCategoryCommand = new RelayCommand<CategoryItem?>(item => StartRename(item ?? SelectedCategory));
@@ -99,6 +102,9 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>Raised after a new prompt is started, so the view can put the cursor in Title.</summary>
     public event EventHandler? TitleFocusRequested;
+
+    /// <summary>The library being shown and edited.</summary>
+    public ILibraryDocument CurrentDocument => _personal;
 
     public ObservableCollection<CategoryItem> Categories { get; } = new();
 
@@ -239,7 +245,7 @@ public sealed class MainViewModel : ObservableObject
     public string NoMatchesText => $"No prompts match \"{_searchText.Trim()}\".";
 
     /// <summary>What the editor area says when no prompt is open.</summary>
-    public string NoEditorText => _host.Library.Prompts.Count == 0
+    public string NoEditorText => CurrentDocument.Library.Prompts.Count == 0
         ? "No prompts yet. Press Ctrl+N or choose New prompt."
         : "Select a prompt, or create one.";
 
@@ -289,7 +295,7 @@ public sealed class MainViewModel : ObservableObject
     {
         if (_editor is not { IsDirty: true } editor) return true;
 
-        var savedTitle = _host.Library.Prompts.FirstOrDefault(p => p.Id == editor.PromptId)?.Title;
+        var savedTitle = CurrentDocument.Library.Prompts.FirstOrDefault(p => p.Id == editor.PromptId)?.Title;
         switch (_dialogs.AskSaveChanges(EditorText.SaveChangesQuestion(savedTitle)))
         {
             case true:
@@ -317,7 +323,7 @@ public sealed class MainViewModel : ObservableObject
     {
         if (_editor is not { IsDirty: true } editor) return null;
 
-        var categoryName = _host.Library.Categories.FirstOrDefault(c => c.Id == editor.CategoryId)?.Name;
+        var categoryName = CurrentDocument.Library.Categories.FirstOrDefault(c => c.Id == editor.CategoryId)?.Name;
         return new UnsavedEdit(editor.Title, editor.Description, editor.CategoryId, categoryName, editor.Text);
     }
 
@@ -325,7 +331,7 @@ public sealed class MainViewModel : ObservableObject
     public void RefreshAll()
     {
         // A prompt removed from the library (e.g. by a restore) can't stay open.
-        if (_editor is { PromptId: { } id } && _host.Library.Prompts.All(p => p.Id != id))
+        if (_editor is { PromptId: { } id } && CurrentDocument.Library.Prompts.All(p => p.Id != id))
             Editor = null;
 
         RebuildCategories(_selectedCategory?.Id);
@@ -341,7 +347,7 @@ public sealed class MainViewModel : ObservableObject
     public bool ConfirmBeforeRestore()
     {
         if (!ConfirmDiscardOrSave()) return false;
-        return (_unwritten is null && !_host.LibraryUnwritten) || _dialogs.ConfirmDestructive(
+        return (_unwritten is null && !CurrentDocument.LibraryUnwritten) || _dialogs.ConfirmDestructive(
             "Some of your changes couldn't be saved to disk. Restoring now will lose them.", "Restore anyway");
     }
 
@@ -394,7 +400,7 @@ public sealed class MainViewModel : ObservableObject
         }
 
         IsAddingCategory = false;
-        _host.SaveLibraryChange(); // on failure the category stays and is written later (the host says so)
+        CurrentDocument.SaveLibraryChange(); // on failure the category stays and is written later (the host says so)
         RebuildCategories(_selectedCategory?.Id);
         SelectCategoryNow(category.Id);
         return true;
@@ -442,7 +448,7 @@ public sealed class MainViewModel : ObservableObject
         }
 
         item.IsRenaming = false;
-        _host.SaveLibraryChange(); // on failure the new name stays and is written later (the host says so)
+        CurrentDocument.SaveLibraryChange(); // on failure the new name stays and is written later (the host says so)
         RebuildCategories(_selectedCategory?.Id);
         return true;
     }
@@ -460,7 +466,7 @@ public sealed class MainViewModel : ObservableObject
         }
         else
         {
-            var targets = _host.Library.Categories
+            var targets = CurrentDocument.Library.Categories
                 .Where(c => c.Id != id)
                 .OrderBy(c => c.Name, NameOrder)
                 .ToList();
@@ -487,14 +493,14 @@ public sealed class MainViewModel : ObservableObject
         }
 
         _editor?.ReplaceCategory(id, moveTo);
-        _host.SaveLibraryChange(); // on failure the deletion stays and is written later (the host says so)
+        CurrentDocument.SaveLibraryChange(); // on failure the deletion stays and is written later (the host says so)
 
         // Show where the prompts went; if the deleted category was empty, fall back to All prompts.
         var selectId = _selectedCategory?.Id == id ? moveTo : _selectedCategory?.Id;
         RebuildCategories(selectId);
         RefreshPrompts();
 
-        if (moveTo is { } targetId && _host.Library.Categories.FirstOrDefault(c => c.Id == targetId) is { } target)
+        if (moveTo is { } targetId && CurrentDocument.Library.Categories.FirstOrDefault(c => c.Id == targetId) is { } target)
             ShowStatus($"Moved {Count(promptCount, "prompt")} to {target.Name}.");
     }
 
@@ -509,7 +515,7 @@ public sealed class MainViewModel : ObservableObject
         if (!ConfirmDiscardOrSave()) return;
 
         var categoryId = _selectedCategory?.Id
-            ?? _host.Library.Categories.OrderBy(c => c.Name, NameOrder).FirstOrDefault()?.Id;
+            ?? CurrentDocument.Library.Categories.OrderBy(c => c.Name, NameOrder).FirstOrDefault()?.Id;
         if (categoryId is null)
         {
             _dialogs.ShowMessage("Create a category first, then add prompts to it.");
@@ -541,7 +547,7 @@ public sealed class MainViewModel : ObservableObject
             if (editor.PromptId is { } existingId)
             {
                 // After an earlier failed write, the earlier snapshot is still what's on disk.
-                onDisk = _unwritten ?? PromptSnapshot.Capture(_host.Library, existingId);
+                onDisk = _unwritten ?? PromptSnapshot.Capture(CurrentDocument.Library, existingId);
                 library.UpdatePrompt(existingId, editor.Title, editor.Description, editor.CategoryId!.Value, editor.Text);
                 promptId = existingId;
             }
@@ -559,11 +565,11 @@ public sealed class MainViewModel : ObservableObject
             return false;
         }
 
-        var written = _host.SaveLibrary();
+        var written = CurrentDocument.SaveLibrary();
         _unwritten = written ? null : onDisk;
         if (written)
         {
-            editor.LoadSaved(_host.Library.Prompts.First(p => p.Id == promptId));
+            editor.LoadSaved(CurrentDocument.Library.Prompts.First(p => p.Id == promptId));
             editor.ShowSavedFeedback();
         }
 
@@ -598,7 +604,7 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
-        var title = _host.Library.Prompts.FirstOrDefault(p => p.Id == id)?.Title ?? editor.DisplayTitle;
+        var title = CurrentDocument.Library.Prompts.FirstOrDefault(p => p.Id == id)?.Title ?? editor.DisplayTitle;
         if (!_dialogs.ConfirmDestructive($"Delete \"{title}\"?", "Delete")) return;
 
         try
@@ -613,7 +619,7 @@ public sealed class MainViewModel : ObservableObject
 
         if (_unwritten?.PromptId == id) _unwritten = null;
         Editor = null;
-        _host.SaveLibraryChange(); // on failure the deletion stays and is written later (the host says so)
+        CurrentDocument.SaveLibraryChange(); // on failure the deletion stays and is written later (the host says so)
         RebuildCategories(_selectedCategory?.Id);
         RefreshPrompts();
     }
@@ -635,11 +641,11 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
-        snapshot.Restore(_host.Library);
+        snapshot.Restore(CurrentDocument.Library);
         _unwritten = null;
         _host.RefreshQuickMenu();
 
-        var restored = _host.Library.Prompts.FirstOrDefault(p => p.Id == snapshot.PromptId);
+        var restored = CurrentDocument.Library.Prompts.FirstOrDefault(p => p.Id == snapshot.PromptId);
         if (restored is null)
             Editor = null;
         else
@@ -650,12 +656,12 @@ public sealed class MainViewModel : ObservableObject
     }
 
     // The host's Library object can be replaced (restore), so make an editor for the current one.
-    private LibraryEditor NewLibraryEditor() => new(_host.Library, () => DateTimeOffset.Now);
+    private LibraryEditor NewLibraryEditor() => new(CurrentDocument.Library, () => DateTimeOffset.Now);
 
     private string? CategoryNameError(string name, Guid? exceptId)
     {
         if (name.Length == 0) return "Give the category a name.";
-        var clash = _host.Library.Categories.Any(c =>
+        var clash = CurrentDocument.Library.Categories.Any(c =>
             c.Id != exceptId && string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
         return clash ? $"There's already a category called \"{name}\"." : null;
     }
@@ -813,7 +819,7 @@ public sealed class MainViewModel : ObservableObject
 
     private void OpenPrompt(Prompt prompt)
     {
-        if (!_host.Library.Prompts.Contains(prompt)) return; // deleted meanwhile
+        if (!CurrentDocument.Library.Prompts.Contains(prompt)) return; // deleted meanwhile
         Editor = PromptEditorViewModel.ForPrompt(prompt);
         _selectedPrompt = Prompts.Contains(prompt) ? prompt : null;
         OnPropertyChanged(nameof(SelectedPrompt));
@@ -821,7 +827,7 @@ public sealed class MainViewModel : ObservableObject
 
     private void RebuildCategories(Guid? selectId)
     {
-        var library = _host.Library;
+        var library = CurrentDocument.Library;
         var sorted = library.Categories.OrderBy(c => c.Name, NameOrder).ToList();
 
         _refreshing = true;
@@ -856,7 +862,7 @@ public sealed class MainViewModel : ObservableObject
         try
         {
             Prompts.Clear();
-            foreach (var prompt in PromptFilter.Apply(_host.Library, _selectedCategory?.Id, _searchText))
+            foreach (var prompt in PromptFilter.Apply(CurrentDocument.Library, _selectedCategory?.Id, _searchText))
                 Prompts.Add(prompt);
 
             // While the items were replaced the list box pushed null selections, and the binding may have left

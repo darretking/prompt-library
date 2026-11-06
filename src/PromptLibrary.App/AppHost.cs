@@ -26,7 +26,7 @@ namespace PromptLibrary.App;
 /// Owns the running app: library and settings, tray icon, global hotkey, backups and windows.
 /// Created once on the UI thread by <see cref="App"/>.
 /// </summary>
-public sealed class AppHost : IDisposable
+public sealed class AppHost : IMainHost, IDisposable
 {
     private const string AppName = "Prompt Library";
     private const string DefaultHotkey = "Ctrl+Alt+P";
