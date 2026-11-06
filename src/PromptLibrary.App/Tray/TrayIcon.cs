@@ -132,7 +132,7 @@ public sealed class TrayIcon : IDisposable
         var yours = new List<Forms.ToolStripItem>();
         if (hasTeam) yours.Add(Heading("Your prompts"));
         yours.AddRange(menu.Yours.Select(CategoryItem));
-        if (yours.Count == 0 && menu.Pinned.Count == 0)
+        if (menu.Yours.Count == 0 && (hasTeam || menu.Pinned.Count == 0))
             yours.Add(new Forms.ToolStripMenuItem("No prompts yet") { Enabled = false });
         sections.Add(yours);
 
@@ -174,6 +174,8 @@ public sealed class TrayIcon : IDisposable
 
     /// <summary>The menu strip, for tests.</summary>
     internal Forms.ContextMenuStrip MenuStrip => _menu;
+    internal System.Drawing.Image? TeamImage => _teamImage;
+    internal System.Drawing.Image? PinImage => _pinImage;
 
     private static Forms.ToolStripMenuItem Heading(string text) => new(text) { Enabled = false };
 
@@ -190,8 +192,9 @@ public sealed class TrayIcon : IDisposable
     {
         var id = prompt.Id;
         var item = new Forms.ToolStripMenuItem(MenuText.ForMenu(prompt.Title));
-        if (pinned) item.Image = _pinImage;
-        else if (prompt.IsTeam) item.Image = _teamImage;
+        // Team prompts always carry the team icon (even pinned); the pin icon marks only personal pins.
+        if (prompt.IsTeam) item.Image = _teamImage;
+        else if (pinned) item.Image = _pinImage;
         item.Click += (_, _) =>
         {
             PromptClicked?.Invoke(this, new PromptPick(id, _pasteTarget));

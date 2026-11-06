@@ -33,6 +33,40 @@ public class TrayMenuTests
     }
 
     [Fact]
+    public void Tray_PinnedTeamPrompt_ShowsTeamIconAndPersonalPinShowsPinIcon() => Sta.Run(() =>
+    {
+        using var tray = new TrayIcon("t", headless: true);
+        tray.Rebuild(new QuickMenu([P("Mine"), P("Theirs", true)], [C("Sales", true)], [C("Work")], false));
+        var items = tray.MenuStrip.Items.Cast<Forms.ToolStripItem>().ToList();
+        Assert.Same(tray.PinImage, items[0].Image);
+        Assert.Same(tray.TeamImage, items[1].Image);
+        Assert.NotSame(tray.PinImage, tray.TeamImage);
+    });
+
+    [Fact]
+    public void Tray_TeamShownButYoursEmpty_ShowsHeadingAndNoPromptsYet()
+    {
+        Assert.Equal(
+            ["[Team prompts]", "Sales>Sales p0", "---", "[Your prompts]", "[No prompts yet]", "---",
+                "Settings…", "Open Prompt Library…", "Exit"],
+            Read(new QuickMenu([], [C("Sales", true)], [], false)));
+    }
+
+    [Fact]
+    public void Tray_Rebuild_KeepsUpdateItemFirst() => Sta.Run(() =>
+    {
+        using var tray = new TrayIcon("t", headless: true);
+        tray.SetUpdateItem("Update to 9.9.9…");
+        tray.Rebuild(new QuickMenu([], [], [C("Work")], false));
+        tray.Rebuild(new QuickMenu([], [], [C("Work")], false));
+        var items = tray.MenuStrip.Items;
+        Assert.Equal("Update to 9.9.9…", items[0].Text);
+        Assert.IsType<Forms.ToolStripSeparator>(items[1]);
+        Assert.Equal("Work", items[2].Text);
+        Assert.Single(items.Cast<Forms.ToolStripItem>(), i => i.Text == "Update to 9.9.9…");
+    });
+
+    [Fact]
     public void Tray_Rebuild_OrderMatchesQuickMenu()
     {
         // (a) solo, nothing pinned: as before.
