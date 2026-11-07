@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -15,7 +16,7 @@ public static class TeamFile
     /// <summary>The value of the file's <c>kind</c> field.</summary>
     public const string Kind = "prompt-library-team";
 
-    /// <summary>Reads a team file. Throws <see cref="InvalidDataException"/> with a plain message if it is not usable.</summary>
+    /// <summary>Reads a team file (a repeated id gets a new one, see <see cref="TeamIds"/>). Throws <see cref="InvalidDataException"/> with a plain message if it is not usable.</summary>
     public static TeamLibrary Parse(string json)
     {
         try
@@ -35,13 +36,15 @@ public static class TeamFile
             var updatedAt = DateTimeOffset.MinValue;
             if (raw["updatedAt"] is JsonValue u)
             {
-                if (!u.TryGetValue<string>(out var text) || !DateTimeOffset.TryParse(text, out updatedAt))
+                if (!u.TryGetValue<string>(out var text) || !DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture,
+                        DateTimeStyles.RoundtripKind, out updatedAt))
                     throw new InvalidDataException("The team file has an invalid date.");
             }
 
             using var doc = JsonDocument.Parse(raw.ToJsonString());
             var content = JsonStore.ValidateLibrary(doc.RootElement);
             content.SchemaVersion = version;
+            TeamIds.ResolveClashes(content); // a repeated id never breaks a lookup or a save
 
             return new TeamLibrary
             {
@@ -66,7 +69,7 @@ public static class TeamFile
         root["kind"] = Kind;
         root["schemaVersion"] = team.SchemaVersion;
         root["name"] = team.Name;
-        root["updatedAt"] = JsonSerializer.SerializeToNode(team.UpdatedAt, JsonStore.Options);
+        root["updatedAt"] = team.UpdatedAt.ToString("O", CultureInfo.InvariantCulture);
         root["categories"] = Merge(root["categories"] as JsonArray, team.Content.Categories, c => c.Id);
         root["prompts"] = Merge(root["prompts"] as JsonArray, team.Content.Prompts, p => p.Id);
         return JsonStore.Serialize(root);
@@ -80,13 +83,14 @@ public static class TeamFile
     }
 
     // Builds the array in item order, updating the existing node with the same id (so unknown fields stay)
-    // or creating a new one. Existing nodes whose item is gone are dropped.
+    // or creating a new one. Existing nodes whose item is gone are dropped. With a repeated id the first node is used
+    // (a later one's item now has a new id, see TeamIds).
     private static JsonArray Merge<T>(JsonArray? existing, IEnumerable<T> items, Func<T, Guid> idOf)
     {
         var byId = new Dictionary<Guid, JsonObject>();
         foreach (var node in existing ?? [])
             if (node is JsonObject o && o["id"] is JsonValue v && v.TryGetValue<string>(out var s) && Guid.TryParse(s, out var id))
-                byId[id] = o;
+                byId.TryAdd(id, o);
 
         var result = new JsonArray();
         foreach (var item in items)

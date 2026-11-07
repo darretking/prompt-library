@@ -185,6 +185,7 @@ public class TeamWriterTests : IDisposable
 
         Assert.False(result.Created);
         Assert.Equal("Already here", result.ExistingName);
+        Assert.True(result.AlreadyExists);
         Assert.Equal(before, File.ReadAllText(FilePath));
     }
 
@@ -226,6 +227,7 @@ public class TeamWriterTests : IDisposable
         var result = Writer().Create(Path.Combine(blocker, "sub"), "Acme", null, [], false);
 
         Assert.False(result.Created);
+        Assert.False(result.AlreadyExists);
         Assert.StartsWith("Couldn't save the team library: ", result.Message);
     }
 
@@ -297,11 +299,58 @@ public class TeamWriterTests : IDisposable
         Assert.Equal(teamText, File.ReadAllText(FilePath)); // the team file itself is untouched
         Assert.Equal(3, Directory.GetFiles(HistoryDir).Length); // nothing deleted
 
-        // The other version is now an ordinary older version, at the time it was last written.
+        // The other version is now an ordinary older version, stamped with the time it was moved (not its last
+        // write, which could be older than every history copy and be pruned at the next save).
         var list = Writer().ListHistory(FilePath);
         Assert.All(list, i => Assert.False(i.IsConflictCopy));
         var theirs = Assert.Single(list, i => i.PromptCount == 2);
-        Assert.Equal(stamp, theirs.SavedAt.LocalDateTime);
+        Assert.NotEqual(stamp, theirs.SavedAt.LocalDateTime);
+        Assert.Equal(list[0], theirs); // newest first: the move came after the save
+    }
+
+    [Fact]
+    public void MoveConflictCopiesToHistory_StampsWithMoveTimeInUtc()
+    {
+        WriteInitial("Acme", "A");
+        var conflict = Path.Combine(_dir, "team-prompts-PC.json");
+        File.WriteAllText(conflict, TeamFile.Serialize(Team("Theirs", "A", "B")));
+        File.SetLastWriteTime(conflict, new DateTime(2020, 1, 1, 9, 0, 0, DateTimeKind.Local));
+        _clock = new DateTimeOffset(2026, 11, 6, 22, 15, 30, TimeSpan.FromHours(-6)); // the writer adds 1 s
+
+        Assert.Equal(1, Writer().MoveConflictCopiesToHistory(FilePath));
+
+        var file = Path.GetFileName(Assert.Single(Directory.GetFiles(HistoryDir)));
+        Assert.Equal("team-prompts 2026-11-07_041531.json", file);
+        var item = Assert.Single(Writer().ListHistory(FilePath));
+        Assert.Equal(new DateTimeOffset(2026, 11, 7, 4, 15, 31, TimeSpan.Zero), item.SavedAt);
+    }
+
+    [Fact]
+    public void Save_HistoryStampIsUtc_AndListedAtThatInstant()
+    {
+        var hash = WriteInitial("Acme", "A");
+        _clock = new DateTimeOffset(2026, 11, 6, 23, 59, 58, TimeSpan.FromHours(5)); // the writer adds 1 s
+
+        Writer().Save(FilePath, TeamFile.Parse(File.ReadAllText(FilePath)), hash);
+
+        var file = Path.GetFileName(Assert.Single(Directory.GetFiles(HistoryDir)));
+        Assert.Equal("team-prompts 2026-11-06_185959.json", file);
+        var item = Assert.Single(Writer().ListHistory(FilePath));
+        Assert.Equal(new DateTimeOffset(2026, 11, 6, 18, 59, 59, TimeSpan.Zero), item.SavedAt);
+        Assert.Equal(TimeSpan.Zero, item.SavedAt.Offset);
+    }
+
+    [Fact]
+    public void Create_UnreadableExistingFile_RefusesAsAlreadyExists()
+    {
+        File.WriteAllText(FilePath, "not a team file");
+
+        var result = Writer().Create(_dir, "New", null, [], false);
+
+        Assert.False(result.Created);
+        Assert.True(result.AlreadyExists);
+        Assert.Null(result.ExistingName);
+        Assert.Equal("not a team file", File.ReadAllText(FilePath));
     }
 
     [Fact]

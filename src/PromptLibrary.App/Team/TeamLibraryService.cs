@@ -37,6 +37,7 @@ public sealed class TeamLibraryService : IDisposable
     /// <summary>What users see when a write to the shared folder fails; the raw detail goes to the log only.</summary>
     internal const string WriteFailedMessage = "Couldn't save the team library. Check that you can save files in that folder.";
     internal const string StartFailedMessage = "Couldn't start the team library. Check that you can save files in that folder.";
+    internal const string UnreadableExistingMessage = "This folder already has a team file that can't be read.";
 
     // Turns typed input into a source; it touches the file system, so it only runs off the UI thread.
     private readonly Func<string, TeamSource?> _parse;
@@ -105,6 +106,9 @@ public sealed class TeamLibraryService : IDisposable
     /// <summary>Why the last read failed, while <see cref="Status"/> is <see cref="TeamStatus.Offline"/>.</summary>
     public string? StatusMessage { get; private set; }
 
+    /// <summary>How the last read that was applied went (null before one is back): the offline header says why from it.</summary>
+    public TeamReadStatus? LastReadStatus { get; private set; }
+
     /// <summary>True when this PC can edit: a file source it can write to, loaded, and not made by a newer app.</summary>
     public bool CanEdit { get; private set; }
 
@@ -136,7 +140,7 @@ public sealed class TeamLibraryService : IDisposable
                 Status = TeamStatus.Offline;
                 if (TeamCache.Load(_cachePath) is { } cached && cached.Source == source)
                 {
-                    Team = cached.Team;
+                    Team = WithoutClashes(cached.Team);
                     _json = cached.Json;
                     CurrentHash = TeamFile.Hash(cached.Json);
                     LastChecked = cached.FetchedAt;
@@ -217,6 +221,7 @@ public sealed class TeamLibraryService : IDisposable
             CurrentHash = null;
             LastChecked = null;
             StatusMessage = null;
+            LastReadStatus = null;
             Status = TeamStatus.NotConnected;
             CanEdit = false;
             CanWrite = false;
@@ -244,8 +249,10 @@ public sealed class TeamLibraryService : IDisposable
             var created = await Task.Run(() => _writer.Create(folder, name, personal, seedCategoryIds, addBusinessExamples));
             if (!created.Created)
             {
-                // A refusal because the folder already has a library is plain copy; any other failure carries raw OS text.
+                // A refusal because the folder already has a library is plain copy (said plainly also when that file
+                // can't be read); any other failure carries raw OS text.
                 if (created.ExistingName is not null) return created;
+                if (created.AlreadyExists) return created with { Message = UnreadableExistingMessage };
                 _log(new IOException(created.Message ?? "Start failed"));
                 return created with { Message = StartFailedMessage };
             }
@@ -307,7 +314,7 @@ public sealed class TeamLibraryService : IDisposable
         if (_json is null) return;
         try
         {
-            Team = TeamFile.Parse(_json);
+            Team = WithoutClashes(TeamFile.Parse(_json));
         }
         catch (InvalidDataException ex)
         {
@@ -502,8 +509,15 @@ public sealed class TeamLibraryService : IDisposable
         if (Source != source) return;
         _generation++; // an older read still in flight must not roll the saved copy back
 
-        // Compare with the copy before the save (re-parsed, so in-place edits of Team are seen).
-        var before = _json is null ? null : TeamFile.Parse(_json).Content.Prompts.ToDictionary(p => p.Id, TeamUserState.Fingerprint);
+        // Compare with the copy before the save (re-parsed, so in-place edits of Team are seen). Ids are unique after
+        // WithoutClashes, but the indexer (not ToDictionary) makes sure a repeated one can never fail a save that was written.
+        WithoutClashes(edited);
+        Dictionary<Guid, string>? before = null;
+        if (_json is not null)
+        {
+            before = new Dictionary<Guid, string>();
+            foreach (var p in WithoutClashes(TeamFile.Parse(_json)).Content.Prompts) before[p.Id] = TeamUserState.Fingerprint(p);
+        }
         foreach (var p in edited.Content.Prompts)
             if (before is null || !before.TryGetValue(p.Id, out var fp) || fp != TeamUserState.Fingerprint(p))
                 TeamUserState.MarkSeen(_settings, p);
@@ -548,11 +562,12 @@ public sealed class TeamLibraryService : IDisposable
         }
 
         var result = snap.Read;
-        var before = (Status, CurrentHash, StatusMessage, CanEdit, CanWrite, string.Join('|', ConflictCopies));
+        var before = (Status, CurrentHash, StatusMessage, LastReadStatus, CanEdit, CanWrite, string.Join('|', ConflictCopies));
+        LastReadStatus = result.Status;
         if (result.Status == TeamReadStatus.Ok && result.Team is not null && result.Json is not null)
         {
             TeamRefresh.Apply(result, _cachePath, source, _now());
-            Team = result.Team;
+            Team = WithoutClashes(result.Team);
             _json = result.Json;
             CurrentHash = result.Hash;
             LastChecked = _now();
@@ -582,8 +597,18 @@ public sealed class TeamLibraryService : IDisposable
         CanWrite = source.Kind == TeamSourceKind.File && snap.CanWrite;
         CanEdit = CanWrite && Team is not null && !Team.IsNewerSchema;
         ConflictCopies = snap.Conflicts;
-        var after = (Status, CurrentHash, StatusMessage, CanEdit, CanWrite, string.Join('|', ConflictCopies));
+        var after = (Status, CurrentHash, StatusMessage, LastReadStatus, CanEdit, CanWrite, string.Join('|', ConflictCopies));
         if (before != after) RaiseChanged();
+    }
+
+    // A team prompt or category whose id is also one of your own gets a new id (see TeamIds), so the shortcut menu,
+    // pins and Leave never mix the two up. Runs on the UI thread, where the personal library lives.
+    private TeamLibrary WithoutClashes(TeamLibrary team)
+    {
+        var personal = _personal();
+        TeamIds.ResolveClashes(team.Content, personal.Prompts.Select(p => p.Id).ToHashSet(),
+            personal.Categories.Select(c => c.Id).ToHashSet());
+        return team;
     }
 
     private void RaiseChanged()
@@ -614,7 +639,9 @@ public sealed class TeamLibraryService : IDisposable
             watcher.Created += onChange;
             watcher.Deleted += onChange;
             watcher.Renamed += (_, _) => ScheduleRefresh();
-            watcher.Error += (_, _) => { };
+            // Events can be lost (buffer overflow) or the watch can break (network drop): drop this watcher, so the
+            // next successful read creates a new one, and read now in case a change was missed.
+            watcher.Error += (_, _) => OnWatcherError(watcher);
             watcher.EnableRaisingEvents = true;
             return watcher;
         }
@@ -622,6 +649,35 @@ public sealed class TeamLibraryService : IDisposable
         {
             return null;
         }
+    }
+
+    // Called on a watcher thread.
+    private void OnWatcherError(FileSystemWatcher watcher)
+    {
+        try
+        {
+            if (_disposed) return;
+            _dispatcher.BeginInvoke(() =>
+            {
+                if (_disposed || !ReferenceEquals(_watcher, watcher)) return;
+                StopWatching();
+                _debounce.Stop();
+                _debounce.Start();
+            });
+        }
+        catch (Exception)
+        {
+            // Dispatcher shut down; nothing to do.
+        }
+    }
+
+    /// <summary>True while a file watcher is running (tests).</summary>
+    internal bool IsWatching => _watcher is not null;
+
+    /// <summary>Raises the running watcher's error handling, as a broken watch would (tests).</summary>
+    internal void SimulateWatcherError()
+    {
+        if (_watcher is { } watcher) OnWatcherError(watcher);
     }
 
     private void StopWatching()

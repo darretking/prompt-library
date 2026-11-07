@@ -24,8 +24,9 @@ public sealed class TeamLibraryServiceTests : IDisposable
 
     private string Cache => Path.Combine(_root, "cache", "team-cache.json");
 
-    private TeamLibraryService NewService(HttpClient? http = null, Func<string, TeamSource?>? parse = null)
-        => new(http ?? _http, "1.0.0", Cache, _settings, () => new Library(), () => { _settingsSaves++; return true; },
+    private TeamLibraryService NewService(HttpClient? http = null, Func<string, TeamSource?>? parse = null,
+        Func<Library>? personal = null)
+        => new(http ?? _http, "1.0.0", Cache, _settings, personal ?? (() => new Library()), () => { _settingsSaves++; return true; },
             () => _now, _ => { }, TimeSpan.FromMilliseconds(50), parse);
 
     private string MakeTeamFolder(string name, params string[] promptTitles)
@@ -438,5 +439,117 @@ public sealed class TeamLibraryServiceTests : IDisposable
 
         Assert.NotNull(parsedOn);
         Assert.NotEqual(uiThread, parsedOn);
+    });
+
+    // ---- Final review fixes ----------------------------------------------------------------------
+
+    [Fact]
+    public void Start_FolderWithUnreadableTeamFile_SaysSoPlainly() => Sta.Run(() =>
+    {
+        var folder = Path.Combine(_root, "unreadable");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, TeamFile.FileName), "not a team file");
+        using var svc = NewService();
+
+        var result = Wait(svc.StartAsync(folder, "Fresh", []));
+
+        Assert.False(result.Created);
+        Assert.Null(result.ExistingName);
+        Assert.Equal("This folder already has a team file that can't be read.", result.Message);
+        Assert.Equal("not a team file", File.ReadAllText(Path.Combine(folder, TeamFile.FileName)));
+        Assert.Null(svc.Source);
+    });
+
+    [Fact]
+    public void Refresh_RecordsWhyTheReadFailed() => Sta.Run(() =>
+    {
+        var folder = MakeTeamFolder("acme", "One");
+        var path = Path.Combine(folder, TeamFile.FileName);
+        using var svc = NewService();
+        Wait(svc.JoinAsync(folder));
+        Assert.Equal(TeamReadStatus.Ok, svc.LastReadStatus);
+
+        File.WriteAllText(path, """{"kind":"prompt-library-team","schemaVersion":2,"name":"x","prompts":[{"id":1}]}""");
+        Wait(svc.RefreshAsync());
+        Assert.Equal(TeamStatus.Offline, svc.Status);
+        Assert.Equal(TeamReadStatus.TooNew, svc.LastReadStatus);
+
+        File.WriteAllText(path, "not json");
+        Wait(svc.RefreshAsync());
+        Assert.Equal(TeamReadStatus.NotATeamFile, svc.LastReadStatus);
+
+        File.Delete(path);
+        Wait(svc.RefreshAsync());
+        Assert.Equal(TeamReadStatus.Unreachable, svc.LastReadStatus);
+        Assert.Equal("acme", svc.Team!.Name); // the last good copy stays throughout
+    });
+
+    [Fact]
+    public void Watcher_Error_DropsItAndTheNextReadMakesANewOne() => Sta.Run(() =>
+    {
+        var folder = MakeTeamFolder("acme", "One");
+        using var svc = NewService();
+        Wait(svc.JoinAsync(folder));
+        Assert.True(svc.IsWatching);
+
+        svc.SimulateWatcherError();
+        PumpUntil(() => !svc.IsWatching);
+        Assert.False(svc.IsWatching);
+
+        Wait(svc.RefreshAsync());
+        Assert.True(svc.IsWatching);
+        WriteTitle(folder, "Changed elsewhere");
+        PumpUntil(() => svc.Team!.Content.Prompts[0].Title == "Changed elsewhere");
+        Assert.Equal("Changed elsewhere", svc.Team!.Content.Prompts[0].Title);
+    });
+
+    [Fact]
+    public void Save_FileWithRepeatedPromptId_IsSavedNotFailed() => Sta.Run(() =>
+    {
+        var folder = MakeTeamFolder("acme", "One", "Two");
+        var path = Path.Combine(folder, TeamFile.FileName);
+        var text = File.ReadAllText(path);
+        var file = TeamFile.Parse(text);
+        text = text.Replace(file.Content.Prompts[1].Id.ToString(), file.Content.Prompts[0].Id.ToString()); // hand-edited
+        File.WriteAllText(path, text);
+        using var svc = NewService();
+        Wait(svc.JoinAsync(folder));
+        Assert.Equal(2, svc.Team!.Content.Prompts.Select(p => p.Id).Distinct().Count());
+        var edited = svc.Team!;
+        edited.Content.Prompts[1].Text = "Changed";
+
+        var result = Wait(svc.SaveAsync(edited, svc.CurrentHash));
+
+        Assert.Equal(TeamSaveStatus.Saved, result.Status);
+        Assert.Equal(TeamStatus.Connected, svc.Status);
+        var written = TeamFile.Parse(File.ReadAllText(path));
+        Assert.Equal("Changed", written.Content.Prompts[1].Text);
+        Assert.Equal(2, written.Content.Prompts.Select(p => p.Id).Distinct().Count());
+    });
+
+    [Fact]
+    public void Join_TeamIdsSharedWithPersonalPrompts_GetNewIds_LeaveKeepsPersonalPins() => Sta.Run(() =>
+    {
+        // A team library started by hand from someone's library.json: same prompt and category ids as their own.
+        var folder = MakeTeamFolder("acme", "One");
+        var file = TeamFile.Parse(File.ReadAllText(Path.Combine(folder, TeamFile.FileName)));
+        var personal = new Library();
+        personal.Categories.Add(new Category { Id = file.Content.Categories[0].Id, Name = "Sales" });
+        personal.Prompts.Add(new Prompt { Id = file.Content.Prompts[0].Id, Title = "One", Text = "One", CategoryId = file.Content.Categories[0].Id });
+        using var svc = NewService(personal: () => personal);
+
+        Wait(svc.JoinAsync(folder));
+
+        var team = svc.Team!.Content;
+        Assert.NotEqual(personal.Prompts[0].Id, team.Prompts[0].Id);
+        Assert.NotEqual(personal.Categories[0].Id, team.Categories[0].Id);
+        Assert.Equal(team.Categories[0].Id, team.Prompts[0].CategoryId);
+        var teamId = team.Prompts[0].Id;
+        Wait(svc.RefreshAsync());
+        Assert.Equal(teamId, svc.Team!.Content.Prompts[0].Id); // the same new id on every read
+
+        TeamUserState.Pin(_settings, personal.Prompts[0].Id);
+        svc.Leave();
+        Assert.Equal([personal.Prompts[0].Id], _settings.PinnedPromptIds);
     });
 }

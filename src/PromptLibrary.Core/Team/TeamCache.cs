@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using PromptLibrary.Core.Storage;
 
@@ -13,7 +14,7 @@ public static class TeamCache
         {
             ["kind"] = source.Kind.ToString(),
             ["location"] = source.Location,
-            ["fetchedAt"] = fetchedAt.ToString("O"),
+            ["fetchedAt"] = fetchedAt.ToString("O", CultureInfo.InvariantCulture),
             ["json"] = json,
         };
         AtomicFile.WriteAllText(path, JsonStore.Serialize(root));
@@ -29,7 +30,8 @@ public static class TeamCache
             var kind = Enum.Parse<TeamSourceKind>(root["kind"]!.GetValue<string>());
             var location = root["location"]!.GetValue<string>();
             var json = root["json"]!.GetValue<string>();
-            var fetched = DateTimeOffset.Parse(root["fetchedAt"]!.GetValue<string>());
+            var fetched = DateTimeOffset.Parse(root["fetchedAt"]!.GetValue<string>(), CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind);
             return (new TeamSource(kind, location), TeamFile.Parse(json), json, fetched);
         }
         catch (Exception)

@@ -14,8 +14,9 @@ public sealed record TeamSaveResult(TeamSaveStatus Status, string? NewHash, stri
 /// <summary>One older version of the team file, or a conflict copy made by file sync.</summary>
 public sealed record TeamHistoryItem(string Path, DateTimeOffset SavedAt, int PromptCount, bool IsConflictCopy);
 
-/// <summary>The outcome of starting a team library. <c>ExistingName</c> is the name of a team file already in the folder.</summary>
-public sealed record TeamCreateResult(bool Created, string FilePath, string? ExistingName, string? Message);
+/// <summary>The outcome of starting a team library. <c>AlreadyExists</c> is true when the folder already has a team file
+/// (nothing was written); <c>ExistingName</c> is its name, or null when it can't be read.</summary>
+public sealed record TeamCreateResult(bool Created, string FilePath, string? ExistingName, string? Message, bool AlreadyExists = false);
 
 /// <summary>
 /// Writes the shared team file safely: refuses to overwrite changes made by someone else since it was read, keeps
@@ -108,9 +109,9 @@ public sealed class TeamWriter(Func<DateTimeOffset> now)
                     var m = HistoryName.Match(Path.GetFileName(path));
                     if (!m.Success || TryCount(path) is not { } count) continue;
                     var savedAt = DateTime.TryParseExact(m.Groups["stamp"].Value, StampFormat, CultureInfo.InvariantCulture,
-                        DateTimeStyles.None, out var local)
-                        ? new DateTimeOffset(local)
-                        : File.GetLastWriteTimeUtc(path);
+                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var utc)
+                        ? new DateTimeOffset(utc, TimeSpan.Zero)
+                        : new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero);
                     items.Add(new TeamHistoryItem(path, savedAt, count, false));
                 }
                 result.AddRange(items.OrderByDescending(i => i.SavedAt).ThenByDescending(i => Path.GetFileNameWithoutExtension(i.Path), StringComparer.Ordinal));
@@ -155,7 +156,7 @@ public sealed class TeamWriter(Func<DateTimeOffset> now)
                 try { existing = TeamFile.Parse(File.ReadAllText(filePath)).Name; }
                 catch (InvalidDataException) { }
                 return new TeamCreateResult(false, filePath, existing,
-                    "There is already a team library in this folder.");
+                    "There is already a team library in this folder.", AlreadyExists: true);
             }
 
             var createdAt = now();
@@ -214,7 +215,8 @@ public sealed class TeamWriter(Func<DateTimeOffset> now)
 
     /// <summary>
     /// Resolves sync conflict copies once an editor has chosen a version: moves every <see cref="FindConflictCopies"/>
-    /// file into the history folder (never deletes one), named as a history copy at its last write time, so it can
+    /// file into the history folder (never deletes one), named as a history copy at the time of the move (its last
+    /// write could be older than every history copy, and it would then be pruned by the next save), so it can
     /// still be restored and the "two versions" notice clears. Returns how many were moved. Never throws for IO errors.
     /// </summary>
     public int MoveConflictCopiesToHistory(string filePath)
@@ -226,12 +228,12 @@ public sealed class TeamWriter(Func<DateTimeOffset> now)
             if (copies.Count == 0) return 0;
             var historyDir = Path.Combine(DirectoryOf(filePath), HistoryFolderName);
             Directory.CreateDirectory(historyDir);
+            var stamp = Stamp(now());
 
             foreach (var path in copies)
             {
                 try
                 {
-                    var stamp = File.GetLastWriteTime(path).ToString(StampFormat, CultureInfo.InvariantCulture);
                     var target = Path.Combine(historyDir, $"{HistoryPrefix}{stamp}.json");
                     for (var n = 2; File.Exists(target); n++)
                         target = Path.Combine(historyDir, $"{HistoryPrefix}{stamp} ({n}).json");
@@ -276,13 +278,17 @@ public sealed class TeamWriter(Func<DateTimeOffset> now)
         }
     }
 
+    // History file names carry the UTC time, so they sort (and are pruned) in time order whatever the time zone or
+    // daylight saving; the Restore list shows them in local time.
+    private static string Stamp(DateTimeOffset at) => at.UtcDateTime.ToString(StampFormat, CultureInfo.InvariantCulture);
+
     // Copies the current file text into the history folder, then removes all but the newest 30.
     private static void CopyToHistory(string filePath, string currentText, DateTimeOffset at)
     {
         var historyDir = Path.Combine(DirectoryOf(filePath), HistoryFolderName);
         Directory.CreateDirectory(historyDir);
 
-        var stamp = at.ToLocalTime().ToString(StampFormat, CultureInfo.InvariantCulture);
+        var stamp = Stamp(at);
         var target = Path.Combine(historyDir, $"{HistoryPrefix}{stamp}.json");
         for (var n = 2; File.Exists(target); n++)
             target = Path.Combine(historyDir, $"{HistoryPrefix}{stamp} ({n}).json");
