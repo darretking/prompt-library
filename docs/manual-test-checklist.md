@@ -5,14 +5,15 @@ Run on a real Windows PC with the Release exe (`publish\PromptLibrary.exe`) or t
 Tip: to start clean, exit the app and delete `%APPDATA%\PromptLibrary`. Release builds add a `PromptLibrary` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`; remove it afterwards if you don't want startup.
 
 ## First run & setup
-- [ ] Start with no `%APPDATA%\PromptLibrary`. Expected: the "Welcome to Prompt Library" wizard opens at step 1 of 4, and no tray balloon appears.
-- [ ] A tray icon is present; hovering shows `Prompt Library (Ctrl+Alt+P)`. The library holds 12 sample prompts.
+- [ ] Start with no `%APPDATA%\PromptLibrary`. Expected: the "Welcome to Prompt Library" wizard opens at step 1 of 5, and no tray balloon appears.
+- [ ] A tray icon is present; hovering shows `Prompt Library (Ctrl+Alt+P)`. The library holds 39 starter prompts in 13 categories.
 - [ ] Wizard step 2: press Ctrl+Alt+P. Expected: a check line confirms it. After the wizard closes, the same keys open the quick menu.
 - [ ] Step 2: Change shortcut, press Ctrl+Alt+K. Expected: keycaps update and "Saved. Try it now..." appears. Esc in the box cancels only the capture; a second Esc skips the wizard.
 - [ ] Step 2: choose a combination another app owns (start another hotkey tool first). Expected: "That shortcut is in use by another app." and it keeps listening.
 - [ ] Step 2: Alt+F4 while listening closes the window. Enter moves through the steps.
-- [ ] Step 3: pick a backup card, or Choose another folder with a scratch folder. Expected: it backs up and shows success. Keyboard focus lands on the selected card.
-- [ ] Step 4: untick paste and finish. Expected: Settings shows paste off. Closing the wizard with x from any step skips it safely and it does not reappear on the next start.
+- [ ] Step 3: Next without joining. Expected: no team switch afterwards. (Joining from here is in Team prompts below.)
+- [ ] Step 4: pick a backup card, or Choose another folder with a scratch folder. Expected: it backs up and shows success. Keyboard focus lands on the selected card.
+- [ ] Step 5: untick paste and finish. Expected: Settings shows paste off. Closing the wizard with x from any step skips it safely and it does not reappear on the next start.
 - [ ] Leave the wizard early while the shortcut is taken by another app. Expected: the tray shows the "in use by another app" message once. With no conflict, no message.
 - [ ] Settings, Change shortcut, press a combination another app owns. Expected: "That shortcut is in use by another app."; normal typing in other apps is unaffected.
 
@@ -76,6 +77,46 @@ Build an older version first (`dotnet build src/PromptLibrary.App -p:Version=1.0
 - [ ] Help → Check for updates… with the network off. Expected: "Couldn't check for updates…". With it on: the dialog, even after Not now.
 - [ ] Update now (installed build, with unsaved edits open). Expected: download progress, then "Save changes?"; Cancel keeps the app running. Save: the app closes, the installer opens, and after it finishes the new version starts.
 - [ ] Run the current version. Expected: no notification and no reminder.
+
+## Team prompts
+
+Use stand-in folders, never a real shared folder: run with `PROMPTLIBRARY_DEBUG_NO_CLOUDS=1` (Debug) and back up `%APPDATA%\PromptLibrary` first. Make folders `team-a` and `team-b` somewhere outside OneDrive / Google Drive / Dropbox.
+
+**Solo user**
+- [ ] Not joined. Expected: no Your/Team switch, no Team block or headings in the shortcut menu; Settings shows "Team prompts" with Join a team library and Start a team library; the editor shows Pin.
+
+**Start and join**
+- [ ] Settings → Start a team library: a folder that doesn't exist. Expected: "Can't reach that folder. Check the path, and that the drive or network is connected."
+- [ ] Start in `team-a`, name "Acme best practice", "Add example business prompts" ticked. Expected: `team-a\team-prompts.json` is written, the switch appears, the Team side shows 24 prompts in 6 categories, Settings shows "Connected to Acme best practice", the folder and "Updated today, …".
+- [ ] Start again in `team-a` from another PC or after leaving. Expected: "This folder already has a team library (Acme best practice)." with Join it; the file is not overwritten.
+- [ ] Copy `team-prompts.json` to `team-b` and run `attrib +r team-prompts.json` there. Leave, then Join `team-b`. Expected: "Checking…" with a progress bar while it reads; the Team header shows "Read only" (no Edit team library, no ⋯); nothing is marked New on first join.
+- [ ] Join a folder holding some other JSON file named `team-prompts.json`. Expected: "That isn't a Prompt Library team file." and nothing changes. Join `\nohost\share`. Expected: "Checking…", then "Can't reach that folder…".
+- [ ] Join a OneDrive or Google Drive share link. Expected: "That link opens a web page, not the file…".
+
+**Members**
+- [ ] Ctrl+2 shows Team prompts and Ctrl+1 Your prompts. The open team prompt has the lock line "Team prompt · Acme best practice · read only"; title, description and prompt read as normal text, not greyed.
+- [ ] Copy prompt on a team prompt (the button and Ctrl+Shift+C). Expected: copied, as for your own.
+- [ ] Make my copy on "Follow-up email after a meeting". Expected: one click, the window switches to Your prompts with the copy open in a "Sales" category, status "Copied to your prompts · Sales".
+- [ ] Pin two prompts (one yours, one the team's). Expected: "Pinned", a pin glyph on the rows, a flat Pinned block at the top of the shortcut menu with the team icon on the team one. Pin an 11th. Expected: "You can pin up to 10 prompts."
+- [ ] Hide from menu on a team prompt. Expected: "Hidden from the menu", it leaves the list and the shortcut menu, "Show hidden (1)" appears under the search box; ticking it lists the prompt greyed; right-click → Unhide brings it back ("Unhidden").
+- [ ] Right-click a team row. Expected: Pin / Unpin and Hide from menu / Unhide. On a hidden row Pin is disabled.
+- [ ] Search "email" on either side. Expected: results from both, team ones with the team icon; opening a result from the other side switches sides and keeps the search text.
+- [ ] Shortcut menu: "Team prompts" heading, the team categories with the team icon, then "Your prompts" and your categories. With 7 or more team categories the team block is one "Team prompts ▸" submenu.
+- [ ] Another editor adds a prompt. Expected: within a few seconds a "New" tag and a dot on the Team switch; a changed prompt shows "Updated"; opening it or Mark all as seen clears them.
+
+**Editors** (joined to `team-a`)
+- [ ] Edit team library. Expected: the bar "Editing team library: changes go to everyone · Done", and Delete · Pin | Save · Copy prompt in the editor. Fix a typo and Save. Expected: "Saved for everyone", and a copy of the old file in `team-a\Prompt Library history\`.
+- [ ] Delete a team prompt. Expected: "Delete "…"? This removes it for everyone." first.
+- [ ] Mid-edit, change `team-prompts.json` in a text editor, then Save in the app. Expected: "Someone else changed the team library, so it's been reloaded. Your change is still here: check it and save again." Your typed text is still in the editor; Save again keeps both changes.
+- [ ] ⋯ → Restore an older version…. Expected: versions listed "Today, 08:36 · 24 prompts", newest first; Restore asks first, then "Restored for everyone".
+- [ ] Copy `team-prompts.json` to `team-prompts-LAPTOP.json`. Expected: "Two versions of the team library found · Review". Review lists "Other version from sync · …" first. Keep current version (or Restore it). Expected: the notice clears and the copy moves into the history folder.
+- [ ] Close the window while editing. Expected: edit mode ends; unsaved text gets the usual "Save changes?".
+
+**Offline and leaving**
+- [ ] Rename `team-a` and restart the app. Expected: the Team prompts still show; the header reads "Last updated … · can't reach the team library · Retry"; Settings shows the reason with Retry. Rename it back and press Retry. Expected: back to "Acme best practice · updated …".
+- [ ] Settings → Leave team library → Leave. Expected: the switch, Team block and pins on team prompts are gone; `%APPDATA%\PromptLibrary\team-cache.json` is deleted; your copies stay.
+- [ ] Setup guide (Help → Setup guide…), step 3 of 5 "Does your team share prompts?": Join a team library and Start a team library open the same dialogs; Next skips; once joined it shows "Connected to …".
+- [ ] Minimum window size (860×520) on the Team side, in edit mode and with a new prompt. Expected: nothing cut off (the window's minimum height grows while the switch and edit bar show).
 
 ## Scaling & accessibility
 - [ ] At 100%, 150% and 200% display scaling (sign out and in after changing): main window, quick menu, Settings, Restore and the wizard are sharp, nothing is clipped, and the minimum window size still works.

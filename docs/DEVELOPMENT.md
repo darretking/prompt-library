@@ -60,6 +60,22 @@ The app asks GitHub for the latest release (`GET /repos/{owner}/{repo}/releases/
 - **Releases** therefore need the MSI attached as an asset; GitHub adds the `digest` automatically.
 - **To test against a real release,** build an older version: `dotnet build src/PromptLibrary.App -p:Version=1.0.0`, then run with both debug switches above and use Help → Check for updates…. Back up `%APPDATA%\PromptLibrary` first and delete `update-check.json` to start fresh.
 
+### Team library
+
+A team shares one file, `team-prompts.json`, in a shared folder (network drive, or a OneDrive / Google Drive / Dropbox synced folder) or at a public https link. Members see it read-only on the **Team prompts** side; anyone whose PC can write to the file can choose **Edit team library**. The code is in `src/PromptLibrary.Core/Team/` (format, reading, writing, pins and markers) and `src/PromptLibrary.App/Team/TeamLibraryService.cs` (refresh, offline copy, joining, saving).
+
+- **File format:** the same shape as `library.json` (`schemaVersion`, `categories`, `prompts` with GUID IDs and `createdAt` / `updatedAt`), plus `"kind": "prompt-library-team"`, a `name` (for example "Acme best practice") and an `updatedAt`. Unknown fields are kept when the app saves, so a later version can add some. A file with a higher `schemaVersion` can still be viewed but not edited.
+- **Sources:** one box takes a folder (the app looks for `team-prompts.json` in it), the file itself, or an https link. A link must return the file: GitHub raw links and Dropbox links work (Dropbox `dl=0` is rewritten to `dl=1`, GitHub `/blob/` to raw). A link that returns a web page (OneDrive and Google Drive share pages) is refused with a message saying so. Links are https only, no sign-in, 15 s time limit, 2 MB cap, the normal `PromptLibrary/<version>` User-Agent, and never a redirect to http.
+- **Saving (editors):** before each save the app re-reads the file and compares its SHA-256 with the one it loaded. If someone else changed it, the save is refused, the library reloads and the typed change stays in the editor to save again. Otherwise the current file is copied to `Prompt Library history\team-prompts <yyyy-MM-dd_HHmmss>.json` next to it (the newest 30 are kept) and the new file is written atomically. **⋯ → Restore an older version…** lists that history.
+- **Sync conflicts:** sibling files named `team-prompts*.json` (OneDrive's `team-prompts-PCNAME.json`, Dropbox's `… (conflicted copy …).json`) make editors see "Two versions of the team library found · Review". Restoring one, or **Keep current version**, moves the copies into the history folder.
+- **Write access** is a probe: the file is opened for writing without changing it, at connect, on each refresh and on Retry. Non-writers see "Read only".
+- **Refresh:** at start (from the offline copy first, then the source), every hour, two seconds after a change to a local or synced file (a file watcher), and on **Retry**. Nothing is read on the UI thread. While an editor has the library unlocked, refreshes wait until **Done**. Bad or unreadable data never replaces the last good copy; the Team header then says "can't reach the team library" with Retry, only after a read has failed.
+- **Offline copy:** `%APPDATA%\PromptLibrary\team-cache.json` holds the last good file, when it was read and from where. Personal backups never include team prompts: the shared file is the master and its history is the team's backup.
+- **Per PC** (in `settings.json`): `teamSource`, `pinnedPromptIds` (either library, at most 10), `hiddenTeamPromptIds`, `seenTeamPrompts` (what drives the New / Updated tags) and `teamBaselineTaken`. On first join nothing is marked new. **Leave team library** clears all of these and the offline copy; copies made with **Make my copy** stay.
+- **Start a team library** writes a new file only into a folder that hasn't got one (otherwise it offers **Join it**). It can copy in some of your categories (with new IDs) and, by default, 24 business example prompts in 6 categories (`TeamSeedLibrary`).
+
+**Testing a team by hand.** Never point a test at a real shared folder. Make two stand-in folders anywhere outside your cloud folders, run the app with `PROMPTLIBRARY_DEBUG_NO_CLOUDS=1`, and **Start a team library** in the first (name it "Acme best practice"). Copy its `team-prompts.json` to the second folder and run `attrib +r team-prompts.json` there to get a read-only member. Edit the file in a text editor while the app is in edit mode to try a refused save, copy it to `team-prompts-LAPTOP.json` to try a sync conflict, and rename the folder to try offline. Back up `%APPDATA%\PromptLibrary` first: the app has no switch to use another data folder. The steps are in [manual-test-checklist.md](manual-test-checklist.md#team-prompts).
+
 ### Manual checks
 
 Some things only a real desktop can show (auto-paste into other apps, notifications, display scaling). They're listed in [manual-test-checklist.md](manual-test-checklist.md) and [edge-cases.md](edge-cases.md).
@@ -95,6 +111,7 @@ The MSI installs per user (no admin prompt) to `%LOCALAPPDATA%\Programs\Prompt L
 | `Safety backups\` | Copies made before a restore when backups are off |
 | `crash.log` | Details of any unexpected error |
 | `update-check.json` | When GitHub was last asked about updates, the newest release seen, and the version you said "Not now" to |
+| `team-cache.json` | The last good copy of the team library, for offline use (only while a team library is joined) |
 
 ## Design
 

@@ -90,6 +90,47 @@ Everything round 1 flagged has been fixed and works when tested live. That inclu
 - The custom folder's card is still called "Folder".
 - The move list has no "Choose a category" placeholder.
 
+## Round 4: Team prompts (v1.1.0)
+
+**2026-11-07, Debug build of commit ef9fd82.** I scored every new or changed screen of the Team prompts feature from the running app, with `PROMPTLIBRARY_DEBUG_NO_CLOUDS=1`, at 200% (3840×2400), with the demo team library "Acme best practice" in two stand-in folders (one writable, one read-only). The PC was unlocked, so this round I could also send real keys (Tab, Ctrl+1, Ctrl+2, Enter, the Ctrl+Alt+P shortcut) and right-click. Method and weights as in rounds 2 and 3. Full notes and the screenshots: `.superpowers/sdd/2026-11-05-team-prompts/task-11-report.md` and `task-11-shots/`.
+
+### Scores
+
+| Screen | UI round 1 | UI after fixes | Simplicity | Result |
+|---|---|---|---|---|
+| Main window: Team side (member, read only) | 90.1 | 95.0 | 96.25 (main, both sides) | Pass |
+| Main window: Team side, editing | 88.0 | 94.9 | (main) | Pass |
+| Main window: Team side, offline + Retry | 88.9 | 95.8 | (main) | Pass |
+| Main window: search across both libraries | 95.0 | 95.0 | (main) | Pass |
+| Main window: Team side at the minimum size | 82.3 | 94.3 | (main) | Pass |
+| Main window: Your side with the switch | 95.6 | 95.6 | (main) | Pass |
+| Restore an older version (history) | 94.4 | 94.4 | 96.0 | Pass |
+| Restore an older version (review sync copies) | 94.9 | 94.9 | (history) | Pass |
+| Join a team library (empty, Checking…, errors) | 94.9 | 95.75 | 98.25 | Pass |
+| Start a team library | 93.9 | 93.9 | 96.0 | Pass |
+| Settings: Team prompts (not connected / connected / offline) | 86.85 | 93.8 | 95.0 | Pass |
+| Setup guide step 3 of 5 (not connected / connected) | 96.7 | 96.7 | 97.0 (setup guide) | Pass |
+| Shortcut menu with Pinned and Team blocks (criteria 1, 4, 8) | 96.5 | 96.5 | — | Pass |
+| Team delete / refused save / restore / leave questions (criterion 8) | 88.9 | 94.4 | — | Pass |
+
+Targets: UI ≥ 90 on every screen; simplicity ≥ 95 on the main window and the setup guide, ≥ 90 on dialogs. **All met after the fixes.** Main-window simplicity was 93.9 in round 1 (the library name was trimmed to "A…", the offline reason was hidden, and the refused-save message said to make the change again although it was kept).
+
+### Fixed in this round (commit ef9fd82)
+
+1. **Team header trimmed.** In the 260 px list column the header showed "Acme best practice…", "A…" next to Edit team library and Mark all as seen, and "Last updated today, 08…" with the reason cut off. It now sits on the switch's line, which spans the window: "Acme best practice · updated today, 08:40" after the switch, the actions at the right. Nothing is trimmed at 860 px.
+2. **Buttons cut off at the minimum size.** On the Team side the two-line button row lost Copy prompt; in edit mode and with a new prompt the whole row left the window. Read-only prompts drop the unused tab-hint row, and the window's minimum height grows by the switch and edit-bar heights (520 + bars).
+3. **Settings, connected.** "Connected to Acme best practice" was followed by "Connected", with no last update and no Retry, and Leave team library was below the fold. It now reads "Updated today, 08:43", or "Can't reach that folder." + Retry, and the window is 720 px tall.
+4. **Words.** Refused save: "Someone else changed the team library, so it's been reloaded. Your change is still here: check it and save again." A plain folder that can't be reached: "… Check the path, and that the drive or network is connected." Team deletes name the prompt: "Delete "Contract summary"? This removes it for everyone."
+
+### Remaining deductions (all small)
+
+- Scaling tested at 200% only; 100% and 150% need a sign-out.
+- The Start dialog's "Copy some of your categories in" uses WPF's default expander arrow, and with 13 categories ticked open the dialog grows tall.
+- "Read only" shows in the offline header even for an editor (the probe can't open an unreachable file); its tooltip then says "You can't change files in this folder".
+- "Team prompts updated" shows on Done even when nothing arrived while editing (ledgered).
+- An auto-opened first prompt keeps its "New" / "Updated" tag until you pick a prompt yourself (ledgered, by design).
+- The README's Settings and backup-step screenshots are from 1.0 (they don't show the Team prompts section); the Settings section was scored from live shots instead.
+
 ## What round 2 asked to fix (now done)
 
 1. **The "Backed up to…" message is too long.** It shows the full folder path, which wraps over two lines, and the ✓ ends up on a line by itself. Shorten the message to "Backed up." or the folder's name, and keep the ✓ beside the text.
