@@ -6,9 +6,9 @@ using PromptLibrary.Core.Onboarding;
 namespace PromptLibrary.App.ViewModels;
 
 /// <summary>
-/// The first-run wizard: Welcome → Shortcut (try it, or change it) → Backups (the shared picker in select-only
-/// mode; Next backs up to the selected folder) → Ready (start with Windows, paste after copy). Finish applies
-/// step 4's choices; Skip and closing early keep the defaults. Both mark the first run done.
+/// The first-run wizard: Welcome → Shortcut (try it, or change it) → Team (join or start a team library, or just
+/// Next) → Backups (the shared picker in select-only mode; Next backs up to the selected folder) → Ready (start
+/// with Windows, paste after copy). Finish applies step 5's choices; Skip and closing early keep the defaults. Both mark the first run done.
 /// </summary>
 public sealed class OnboardingViewModel : ObservableObject
 {
@@ -37,6 +37,7 @@ public sealed class OnboardingViewModel : ObservableObject
         _startWithWindows = host.Settings.StartWithWindows;
         _pasteAfterCopy = host.Settings.PasteAfterCopy;
         _isChangingShortcut = IsConflict; // the shortcut is taken: the capture box shows straight away
+        Team = new TeamConnectionViewModel(host.Team);
 
         NextCommand = new AsyncRelayCommand(NextAsync, () => !IsBusy);
         BackCommand = new RelayCommand(() => Move(_flow.Back()), () => !IsBusy);
@@ -67,6 +68,7 @@ public sealed class OnboardingViewModel : ObservableObject
     public OnboardingStep Step => _flow.Step;
     public bool IsWelcome => Step == OnboardingStep.Welcome;
     public bool IsShortcut => Step == OnboardingStep.Shortcut;
+    public bool IsTeam => Step == OnboardingStep.Team;
     public bool IsBackups => Step == OnboardingStep.Backups;
     public bool IsReady => Step == OnboardingStep.Ready;
     public string StepText => _flow.StepText;
@@ -140,7 +142,10 @@ public sealed class OnboardingViewModel : ObservableObject
         private set => SetProperty(ref _shortcutStatusIsError, value);
     }
 
-    // Step 4: ready
+    // Step 3: team (Join and Start open the same dialogs as Settings; Next continues without a team library)
+    public TeamConnectionViewModel Team { get; }
+
+    // Step 5: ready
     public string ReadyText => OnboardingText.ReadyText(Hotkey, !IsConflict, _pasteAfterCopy);
     public string ShortcutSummary => OnboardingText.ShortcutSummary(Hotkey, !IsConflict);
     public string BackupSummary => OnboardingText.BackupSummary(_host.Settings.BackupFolder, _host.Settings.BackupProviderName);
@@ -165,7 +170,7 @@ public sealed class OnboardingViewModel : ObservableObject
     public bool AsksBeforeLeaving
         => _flow.AsksBeforeLeaving(!BackupLocation.SameFolder(_folderAtStart, _host.Settings.BackupFolder));
 
-    /// <summary>Step 3's picker; its busy state holds Next back.</summary>
+    /// <summary>Step 4's picker; its busy state holds Next back.</summary>
     public void AttachPicker(BackupLocationPickerViewModel picker)
     {
         _picker = picker;
@@ -226,7 +231,7 @@ public sealed class OnboardingViewModel : ObservableObject
     public void ShowShortcutHint(string hint) => SetShortcutStatus(hint, isError: false);
 
     /// <summary>
-    /// Skip setup, Esc or ×: the choices so far are kept (on step 4 including its checkboxes), everything else stays
+    /// Skip setup, Esc or ×: the choices so far are kept (on step 5 including its checkboxes), everything else stays
     /// at the defaults, and the wizard won't open by itself again.
     /// </summary>
     public void Leave()

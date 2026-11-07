@@ -8,7 +8,7 @@
         Icon="/Assets/app.ico"
         Width="640" Height="480"
         ResizeMode="NoResize">
-    <!-- Four steps in one window; only the current step's panel is visible. Enter = Next/Finish, Esc or × = skip
+    <!-- Five steps in one window; only the current step's panel is visible. Enter = Next/Finish, Esc or × = skip
          (after step 1 it asks first once a backup folder has been chosen). -->
     <Window.Resources>
         <Style x:Key="Heading" TargetType="TextBlock">
@@ -113,7 +113,31 @@
                             Visibility="{Binding ShowChangeLink, Converter={StaticResource BoolToVisibility}}" />
                 </StackPanel>
 
-                <!-- Step 3: Backups -->
+                <!-- Step 3: Team (optional; Next skips) -->
+                <StackPanel Style="{StaticResource StepPanel}"
+                            Visibility="{Binding IsTeam, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="Does your team share prompts?" Style="{StaticResource Heading}" />
+                    <TextBlock Style="{StaticResource Body}"
+                               Text="Connect to your team's shared prompts, or start a library for your team." />
+                    <StackPanel Orientation="Horizontal" Margin="0,24,0,0"
+                                Visibility="{Binding Team.ShowActions, Converter={StaticResource BoolToVisibility}}">
+                        <Button Content="Join a team library" Click="JoinTeam_Click"
+                                AutomationProperties.Name="Join a team library" />
+                        <Button Content="Start a team library" Margin="8,0,0,0" Click="StartTeam_Click"
+                                AutomationProperties.Name="Start a team library" />
+                    </StackPanel>
+                    <StackPanel Margin="0,24,0,0"
+                                Visibility="{Binding Team.IsConnected, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Width="16" Height="16" Margin="0,2,8,0" VerticalAlignment="Top" Data="M1.5,8.5 L6,13 L14.5,3.5"
+                                  Stroke="{StaticResource Brush.Brand}" StrokeThickness="2" />
+                            <TextBlock Text="{Binding Team.ConnectedLine}" Style="{StaticResource Body}"
+                                       AutomationProperties.LiveSetting="Polite" />
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Step 4: Backups -->
                 <StackPanel Style="{StaticResource StepPanel}"
                             Visibility="{Binding IsBackups, Converter={StaticResource BoolToVisibility}}">
                     <TextBlock Text="Keep a copy in the cloud" Style="{StaticResource Heading}" />
@@ -126,7 +150,7 @@
                                Visibility="{Binding ShowFinishingBackup, Converter={StaticResource BoolToVisibility}}" />
                 </StackPanel>
 
-                <!-- Step 4: Ready -->
+                <!-- Step 5: Ready -->
                 <StackPanel Style="{StaticResource StepPanel}"
                             Visibility="{Binding IsReady, Converter={StaticResource BoolToVisibility}}">
                     <TextBlock Text="You're all set" Style="{StaticResource Heading}" />
@@ -154,7 +178,7 @@
             </Grid>
         </ScrollViewer>
 
-        <!-- Footer: one quiet link on the left (steps 1 and 3 only), then the step count, Back and Next/Finish. -->
+        <!-- Footer: one quiet link on the left (steps 1 and 4 only), then the step count, Back and Next/Finish. -->
         <Border Grid.Row="1" BorderBrush="{StaticResource Brush.Line}" BorderThickness="0,1,0,0" Padding="32,16">
             <Grid>
                 <Grid.ColumnDefinitions>

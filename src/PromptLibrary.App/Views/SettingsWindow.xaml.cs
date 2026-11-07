@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using PromptLibrary.App.ViewModels;
 using PromptLibrary.Core.Hotkeys;
 
 namespace PromptLibrary.App.Views;
@@ -16,6 +17,7 @@ public partial class SettingsWindow : Window
 
     private readonly AppHost _host;
     private readonly UserCloseTracker _closes;
+    private readonly TeamConnectionViewModel _team;
 
     public SettingsWindow(AppHost host)
     {
@@ -53,7 +55,17 @@ public partial class SettingsWindow : Window
         StartupBox.Unchecked += (_, _) => ApplyStartWithWindows(false);
 
         Picker.Attach(host);
+
+        _team = new TeamConnectionViewModel(host.Team);
+        TeamSection.DataContext = _team;
+        Closed += (_, _) => _team.Dispose();
     }
+
+    private void JoinTeam_Click(object sender, RoutedEventArgs e) => TeamDialogs.Join(this, _host);
+
+    private void StartTeam_Click(object sender, RoutedEventArgs e) => TeamDialogs.Start(this, _host);
+
+    private void LeaveTeam_Click(object sender, RoutedEventArgs e) => TeamDialogs.Leave(this, _team);
 
     /// <summary>Moves the focus to the backup folders (for "Set up backups").</summary>
     public void FocusBackups() => Picker.FocusFirstCard();

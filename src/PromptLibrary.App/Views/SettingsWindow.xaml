@@ -52,6 +52,33 @@
                 <CheckBox x:Name="StartupBox" Margin="0,16,0,0"
                           Content="Start Prompt Library when Windows starts"
                           AutomationProperties.Name="Start Prompt Library when Windows starts" />
+
+                <!-- Team prompts: Join / Start until a team library is connected, then only the connected state + Leave. -->
+                <StackPanel x:Name="TeamSection" Margin="0,24,0,0"
+                            Visibility="{Binding IsAvailable, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="Team prompts" Style="{StaticResource FieldLabel}" />
+
+                    <StackPanel Visibility="{Binding ShowActions, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,8"
+                                   Text="Connect to your team's shared prompts, or start a library for your team." />
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Join a team library" Click="JoinTeam_Click"
+                                    AutomationProperties.Name="Join a team library" />
+                            <Button Content="Start a team library" Margin="8,0,0,0" Click="StartTeam_Click"
+                                    AutomationProperties.Name="Start a team library" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="{Binding ConnectedLine}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding SourceText}" Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                                   Margin="0,2,0,0" />
+                        <TextBlock Text="{Binding StatusText}" Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                                   Margin="0,2,0,0" />
+                        <Button Content="Leave team library" HorizontalAlignment="Left" Margin="0,8,0,0"
+                                Click="LeaveTeam_Click" AutomationProperties.Name="Leave team library" />
+                    </StackPanel>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
 

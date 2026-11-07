@@ -11,7 +11,7 @@ public class OnboardingFlowTests
         var flow = new OnboardingFlow();
 
         Assert.Equal(OnboardingStep.Welcome, flow.Step);
-        Assert.Equal("Step 1 of 4", flow.StepText);
+        Assert.Equal("Step 1 of 5", flow.StepText);
         Assert.False(flow.CanGoBack);
         Assert.True(flow.ShowsSkipSetup);
         Assert.False(flow.ShowsSkipBackups(backupsOn: false));
@@ -19,17 +19,20 @@ public class OnboardingFlowTests
     }
 
     [Fact]
-    public void Next_WalksThroughAllFourSteps_ThenStops()
+    public void Next_WalksThroughAllFiveSteps_ThenStops()
     {
         var flow = new OnboardingFlow();
 
         Assert.True(flow.Next());
         Assert.Equal(OnboardingStep.Shortcut, flow.Step);
         Assert.True(flow.Next());
+        Assert.Equal(OnboardingStep.Team, flow.Step);
+        Assert.Equal("Step 3 of 5", flow.StepText);
+        Assert.True(flow.Next());
         Assert.Equal(OnboardingStep.Backups, flow.Step);
         Assert.True(flow.Next());
         Assert.Equal(OnboardingStep.Ready, flow.Step);
-        Assert.Equal("Step 4 of 4", flow.StepText);
+        Assert.Equal("Step 5 of 5", flow.StepText);
         Assert.Equal("Finish", flow.PrimaryText);
         Assert.True(flow.IsLastStep);
 
@@ -55,9 +58,10 @@ public class OnboardingFlowTests
     [Theory]
     [InlineData(OnboardingStep.Welcome, true, false)]
     [InlineData(OnboardingStep.Shortcut, false, false)]
+    [InlineData(OnboardingStep.Team, false, false)]
     [InlineData(OnboardingStep.Backups, false, true)]
     [InlineData(OnboardingStep.Ready, false, false)]
-    public void OneQuietLinkAtMost_SkipSetupOnStep1_SkipBackupsOnStep3(OnboardingStep step, bool skipSetup, bool skipBackups)
+    public void OneQuietLinkAtMost_SkipSetupOnStep1_SkipBackupsOnStep4(OnboardingStep step, bool skipSetup, bool skipBackups)
     {
         var flow = AtStep(step);
 
@@ -73,10 +77,30 @@ public class OnboardingFlowTests
     [InlineData(OnboardingStep.Welcome, true, false)]
     [InlineData(OnboardingStep.Shortcut, false, false)]
     [InlineData(OnboardingStep.Shortcut, true, true)]
+    [InlineData(OnboardingStep.Team, true, true)]
     [InlineData(OnboardingStep.Backups, true, true)]
     [InlineData(OnboardingStep.Ready, true, true)]
     public void AsksBeforeLeaving_OnlyAfterStep1_OnceABackupFolderWasChosen(OnboardingStep step, bool chosen, bool asks)
         => Assert.Equal(asks, AtStep(step).AsksBeforeLeaving(backupFolderChosen: chosen));
+
+    [Fact]
+    public void TeamStep_SkipKeepsNoTeam()
+    {
+        var flow = AtStep(OnboardingStep.Team);
+        var settings = new AppSettings();
+
+        // Next is the default and continues without a team library.
+        Assert.Equal("Next", flow.PrimaryText);
+        Assert.False(flow.ShowsSkipSetup);
+        Assert.False(flow.ShowsSkipBackups(backupsOn: false));
+        Assert.True(flow.Next());
+        Assert.Equal(OnboardingStep.Backups, flow.Step);
+
+        flow.ApplyLeave(settings, startWithWindows: false, pasteAfterCopy: false);
+
+        Assert.Null(settings.TeamSource);
+        Assert.True(settings.FirstRunDone);
+    }
 
     [Fact]
     public void Skip_MarksFirstRunDone_AndKeepsDefaults()
@@ -126,7 +150,7 @@ public class OnboardingFlowTests
 public class OnboardingLeaveTests
 {
     [Fact]
-    public void LeavingFromStep4_KeepsTheCheckboxChoices()
+    public void LeavingFromStep5_KeepsTheCheckboxChoices()
     {
         var flow = new OnboardingFlow();
         while (!flow.IsLastStep) flow.Next();
@@ -143,7 +167,8 @@ public class OnboardingLeaveTests
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(3)]
-    public void LeavingBeforeStep4_KeepsTheDefaults(int nexts)
+    [InlineData(4)]
+    public void LeavingBeforeStep5_KeepsTheDefaults(int nexts)
     {
         var flow = new OnboardingFlow();
         for (var i = 0; i < nexts - 1; i++) flow.Next();

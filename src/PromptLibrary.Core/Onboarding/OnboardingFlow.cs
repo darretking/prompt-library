@@ -6,17 +6,18 @@ public enum OnboardingStep
 {
     Welcome = 1,
     Shortcut = 2,
-    Backups = 3,
-    Ready = 4,
+    Team = 3,
+    Backups = 4,
+    Ready = 5,
 }
 
 /// <summary>
-/// The onboarding wizard's steps (Welcome → Shortcut → Backups → Ready) and what Finish and Skip do to the settings.
-/// One quiet way out per page at most: <c>Skip setup</c> on step 1, <c>Skip backups for now</c> on step 3.
+/// The onboarding wizard's steps (Welcome → Shortcut → Team → Backups → Ready) and what Finish and Skip do to the settings.
+/// One quiet way out per page at most: <c>Skip setup</c> on step 1, <c>Skip backups for now</c> on step 4. The Team step has none: Next continues without a team library.
 /// </summary>
 public sealed class OnboardingFlow
 {
-    public const int StepCount = 4;
+    public const int StepCount = 5;
 
     public OnboardingStep Step { get; private set; } = OnboardingStep.Welcome;
 
@@ -31,7 +32,7 @@ public sealed class OnboardingFlow
 
     public bool ShowsSkipSetup => Step == OnboardingStep.Welcome;
 
-    /// <summary>Step 3's quiet way out, until backups are on (then Next simply continues).</summary>
+    /// <summary>Step 4's quiet way out, until backups are on (then Next simply continues).</summary>
     public bool ShowsSkipBackups(bool backupsOn) => Step == OnboardingStep.Backups && !backupsOn;
 
     /// <summary>Moves to the next step; false on the last one (the caller finishes instead).</summary>
@@ -56,7 +57,7 @@ public sealed class OnboardingFlow
     public bool AsksBeforeLeaving(bool backupFolderChosen) => Step != OnboardingStep.Welcome && backupFolderChosen;
 
     /// <summary>
-    /// Esc, × or Skip setup: "your choices so far are kept". On step 4 that includes its checkboxes (as Finish);
+    /// Esc, × or Skip setup: "your choices so far are kept". On step 5 that includes its checkboxes (as Finish);
     /// before it the defaults stay. Either way the wizard doesn't open by itself again. The caller saves.
     /// </summary>
     public void ApplyLeave(AppSettings settings, bool startWithWindows, bool pasteAfterCopy)
@@ -70,7 +71,7 @@ public sealed class OnboardingFlow
     /// <summary>Skip (or leaving early): the defaults stay as they are and the wizard doesn't open again.</summary>
     public static void ApplySkip(AppSettings settings) => settings.FirstRunDone = true;
 
-    /// <summary>Finish: step 4's checkboxes apply and the wizard doesn't open again. The caller saves.</summary>
+    /// <summary>Finish: step 5's checkboxes apply and the wizard doesn't open again. The caller saves.</summary>
     public static void ApplyFinish(AppSettings settings, bool startWithWindows, bool pasteAfterCopy)
     {
         settings.StartWithWindows = startWithWindows;

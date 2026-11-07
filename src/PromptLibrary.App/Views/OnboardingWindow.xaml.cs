@@ -62,7 +62,11 @@ public partial class OnboardingWindow : Window
         };
         ShortcutField.ShortcutPressed += (_, shortcut) => ViewModel.ApplyShortcut(shortcut);
         ShortcutField.Rejected += (_, hint) => ViewModel.ShowShortcutHint(hint);
-        Closed += (_, _) => _host.ResumeHotkey();
+        Closed += (_, _) =>
+        {
+            _host.ResumeHotkey();
+            ViewModel.Team.Dispose();
+        };
         Loaded += (_, _) => PrimaryButton.Focus();
     }
 
@@ -133,8 +137,12 @@ public partial class OnboardingWindow : Window
         base.OnClosing(e);
     }
 
+    private void JoinTeam_Click(object sender, RoutedEventArgs e) => TeamDialogs.Join(this, _host);
+
+    private void StartTeam_Click(object sender, RoutedEventArgs e) => TeamDialogs.Start(this, _host);
+
     /// <summary>
-    /// A new step: the keyboard focus goes to Next/Finish so Enter moves on, except on step 3 where it goes to the
+    /// A new step: the keyboard focus goes to Next/Finish so Enter moves on, except on step 4 where it goes to the
     /// selected folder card, so the choice is seen before Next backs up there.
     /// </summary>
     private void FocusForStep()
