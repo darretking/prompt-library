@@ -11,7 +11,8 @@ namespace PromptLibrary.App.Views;
 /// <summary>
 /// Restore an older version of the team library (from the Team header's ⋯ menu), or Review the other versions sync
 /// left beside it. Lists those first ("Other version from sync · …"), then the history copies, newest first, and
-/// writes the chosen one back for everyone after a confirm; the current version gets a history copy first.
+/// writes the chosen one back for everyone after a confirm; the current version gets a history copy first. Restoring
+/// a version from sync, or Keep current version, resolves the conflict: the copies move into the history folder.
 /// </summary>
 public partial class TeamHistoryWindow : Window
 {
@@ -65,6 +66,11 @@ public partial class TeamHistoryWindow : Window
         ShowEmpty("Looking for older versions…");
 
         var items = await _service.ListHistoryAsync();
+        var conflicts = items.Any(i => i.IsConflictCopy);
+        KeepButton.Visibility = conflicts ? Visibility.Visible : Visibility.Collapsed;
+        HelpText.Text = conflicts
+            ? "Restore the version everyone should have, or keep the current one. Either way, nothing is deleted."
+            : "Restoring keeps a copy of the current version first.";
         if (items.Count == 0)
         {
             ShowEmpty("No older versions yet. One is kept each time the team library is saved.");
@@ -138,6 +144,24 @@ public partial class TeamHistoryWindow : Window
         ErrorText.Text = result.Status == TeamSaveStatus.ChangedByOther
             ? ChangedByOtherMessage
             : result.Message ?? "Couldn't restore the team library.";
+    }
+
+    /// <summary>Keep current version: the team file stays; the other versions from sync go into its history.</summary>
+    private async void Keep_Click(object sender, RoutedEventArgs e)
+    {
+        if (_restoring) return;
+        _restoring = true;
+        Root.IsEnabled = false;
+        try
+        {
+            await _service.KeepCurrentVersionAsync();
+        }
+        finally
+        {
+            _restoring = false;
+            Root.IsEnabled = true;
+        }
+        DialogResult = false; // nothing was restored; the notice clears with the next read
     }
 
     private sealed record VersionRow(TeamHistoryItem Item, string Text);

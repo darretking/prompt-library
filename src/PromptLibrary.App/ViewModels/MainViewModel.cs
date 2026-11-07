@@ -47,6 +47,11 @@ public sealed class MainViewModel : ObservableObject
     // True from the start of a team save until its outcome has been applied on the UI thread; changes wait for it.
     private bool _teamSaving;
 
+    // What the user was doing when "Save changes?" → Save started a team save: it goes on once the save went through.
+    private Action? _afterTeamSave;
+
+    private enum SaveAnswer { Proceed, Cancelled, Saving }
+
     // The user answered Cancel to "Save changes?" while the search was hiding the open prompt: the editor stays
     // and the search doesn't ask again until the editor changes or the search is cleared.
     private bool _searchKeepsEditor;
@@ -554,21 +559,76 @@ public sealed class MainViewModel : ObservableObject
     /// Save saves (false if that fails), Don't save throws the changes away, Cancel returns false. True when it's
     /// fine to move on.
     /// </summary>
-    public bool ConfirmDiscardOrSave()
+    /// <remarks>
+    /// On the Team side a save can't finish before this returns, so Save (or a team save still writing) gives false;
+    /// callers that should go on once it has gone through use <see cref="ProceedOrDefer"/>.
+    /// </remarks>
+    public bool ConfirmDiscardOrSave() => AskToSave() == SaveAnswer.Proceed;
+
+    /// <summary>
+    /// Before the main window hides (or the app exits): offers to save unsaved changes, then ends editing the team
+    /// library (so refreshes aren't held while nobody is looking). True when it can go now. When a team save has to
+    /// finish first, false is returned and <paramref name="later"/> runs once the save has gone through.
+    /// </summary>
+    public bool ConfirmLeave(Action later)
     {
-        if (_editor is not { IsDirty: true } editor) return true;
+        if (!ProceedOrDefer(() =>
+            {
+                if (ConfirmLeave(later)) later();
+            })) return false;
+        return StopEditingTeam(ask: false);
+    }
+
+    /// <summary>
+    /// At exit: gives a team save still writing up to <paramref name="limit"/> to finish, running the dispatcher
+    /// meanwhile so its result applies. True when nothing is left writing.
+    /// </summary>
+    public bool WaitForTeamSave(TimeSpan limit)
+    {
+        var deadline = DateTime.UtcNow + limit;
+        while (TeamWriting && DateTime.UtcNow < deadline)
+        {
+            var frame = new DispatcherFrame();
+            var tick = new DispatcherTimer(TimeSpan.FromMilliseconds(20), DispatcherPriority.Background,
+                (_, _) => frame.Continue = false, _dispatcher);
+            Dispatcher.PushFrame(frame);
+            tick.Stop();
+        }
+        return !TeamWriting;
+    }
+
+    private bool TeamWriting => _teamSaving || _team?.LibraryUnwritten == true;
+
+    /// <summary>"Save changes?" with what came of it: go on, stay (Cancel, or a save that failed at once), or a team save writing.</summary>
+    private SaveAnswer AskToSave()
+    {
+        if (_teamSaving) return SaveAnswer.Saving; // a team save is still writing: wait for it
+        if (_editor is not { IsDirty: true } editor) return SaveAnswer.Proceed;
 
         var savedTitle = CurrentDocument.Library.Prompts.FirstOrDefault(p => p.Id == editor.PromptId)?.Title;
         switch (_dialogs.AskSaveChanges(EditorText.SaveChangesQuestion(savedTitle)))
         {
             case true:
-                return Save();
+                if (Save()) return SaveAnswer.Proceed;
+                return _teamSaving ? SaveAnswer.Saving : SaveAnswer.Cancelled;
             case false:
                 DiscardChanges(editor);
-                return true;
+                return SaveAnswer.Proceed;
             default:
-                return false;
+                return SaveAnswer.Cancelled;
         }
+    }
+
+    /// <summary>
+    /// <see cref="ConfirmDiscardOrSave"/> for an action that can wait: true when it can go on now. When a team save was
+    /// started (or is still writing), <paramref name="retry"/> runs once it has gone through, as a personal save would
+    /// have let it; after a refused or failed save it doesn't.
+    /// </summary>
+    private bool ProceedOrDefer(Action retry)
+    {
+        var answer = AskToSave();
+        if (answer == SaveAnswer.Saving) _afterTeamSave = retry;
+        return answer == SaveAnswer.Proceed;
     }
 
     /// <summary>
@@ -789,7 +849,7 @@ public sealed class MainViewModel : ObservableObject
     public void NewPrompt()
     {
         if (CannotChange) return;
-        if (!ConfirmDiscardOrSave()) return;
+        if (!ProceedOrDefer(NewPrompt)) return;
 
         var categoryId = _selectedCategory?.Id
             ?? CurrentDocument.Library.Categories.OrderBy(c => c.Name, NameOrder).FirstOrDefault()?.Id;
@@ -976,7 +1036,7 @@ public sealed class MainViewModel : ObservableObject
             _asking = true;
             try
             {
-                if (ConfirmDiscardOrSave())
+                if (ProceedOrDefer(change))
                     change();
             }
             finally
@@ -1227,7 +1287,8 @@ public sealed class MainViewModel : ObservableObject
         }
         if (side == LibrarySide.Team && !TeamConnected) return false;
         // Leaving the Team side ends editing it (Done), so refreshes aren't held while it isn't in view.
-        if (!ConfirmDiscardOrSave() || (_side == LibrarySide.Team && !StopEditingTeam(ask: false)))
+        if (!ProceedOrDefer(() => SwitchSide(side, openPromptId))
+            || (_side == LibrarySide.Team && !StopEditingTeam(ask: false)))
         {
             RaiseSideState(); // puts the switch back on the side still shown
             return false;
@@ -1403,18 +1464,21 @@ public sealed class MainViewModel : ObservableObject
     {
         if (_team?.PendingSave is not { } pending) return;
         _teamSaving = true;
+        var baseHash = _team.BaseHash;
         pending.ContinueWith(task =>
         {
             var result = task.IsCompletedSuccessfully
                 ? task.Result
                 : new TeamSaveResult(TeamSaveStatus.Failed, null, "Couldn't save the team library.");
-            _dispatcher.BeginInvoke(() => FinishTeamSave(result, onSaved));
+            _dispatcher.BeginInvoke(() => FinishTeamSave(result, baseHash, onSaved));
         }, TaskScheduler.Default);
     }
 
-    private void FinishTeamSave(TeamSaveResult result, Action? onSaved)
+    private void FinishTeamSave(TeamSaveResult result, string? baseHash, Action? onSaved)
     {
         _teamSaving = false;
+        var next = _afterTeamSave;
+        _afterTeamSave = null;
         if (_team is not { } team) return;
 
         switch (result.Status)
@@ -1424,18 +1488,21 @@ public sealed class MainViewModel : ObservableObject
                 onSaved?.Invoke();
                 ShowStatus("Saved for everyone", FeedbackDuration);
                 break;
-            case TeamSaveStatus.ChangedByOther:
-                team.Rebase(); // the service has already re-read the file
+            case TeamSaveStatus.ChangedByOther when team.Service.CurrentHash != baseHash:
+                team.Rebase(); // the service has re-read the file
                 _dialogs.ShowMessage(ChangedByOtherMessage);
                 break;
             default:
-                team.Service.RevertToLoaded(); // what wasn't written doesn't stay in memory
+                // Failed, or refused and the file couldn't be read back: what wasn't written doesn't stay in memory
+                // (a new prompt then can't be added twice), and the message says only what happened.
+                team.Service.RevertToLoaded();
                 _dialogs.ShowMessage(result.Message ?? "Couldn't save the team library.");
                 break;
         }
 
         if (IsTeamSide) ReloadTeamSide();
         _host.RefreshQuickMenu();
+        if (result.Status == TeamSaveStatus.Saved) next?.Invoke(); // what "Save changes?" interrupted
     }
 
     /// <summary>
@@ -1464,6 +1531,19 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     private void ReloadTeamSide()
     {
+        // Another editor deleted the prompt being edited: what was typed stays, as a new prompt in its category (or the
+        // first one when that is gone too), so nothing typed is thrown away.
+        var library = CurrentDocument.Library;
+        if (_editor is { IsDirty: true, PromptId: { } goneId } kept && library.Prompts.All(p => p.Id != goneId))
+        {
+            var categoryId = library.Categories.Any(c => c.Id == kept.CategoryId)
+                ? kept.CategoryId
+                : library.Categories.OrderBy(c => c.Name, NameOrder).FirstOrDefault()?.Id;
+            kept.BecomeNew(categoryId);
+            _selectedPrompt = null;
+            OnPropertyChanged(nameof(SelectedPrompt));
+        }
+
         RefreshAll();
         if (_editor is { } editor)
         {
@@ -1493,7 +1573,7 @@ public sealed class MainViewModel : ObservableObject
     private bool StopEditingTeam(bool ask = true)
     {
         if (_team is not { IsEditing: true } team) return true;
-        if (_teamSaving || (ask && !ConfirmDiscardOrSave())) return false;
+        if (_teamSaving || (ask && !ProceedOrDefer(() => StopEditingTeam()))) return false;
 
         CancelNewCategory();
         foreach (var item in Categories) item.IsRenaming = false;
@@ -1515,7 +1595,7 @@ public sealed class MainViewModel : ObservableObject
     private void OpenTeamHistory(bool review)
     {
         if (!IsTeamSide || _team is not { } team || !team.Service.CanEdit || _teamSaving) return;
-        if (!ConfirmDiscardOrSave()) return;
+        if (!ProceedOrDefer(() => OpenTeamHistory(review))) return;
         if (!_dialogs.ShowTeamHistory(team.Service, review)) return;
 
         team.Rebase();

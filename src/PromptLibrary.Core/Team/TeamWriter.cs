@@ -212,6 +212,45 @@ public sealed class TeamWriter(Func<DateTimeOffset> now)
         }
     }
 
+    /// <summary>
+    /// Resolves sync conflict copies once an editor has chosen a version: moves every <see cref="FindConflictCopies"/>
+    /// file into the history folder (never deletes one), named as a history copy at its last write time, so it can
+    /// still be restored and the "two versions" notice clears. Returns how many were moved. Never throws for IO errors.
+    /// </summary>
+    public int MoveConflictCopiesToHistory(string filePath)
+    {
+        var moved = 0;
+        try
+        {
+            var copies = FindConflictCopies(filePath);
+            if (copies.Count == 0) return 0;
+            var historyDir = Path.Combine(DirectoryOf(filePath), HistoryFolderName);
+            Directory.CreateDirectory(historyDir);
+
+            foreach (var path in copies)
+            {
+                try
+                {
+                    var stamp = File.GetLastWriteTime(path).ToString(StampFormat, CultureInfo.InvariantCulture);
+                    var target = Path.Combine(historyDir, $"{HistoryPrefix}{stamp}.json");
+                    for (var n = 2; File.Exists(target); n++)
+                        target = Path.Combine(historyDir, $"{HistoryPrefix}{stamp} ({n}).json");
+                    File.Move(path, target);
+                    moved++;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Best effort: a copy that can't be moved stays, and the notice with it.
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Return what was moved.
+        }
+        return moved;
+    }
+
     // Copies categories (and their prompts) into the target with fresh ids; a category whose name the target already has is merged into it.
     private static void AddCopies(Library target, IEnumerable<Category> categories, IReadOnlyCollection<Prompt> prompts, DateTimeOffset at)
     {

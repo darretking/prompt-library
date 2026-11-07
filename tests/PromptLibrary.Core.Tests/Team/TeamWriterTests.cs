@@ -274,4 +274,41 @@ public class TeamWriterTests : IDisposable
         Assert.Equal(2, list[0].PromptCount);
         Assert.False(list[1].IsConflictCopy);
     }
+
+    [Fact]
+    public void MoveConflictCopiesToHistory_MovesSiblings_KeepsThemRestorable()
+    {
+        var hash = WriteInitial("Acme", "A");
+        Writer().Save(FilePath, TeamFile.Parse(File.ReadAllText(FilePath)), hash); // one history copy
+        var conflict = Path.Combine(_dir, "team-prompts-PC.json");
+        File.WriteAllText(conflict, TeamFile.Serialize(Team("Theirs", "A", "B")));
+        var stamp = new DateTime(2026, 11, 4, 9, 30, 0, DateTimeKind.Local);
+        File.SetLastWriteTime(conflict, stamp);
+        var bad = Path.Combine(_dir, "team-prompts-bad.json");
+        File.WriteAllText(bad, "not json");
+        var teamText = File.ReadAllText(FilePath);
+
+        var moved = Writer().MoveConflictCopiesToHistory(FilePath);
+
+        Assert.Equal(2, moved);
+        Assert.Empty(TeamWriter.FindConflictCopies(FilePath));
+        Assert.False(File.Exists(conflict));
+        Assert.False(File.Exists(bad));
+        Assert.Equal(teamText, File.ReadAllText(FilePath)); // the team file itself is untouched
+        Assert.Equal(3, Directory.GetFiles(HistoryDir).Length); // nothing deleted
+
+        // The other version is now an ordinary older version, at the time it was last written.
+        var list = Writer().ListHistory(FilePath);
+        Assert.All(list, i => Assert.False(i.IsConflictCopy));
+        var theirs = Assert.Single(list, i => i.PromptCount == 2);
+        Assert.Equal(stamp, theirs.SavedAt.LocalDateTime);
+    }
+
+    [Fact]
+    public void MoveConflictCopiesToHistory_NoCopies_MovesNothing()
+    {
+        WriteInitial("Acme", "A");
+        Assert.Equal(0, Writer().MoveConflictCopiesToHistory(FilePath));
+        Assert.False(Directory.Exists(HistoryDir));
+    }
 }

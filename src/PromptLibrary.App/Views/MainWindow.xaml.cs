@@ -69,16 +69,24 @@ public partial class MainWindow : Window, IDialogs
         // already saved or recovered unsaved edits).
         if (!_exiting && !_host.IsSessionEnding)
         {
-            // Closing only hides the window, after the question (asked once this close has been cancelled).
+            // Closing only hides the window, after the question (asked once this close has been cancelled). It also ends
+            // editing the team library. When a team save has to finish first, the window hides once it has gone through.
             _closeQuestion.CancelAndAsk(e,
-                ask: () => !_exiting && IsVisible && ViewModel.ConfirmDiscardOrSave() && !_exiting && !_host.IsExiting,
-                onYes: () =>
-                {
-                    Hide();
-                    _host.OnMainWindowHidden(); // says once that the app is still running in the tray
-                });
+                ask: () => !_exiting && IsVisible && ViewModel.ConfirmLeave(HideLater) && !_exiting && !_host.IsExiting,
+                onYes: HideToTray);
         }
         base.OnClosing(e);
+    }
+
+    private void HideToTray()
+    {
+        Hide();
+        _host.OnMainWindowHidden(); // says once that the app is still running in the tray
+    }
+
+    private void HideLater()
+    {
+        if (!_exiting && !_host.IsExiting && IsVisible) HideToTray();
     }
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)

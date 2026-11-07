@@ -219,6 +219,190 @@ public sealed class TeamEditModeTests : IDisposable
         Assert.Equal(2, after.Result.Count(i => !i.IsConflictCopy)); // the version it replaced was kept
     });
 
+    // ---- Fix round 1 ---------------------------------------------------------------------------
+
+    [Fact]
+    public void CloseWindow_EndsEditMode_AppliesHeldRefresh() => Sta.Run(() =>
+    {
+        var host = NewHost();
+        var dialogs = new FakeDialogs { SaveAnswer = true };
+        var vm = new MainViewModel(host, dialogs);
+        vm.ShowTeamCommand.Execute(null);
+        vm.EditTeamCommand.Execute(null);
+        WaitFor(host.Team!.RequestRefreshAsync()); // the hourly refresh, held while editing
+        Assert.True(host.Team.HasHeldRefresh);
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Title == "Follow-up email");
+        vm.Editor!.Text = "Typed before closing";
+        var hidden = 0;
+
+        // "Save changes?" → Save: the window doesn't hide mid-write; it hides once the save has gone through.
+        Assert.False(vm.ConfirmLeave(() => hidden++));
+        Assert.Equal(0, hidden);
+        Assert.True(vm.IsEditingTeam);
+        Until(() => hidden == 1);
+        Assert.False(vm.IsEditingTeam);
+        Assert.False(host.Team.HasHeldRefresh); // released, and the held refresh ran
+        Assert.Equal("Team prompts updated", vm.StatusText);
+        Assert.Contains("Typed before closing", ReadTeamFile());
+
+        // Nothing unsaved: it can hide at once, and editing ends.
+        vm.EditTeamCommand.Execute(null);
+        Assert.True(vm.ConfirmLeave(() => hidden++));
+        Assert.False(vm.IsEditingTeam);
+        Assert.Equal(1, hidden);
+    });
+
+    [Fact]
+    public void Save_PromptDeletedByOther_KeepsTypedTextAsNewPrompt() => Sta.Run(() =>
+    {
+        var host = NewHost();
+        var dialogs = new FakeDialogs();
+        var vm = new MainViewModel(host, dialogs);
+        vm.ShowTeamCommand.Execute(null);
+        vm.EditTeamCommand.Execute(null);
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Title == "Follow-up email");
+        var salesId = vm.Editor!.CategoryId;
+        vm.Editor.Text = "Typed into a prompt someone deleted";
+
+        var other = TeamFile.Parse(File.ReadAllText(TeamPath));
+        other.Content.Prompts.RemoveAll(p => p.Title == "Follow-up email");
+        File.WriteAllText(TeamPath, TeamFile.Serialize(other));
+        vm.SaveCommand.Execute(null);
+
+        Until(() => dialogs.Messages.Count > 0);
+        Assert.Equal(ChangedByOtherMessage, dialogs.Messages[0]);
+        Assert.NotNull(vm.Editor);
+        Assert.True(vm.Editor!.IsNew);
+        Assert.True(vm.Editor.IsDirty);
+        Assert.Equal("Follow-up email", vm.Editor.Title);
+        Assert.Equal("Typed into a prompt someone deleted", vm.Editor.Text);
+        Assert.Equal(salesId, vm.Editor.CategoryId);
+
+        vm.SaveCommand.Execute(null);
+        Until(() => vm.Editor is { IsDirty: false });
+        Assert.Single(TeamFile.Parse(ReadTeamFile()).Content.Prompts, p => p.Text == "Typed into a prompt someone deleted");
+    });
+
+    [Fact]
+    public void SaveChanges_Save_ContinuesPendingAction_OnlyWhenSaved() => Sta.Run(() =>
+    {
+        var host = NewHost();
+        var dialogs = new FakeDialogs { SaveAnswer = true };
+        var vm = new MainViewModel(host, dialogs);
+        vm.ShowTeamCommand.Execute(null);
+        vm.EditTeamCommand.Execute(null);
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Title == "Follow-up email");
+        vm.Editor!.Text = "Saved on the way out";
+
+        vm.ShowYoursCommand.Execute(null); // "Save changes?" → Save
+        Assert.Equal(LibrarySide.Team, vm.Side); // not yet: the save is writing
+        Until(() => vm.Side == LibrarySide.Yours);
+        Assert.Contains("Saved on the way out", ReadTeamFile());
+        Assert.False(vm.IsEditingTeam);
+
+        // A refused save doesn't continue: the user stays, with what they typed.
+        vm.ShowTeamCommand.Execute(null);
+        vm.EditTeamCommand.Execute(null);
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Title == "Complaint reply");
+        vm.Editor!.Text = "Refused text";
+        ChangeFileElsewhere("Discovery questions", "Discovery questions (v2)");
+        vm.DoneEditingTeamCommand.Execute(null);
+
+        Until(() => dialogs.Messages.Count > 0);
+        Pump(TimeSpan.FromMilliseconds(200));
+        Assert.True(vm.IsEditingTeam);
+        Assert.Equal("Refused text", vm.Editor!.Text);
+    });
+
+    [Fact]
+    public void Save_ChangedByOther_ReloadFails_RevertsAndSaysSo() => Sta.Run(() =>
+    {
+        var host = NewHost();
+        var dialogs = new FakeDialogs();
+        var vm = new MainViewModel(host, dialogs);
+        vm.ShowTeamCommand.Execute(null);
+        vm.EditTeamCommand.Execute(null);
+        var good = File.ReadAllText(TeamPath);
+        vm.NewPromptCommand.Execute(null);
+        vm.Editor!.Title = "Brand new";
+        vm.Editor.Text = "New text";
+
+        File.WriteAllText(TeamPath, "{ half written"); // changed, and can't be read back
+        vm.SaveCommand.Execute(null);
+
+        Until(() => dialogs.Messages.Count > 0);
+        Assert.NotEqual(ChangedByOtherMessage, dialogs.Messages[0]); // it wasn't reloaded
+        Assert.Equal("The team library was changed by someone else.", dialogs.Messages[0]);
+        Assert.DoesNotContain(host.Team!.Team!.Content.Prompts, p => p.Title == "Brand new"); // the refused change is gone
+        Assert.True(vm.Editor!.IsNew);
+        Assert.Equal("New text", vm.Editor.Text);
+
+        // The file is readable again: the next save adds the prompt once.
+        File.WriteAllText(TeamPath, good);
+        WaitFor(host.Team.RefreshAsync());
+        vm.SaveCommand.Execute(null);
+        Until(() => vm.Editor is { IsDirty: false });
+        Assert.Single(TeamFile.Parse(ReadTeamFile()).Content.Prompts, p => p.Title == "Brand new");
+        Assert.Single(host.Team.Team!.Content.Prompts, p => p.Title == "Brand new");
+    });
+
+    [Fact]
+    public void Exit_WaitsForTeamSaveInFlight() => Sta.Run(() =>
+    {
+        var host = NewHost();
+        var vm = new MainViewModel(host, new FakeDialogs());
+        vm.ShowTeamCommand.Execute(null);
+        vm.EditTeamCommand.Execute(null);
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Title == "Follow-up email");
+        vm.Editor!.Text = "Written before exit";
+        vm.SaveCommand.Execute(null);
+        Assert.True(vm.CurrentDocument.LibraryUnwritten);
+
+        Assert.True(vm.WaitForTeamSave(TimeSpan.FromSeconds(5)));
+
+        Assert.False(vm.CurrentDocument.LibraryUnwritten);
+        Assert.Contains("Written before exit", ReadTeamFile());
+        Assert.True(vm.WaitForTeamSave(TimeSpan.FromSeconds(1))); // nothing writing: at once
+    });
+
+    [Fact]
+    public void Review_KeepOrRestore_MovesConflictCopiesIntoHistory() => Sta.Run(() =>
+    {
+        var host = NewHost();
+        var vm = new MainViewModel(host, new FakeDialogs());
+        vm.ShowTeamCommand.Execute(null);
+        var folder = Path.GetDirectoryName(TeamPath)!;
+        var historyDir = Path.Combine(folder, TeamWriter.HistoryFolderName);
+        var copy = Path.Combine(folder, "team-prompts-OTHERPC.json");
+
+        // Keep the current version.
+        File.Copy(TeamPath, copy);
+        WaitFor(host.Team!.RefreshAsync());
+        Assert.True(vm.ShowConflictBar);
+        WaitFor(host.Team.KeepCurrentVersionAsync());
+        Assert.False(File.Exists(copy));
+        Assert.Single(Directory.GetFiles(historyDir)); // moved, not deleted
+        Assert.Empty(host.Team.ConflictCopies);
+        Assert.False(vm.ShowConflictBar);
+
+        // Restore the other version from sync.
+        var theirs = TeamFile.Parse(File.ReadAllText(TeamPath));
+        theirs.Content.Prompts.First(p => p.Title == "Complaint reply").Title = "Complaint reply (theirs)";
+        File.WriteAllText(copy, TeamFile.Serialize(theirs));
+        WaitFor(host.Team.RefreshAsync());
+        Assert.True(vm.ShowConflictBar);
+        var list = host.Team.ListHistoryAsync();
+        WaitFor(list);
+        var restore = host.Team.RestoreAsync(list.Result.First(i => i.IsConflictCopy));
+        WaitFor(restore);
+        Assert.Equal(TeamSaveStatus.Saved, restore.Result.Status);
+
+        Until(() => !vm.ShowConflictBar);
+        Assert.False(File.Exists(copy));
+        Assert.Contains("Complaint reply (theirs)", ReadTeamFile());
+        Assert.Equal(3, Directory.GetFiles(historyDir).Length); // first copy, the replaced version, the restored copy
+    });
+
     // ---- Helpers -------------------------------------------------------------------------------
 
     private FakeHost NewHost(int schemaVersion = 1)
@@ -311,7 +495,10 @@ public sealed class TeamEditModeTests : IDisposable
         public string? LastConfirm { get; private set; }
         public List<string> Messages { get; } = [];
 
-        public bool? AskSaveChanges(string question) => null;
+        /// <summary>The answer to "Save changes?": true = Save, false = Don't save, null = Cancel.</summary>
+        public bool? SaveAnswer { get; set; }
+
+        public bool? AskSaveChanges(string question) => SaveAnswer;
 
         public bool ConfirmDestructive(string message, string action)
         {

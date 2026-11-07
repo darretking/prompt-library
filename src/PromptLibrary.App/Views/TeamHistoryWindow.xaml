@@ -38,16 +38,23 @@
             </Grid>
         </Border>
 
-        <TextBlock Text="Restoring keeps a copy of the current version first." Style="{StaticResource MutedText}"
-                   Margin="0,8,0,0" TextWrapping="Wrap" />
+        <TextBlock x:Name="HelpText" Text="Restoring keeps a copy of the current version first."
+                   Style="{StaticResource MutedText}" Margin="0,8,0,0" TextWrapping="Wrap" />
 
         <TextBlock x:Name="ErrorText" Style="{StaticResource ErrorText}" />
 
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
-            <Button x:Name="CancelButton" Content="Cancel" IsCancel="True" Margin="0,0,8,0"
-                    AutomationProperties.Name="Cancel" />
-            <Button x:Name="RestoreButton" Style="{StaticResource PrimaryButton}" Content="Restore" IsDefault="True"
-                    IsEnabled="False" Click="Restore_Click" AutomationProperties.Name="Restore selected version" />
-        </StackPanel>
+        <!-- While sync has left other versions: Keep current version on the left resolves them the other way. -->
+        <DockPanel Margin="0,24,0,0">
+            <Button x:Name="KeepButton" DockPanel.Dock="Left" Style="{StaticResource OutlineButton}"
+                    Content="Keep current version" Visibility="Collapsed" Click="Keep_Click"
+                    ToolTip="Keep the team library as it is; the other versions from sync go into its history"
+                    AutomationProperties.Name="Keep current version" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="CancelButton" Content="Cancel" IsCancel="True" Margin="8,0,8,0"
+                        AutomationProperties.Name="Cancel" />
+                <Button x:Name="RestoreButton" Style="{StaticResource PrimaryButton}" Content="Restore" IsDefault="True"
+                        IsEnabled="False" Click="Restore_Click" AutomationProperties.Name="Restore selected version" />
+            </StackPanel>
+        </DockPanel>
     </StackPanel>
 </Window>

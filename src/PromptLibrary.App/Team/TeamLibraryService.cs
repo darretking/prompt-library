@@ -327,8 +327,9 @@ public sealed class TeamLibraryService : IDisposable
     /// <summary>
     /// Writes <paramref name="item"/> back over the team file (<see cref="TeamWriter.Restore"/>: the current version
     /// gets a history copy first), guarded by <see cref="CurrentHash"/> like <see cref="SaveAsync"/>. A restore is the
-    /// editor's own save, so it marks nothing New or Updated on this PC. When the file changed meanwhile, the library
-    /// is re-read and the refusal is returned.
+    /// editor's own save, so it marks nothing New or Updated on this PC. Restoring a sync conflict copy resolves the
+    /// conflict: the copies then move into the history folder, as with <see cref="KeepCurrentVersionAsync"/>. When the
+    /// file changed meanwhile, the library is re-read and the refusal is returned.
     /// </summary>
     public async Task<TeamSaveResult> RestoreAsync(TeamHistoryItem item)
     {
@@ -345,6 +346,7 @@ public sealed class TeamLibraryService : IDisposable
                 TeamLibrary? team = null;
                 if (saved.Status == TeamSaveStatus.Saved)
                 {
+                    if (item.IsConflictCopy) _writer.MoveConflictCopiesToHistory(source.Location);
                     try
                     {
                         text = File.ReadAllText(source.Location);
@@ -358,7 +360,8 @@ public sealed class TeamLibraryService : IDisposable
             if (result.Status == TeamSaveStatus.Saved)
             {
                 if (restored is not null) await OnUi(() => AfterOwnSave(source, restored, json, result.NewHash));
-                else await RunRefreshAsync(force: true);
+                // Read again when the restored file couldn't be, or when the conflict copies have gone (the notice clears).
+                if (restored is null || item.IsConflictCopy) await RunRefreshAsync(force: true);
             }
             else if (result.Status == TeamSaveStatus.ChangedByOther)
             {
@@ -370,6 +373,25 @@ public sealed class TeamLibraryService : IDisposable
         {
             _log(ex);
             return new TeamSaveResult(TeamSaveStatus.Failed, null, "Couldn't restore the team library.");
+        }
+    }
+
+    /// <summary>
+    /// Review → Keep current version: the team file stays as it is, and the sync conflict copies move into its history
+    /// folder (<see cref="TeamWriter.MoveConflictCopiesToHistory"/>; never deleted), so the notice clears. Then reads the
+    /// file again. Never throws.
+    /// </summary>
+    public async Task KeepCurrentVersionAsync()
+    {
+        try
+        {
+            if (Source is not { Kind: TeamSourceKind.File } source) return;
+            await Task.Run(() => _writer.MoveConflictCopiesToHistory(source.Location));
+            await RunRefreshAsync(force: true);
+        }
+        catch (Exception ex)
+        {
+            _log(ex);
         }
     }
 

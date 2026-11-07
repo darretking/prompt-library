@@ -40,6 +40,9 @@ public sealed class AppHost : IMainHost, IDisposable
     private static readonly TimeSpan ExitBackupTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan SessionEndBackupTimeout = TimeSpan.FromSeconds(5);
 
+    // How long an exit waits for a team library save that is still writing.
+    private static readonly TimeSpan TeamSaveExitTimeout = TimeSpan.FromSeconds(3);
+
     private readonly ClipboardWriter _clipboard =
         new(text => System.Windows.Clipboard.SetText(text, TextDataFormat.UnicodeText), Thread.Sleep);
 
@@ -798,7 +801,8 @@ public sealed class AppHost : IMainHost, IDisposable
                 _onboardingWindow.ActivateCloseQuestion();
                 return false;
             }
-            if (_mainWindow is { IsVisible: true } && !_mainWindow.ViewModel.ConfirmDiscardOrSave())
+            // "Save changes?" → Save on the Team side: the exit goes ahead once that save has gone through.
+            if (_mainWindow is { IsVisible: true } && !_mainWindow.ViewModel.ConfirmLeave(() => TryExit(reason, afterExit)))
                 return false;
         }
 
@@ -814,6 +818,7 @@ public sealed class AppHost : IMainHost, IDisposable
         // From here nothing can reopen a window or start a copy: the tray icon, shortcut and timers go first
         // (the backup result is still recorded in settings; it just isn't announced).
         _exiting = true;
+        WaitForTeamSave();
         Dispose();
         _settingsWindow?.Close();
         _onboardingWindow?.CloseForExit();
@@ -849,6 +854,7 @@ public sealed class AppHost : IMainHost, IDisposable
         IsSessionEnding = true;
         if (!_exiting && _started && !_disposed)
         {
+            WaitForTeamSave();
             KeepUnsavedWorkWithoutAsking();
             KeepUnwrittenLibrary();
         }
@@ -882,6 +888,24 @@ public sealed class AppHost : IMainHost, IDisposable
         }
 
         Dispose();
+    }
+
+    /// <summary>
+    /// A team library save still writing when the app exits (a save started just before an external exit or logoff)
+    /// gets a short while to finish, so it isn't cut off unseen. The team file is replaced atomically, so one that
+    /// doesn't finish leaves the shared file as it was.
+    /// </summary>
+    private void WaitForTeamSave()
+    {
+        try
+        {
+            if (_mainWindow?.ViewModel.WaitForTeamSave(TeamSaveExitTimeout) == false)
+                CrashLog.Append(Paths.CrashLogFile, new TimeoutException("A team library save hadn't finished at exit."), DateTime.Now);
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Append(Paths.CrashLogFile, ex, DateTime.Now); // the exit itself must still finish
+        }
     }
 
     /// <summary>

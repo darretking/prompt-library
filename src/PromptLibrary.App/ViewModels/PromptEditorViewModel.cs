@@ -245,6 +245,22 @@ public sealed class PromptEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(IsNew));
     }
 
+    /// <summary>
+    /// The saved prompt is gone (another editor deleted it) while the fields hold unsaved changes: they stay, as a new
+    /// prompt that Save adds in <paramref name="categoryId"/> (null when there's no category left; Save then asks for one).
+    /// </summary>
+    public void BecomeNew(Guid? categoryId)
+    {
+        PromptId = null;
+        _savedTitle = _savedDescription = _savedText = "";
+        _savedCategoryId = categoryId;
+        _categoryId = categoryId;
+        OnPropertyChanged(nameof(PromptId));
+        OnPropertyChanged(nameof(IsNew));
+        OnPropertyChanged(nameof(CategoryId));
+        OnPropertyChanged(nameof(IsDirty));
+    }
+
     /// <summary>Takes the saved prompt's values as both the fields and the "saved" baseline.</summary>
     public void LoadSaved(Prompt prompt)
     {
