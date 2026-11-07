@@ -298,7 +298,8 @@ public partial class MainWindow : Window, IDialogs
     private void UpdateMinHeight()
     {
         static double HeightOf(FrameworkElement bar) => bar.IsVisible ? bar.ActualHeight : 0;
-        MinHeight = BaseMinHeight + HeightOf(SwitchBar) + HeightOf(TeamBar);
+        // Never above the work area, or the window couldn't fit on a small or highly scaled screen.
+        MinHeight = WindowFit.Height(BaseMinHeight + HeightOf(SwitchBar) + HeightOf(TeamBar), WindowFit.WorkAreaHeight);
     }
 
     // ---- Helpers -------------------------------------------------------------------------------

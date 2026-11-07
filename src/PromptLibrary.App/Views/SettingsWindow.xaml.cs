@@ -25,6 +25,10 @@ public partial class SettingsWindow : Window
         _closes = new UserCloseTracker(this, host);
         InitializeComponent();
 
+        // Never taller than the screen's work area: the settings then scroll, and Close stays in view.
+        MaxHeight = WindowFit.WorkAreaHeight;
+        Height = WindowFit.Height(Height, MaxHeight);
+
         ShortcutField.Shortcut = host.Settings.Hotkey;
         if (host.HotkeyRegistered)
             SetShortcutStatus(ShortcutIdle, isError: false);

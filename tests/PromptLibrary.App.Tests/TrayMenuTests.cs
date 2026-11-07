@@ -92,4 +92,24 @@ public class TrayMenuTests
                 "Settings…", "Open Prompt Library…", "Exit"],
             collapsed);
     }
+
+    [Fact]
+    public void Tray_RebuildWhileMenuOpen_WaitsUntilItCloses() => Sta.Run(() =>
+    {
+        // A background refresh must not replace the items under the pointer: what is clicked is what was shown.
+        using var tray = new TrayIcon("t", headless: true);
+        tray.Rebuild(new QuickMenu([], [], [C("Work")], false));
+        var shown = tray.MenuStrip.Items[0];
+
+        tray.MenuOpened();
+        tray.Rebuild(new QuickMenu([], [], [C("Other")], false));
+
+        Assert.Same(shown, tray.MenuStrip.Items[0]);
+        Assert.Equal("Work", tray.MenuStrip.Items[0].Text);
+
+        tray.MenuClosed();
+        Sta.DoEvents();
+
+        Assert.Equal("Other", tray.MenuStrip.Items[0].Text);
+    });
 }

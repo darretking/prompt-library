@@ -47,12 +47,19 @@ public sealed class TrayIcon : IDisposable
     // "Update to 1.0.2…" while an update is available; kept across Rebuild.
     private string? _updateItemText;
 
+    // True from the menu's Opening to its Closed. A rebuild asked for meanwhile (a background team refresh) waits in
+    // _pendingMenu: replacing the items under the pointer would make a click pick a different prompt than the one shown.
+    private bool _menuOpen;
+    private QuickMenu? _pendingMenu;
+    private bool _disposed;
+
     public TrayIcon(string tooltip) : this(tooltip, headless: false) { }
 
     /// <summary>Headless (tests): the menu exists but there is no notification-area icon.</summary>
     internal TrayIcon(string tooltip, bool headless)
     {
         _menuOwner.CreateHandle(new Forms.CreateParams());
+        _menu.Opening += (_, _) => MenuOpened();
         _menu.Closed += OnMenuClosed;
         if (headless) return;
 
@@ -92,9 +99,18 @@ public sealed class TrayIcon : IDisposable
     }
 
     /// <summary>Rebuilds the menu: Pinned, then the team block (when a team library is connected), then your
-    /// own categories, then Settings, Open and Exit.</summary>
+    /// own categories, then Settings, Open and Exit. While the menu is open the newest menu waits and is applied once
+    /// it has closed.</summary>
     public void Rebuild(QuickMenu menu)
     {
+        if (_disposed) return;
+        if (_menuOpen)
+        {
+            _pendingMenu = menu;
+            return;
+        }
+        _pendingMenu = null;
+
         // Dispose the old items so their handles do not pile up on every save, then the icons they used.
         var old = _menu.Items.Cast<Forms.ToolStripItem>().ToList();
         _menu.Items.Clear();
@@ -170,6 +186,24 @@ public sealed class TrayIcon : IDisposable
         }
 
         AddUpdateItem();
+    }
+
+    /// <summary>The menu is about to show (tests call it directly).</summary>
+    internal void MenuOpened() => _menuOpen = true;
+
+    /// <summary>
+    /// The menu has closed (tests call it directly): a rebuild that waited is applied, after the dispatcher has run
+    /// the picked item's Click, which can come after Closed and must still find the item it was raised on.
+    /// </summary>
+    internal void MenuClosed()
+    {
+        _menuOpen = false;
+        if (_pendingMenu is null) return;
+        System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(() =>
+        {
+            if (_menuOpen || _pendingMenu is not { } waiting) return;
+            Rebuild(waiting);
+        });
     }
 
     /// <summary>The menu strip, for tests.</summary>
@@ -260,6 +294,7 @@ public sealed class TrayIcon : IDisposable
 
     public void Dispose()
     {
+        _disposed = true;
         // Hide before disposing so no ghost icon stays in the notification area.
         if (_notifyIcon is not null) _notifyIcon.Visible = false;
         _notifyIcon?.Dispose();
@@ -280,6 +315,7 @@ public sealed class TrayIcon : IDisposable
             ReturnFocus();
         else
             _returnFocusTo = IntPtr.Zero;
+        MenuClosed();
     }
 
     private void ReturnFocus()
