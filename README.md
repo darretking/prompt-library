@@ -23,6 +23,14 @@ ChatGPT, Claude, Copilot, your terminal, your IDE: one library for all of them.
 
 <img src="docs/images/hero-main-window.png" alt="Prompt Library: categories on the left, prompts in the middle, the selected prompt on the right with a Copy prompt button" width="900" />
 
+<p>
+  <a href="#get-started">Get started</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#share-best-practice-prompts-with-your-team">Team prompts</a> ·
+  <a href="#questions">Questions</a> ·
+  <a href="#help-and-feedback">Help</a>
+</p>
+
 </div>
 
 <br/>
@@ -48,6 +56,36 @@ You've written a prompt that works. Then it disappears into a notes app, a chat 
 <div align="center">
   <img src="docs/images/quick-menu.png" alt="The Prompt Library menu open over another app, showing categories and prompts" width="640" />
 </div>
+
+<br/>
+
+## Get started
+
+1. **[Download the installer](https://github.com/darretking/prompt-library/releases/latest)** (`PromptLibrary-Setup.msi`, Windows 10 or 11).
+2. **Run it.** It installs just for you, so no admin rights are needed. If Windows says "Windows protected your PC", choose **More info**, then **Run anyway** (the installer isn't code-signed yet).
+3. **Follow the short setup.** It has you try the shortcut, offers to join or start a team library (or skip), and asks where to keep backups. You can run it again any time from **Help → Setup guide…**.
+4. **Press <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>P</kbd>** in any app and pick one of the 39 starter prompts. It's pasted where you were typing.
+
+**Add your own prompt.** Double-click the Prompt Library icon in the taskbar's notification area (or open it from the Start menu) to open the main window. Choose **+ New prompt** (<kbd>Ctrl</kbd> + <kbd>N</kbd>), give it a title, a category and the prompt text, and **Save** (<kbd>Ctrl</kbd> + <kbd>S</kbd>). It's in the shortcut menu straight away.
+
+The app starts with Windows and waits in the notification area. Clicking its icon opens the same menu as the shortcut, plus **Open Prompt Library…**, **Settings…** and **Exit**.
+
+<table>
+  <tr>
+    <td><img src="docs/images/installer-welcome.png" alt="Installer: one click to install, no admin rights" /></td>
+    <td><img src="docs/images/setup-shortcut.png" alt="Setup: try the shortcut" /></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/setup-team.png" alt="Setup: join or start a team library, or skip" /></td>
+    <td><img src="docs/images/setup-done.png" alt="Setup: you're all set" /></td>
+  </tr>
+</table>
+
+<details>
+  <summary>Prefer a single file, no installer?</summary>
+  <br/>
+  Build <code>PromptLibrary.exe</code> yourself (see <a href="docs/DEVELOPMENT.md">Developing Prompt Library</a>) and run it. It's self-contained: no .NET install needed.
+</details>
 
 <br/>
 
@@ -122,7 +160,7 @@ You've written a prompt that works. Then it disappears into a notes app, a chat 
   <tr>
     <td width="50%" valign="top">
       <h3>🔗 Join with one box</h3>
-      <p>Settings → Team prompts → <b>Join a team library</b>, paste or browse to the shared folder (or a direct link to the file), and Join. Starting one is just as quick: pick the folder, name it, and begin with 24 example business prompts for sales, support, marketing, management, HR and operations, or copy in your own categories.</p>
+      <p>Settings → Team prompts → <b>Join a team library</b>, paste or browse to the shared folder (or a direct link to the file), and Join. OneDrive and Google Drive share pages aren't direct links, so use the synced folder for those. Starting one is just as quick: pick the folder, name it, and begin with 24 example business prompts for sales, support, marketing, management, HR and operations, or copy in your own categories.</p>
     </td>
     <td width="50%" valign="top">
       <h3>⌨️ In the shortcut menu too</h3>
@@ -137,31 +175,9 @@ You've written a prompt that works. Then it disappears into a notes app, a chat 
 
 <br/>
 
-## Ready in under a minute
-
-Install it, and a short setup gets you going: try the shortcut, join your team's prompts if it shares them, pick where backups go, and you're done. You start with 39 ready-made prompts across 13 categories, from marketing and business to recipes, travel, kids' games and personal productivity, so it's useful from the first minute.
-
-<table>
-  <tr>
-    <td><img src="docs/images/installer-welcome.png" alt="Installer: one click to install, no admin rights" /></td>
-    <td><img src="docs/images/installer-finish.png" alt="Installer: done, launch Prompt Library" /></td>
-  </tr>
-</table>
-
-<table>
-  <tr>
-    <td><img src="docs/images/setup-welcome.png" alt="Setup, step 1: welcome" /></td>
-    <td><img src="docs/images/setup-shortcut.png" alt="Setup, step 2: try the shortcut" /></td>
-  </tr>
-  <tr>
-    <td><img src="docs/images/setup-team.png" alt="Setup, step 3: join or start a team library, or skip" /></td>
-    <td><img src="docs/images/setup-done.png" alt="Setup, step 5: you're all set" /></td>
-  </tr>
-</table>
-
-<br/>
-
 ## Made for people who use AI every day
+
+You start with 39 ready-made prompts across 13 categories, so it's useful from the first minute.
 
 - **Business owners and marketers** planning content, writing ad copy, testing ideas and setting prices.
 - **Busy people and parents** planning the week, the meals, the trip and the kids' party.
@@ -191,27 +207,7 @@ Install it, and a short setup gets you going: try the shortcut, join your team's
 | Career | Tailor my CV to a job · Interview practice · Ask for a raise |
 | Coding | Explain this code · Fix this error · Review my code |
 
-Each one fills in your details through `{placeholders}`, tells the AI exactly what to produce, and is yours to edit, rename or delete.
-</details>
-
-<br/>
-
-## Get started
-
-1. **[Download the installer](https://github.com/darretking/prompt-library/releases/latest)** (`PromptLibrary-Setup.msi`).
-2. **Run it.** It installs just for you, so no admin rights are needed.
-3. **Follow the short setup**, then press <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>P</kbd> anywhere.
-
-<details>
-  <summary>Windows says "Windows protected your PC"?</summary>
-  <br/>
-  The installer isn't code-signed yet, so SmartScreen doesn't recognise the publisher. Choose <b>More info</b>, then <b>Run anyway</b>.
-</details>
-
-<details>
-  <summary>Prefer a single file, no installer?</summary>
-  <br/>
-  Build <code>PromptLibrary.exe</code> yourself (see <a href="docs/DEVELOPMENT.md">Developing Prompt Library</a>) and run it. It's self-contained: no .NET install needed.
+Each one has `{placeholders}` where your details go, tells the AI exactly what to produce, and is yours to edit, rename or delete.
 </details>
 
 <br/>
@@ -237,9 +233,15 @@ Each one fills in your details through `{placeholders}`, tells the AI exactly wh
 </details>
 
 <details>
-  <summary><b>Can I change the shortcut?</b></summary>
+  <summary><b>The shortcut does nothing. What now?</b></summary>
   <br/>
-  Yes, in Settings → Change. If another app already uses the keys you press, Prompt Library tells you and suggests a free combination.
+  Another app probably took <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>P</kbd> first; Prompt Library shows a notice when that happens. Open Settings, choose <b>Change</b> next to Shortcut and press a new combination. If that one is taken too, it tells you and suggests a free one. Meanwhile, clicking the tray icon opens the same menu.
+</details>
+
+<details>
+  <summary><b>Where are my prompts stored?</b></summary>
+  <br/>
+  On your PC, in <code>%APPDATA%\PromptLibrary</code> (<code>library.json</code> is your library). With backups on, a copy also goes to the folder you chose, once a day and when you exit.
 </details>
 
 <details>
@@ -273,9 +275,9 @@ Each one fills in your details through `{placeholders}`, tells the AI exactly wh
 </details>
 
 <details>
-  <summary><b>Does uninstalling delete my prompts?</b></summary>
+  <summary><b>How do I uninstall? Does it delete my prompts?</b></summary>
   <br/>
-  No. Uninstalling removes the app and keeps your prompts and backups.
+  Windows Settings → Apps → Installed apps → Prompt Library → <b>Uninstall</b>. That removes the app, its Start menu shortcut and its "start with Windows" entry. Your prompts and backups are kept, so reinstalling picks up where you left off. To remove them too, delete the <code>%APPDATA%\PromptLibrary</code> folder.
 </details>
 
 <details>
@@ -283,6 +285,14 @@ Each one fills in your details through `{placeholders}`, tells the AI exactly wh
   <br/>
   Yes. No account, no subscription. It's open source under the GNU GPL v3: you can use, study, change and share it, and anyone who shares a changed version must share its source code too.
 </details>
+
+<br/>
+
+## Help and feedback
+
+- 🐛 [Report a bug or suggest an idea](https://github.com/darretking/prompt-library/issues)
+- 📦 [Releases and what's new](https://github.com/darretking/prompt-library/releases)
+- 🧭 In the app: **Help → Setup guide…** runs setup again; **Help → Check for updates…** looks for a new version now.
 
 <br/>
 
