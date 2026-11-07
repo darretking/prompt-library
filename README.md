@@ -243,6 +243,24 @@ Each one fills in your details through `{placeholders}`, tells the AI exactly wh
 </details>
 
 <details>
+  <summary><b>What if the team folder can't be reached?</b></summary>
+  <br/>
+  Team prompts keep working from the last copy your PC saw, offline or not. The Team side says when it last updated, with <b>Retry</b>. When the folder is back, new and changed prompts arrive by themselves.
+</details>
+
+<details>
+  <summary><b>What happens if I leave a team library?</b></summary>
+  <br/>
+  Settings → Team prompts → <b>Leave team library</b>. The team's prompts disappear from your PC; any copies you made with <b>Make my copy</b> stay in your own prompts. Nothing changes for the rest of the team.
+</details>
+
+<details>
+  <summary><b>How do I get new versions?</b></summary>
+  <br/>
+  Prompt Library checks for a new version once a day (or choose Help → Check for updates…). When one is out, choose <b>Update now</b>: it downloads the installer, checks it, closes the app safely and installs. Your prompts and settings are kept. Versions before 1.0.2 don't have this yet, so install 1.0.2 or later by hand once. See <a href="https://github.com/darretking/prompt-library/releases">what's new in each release</a>.
+</details>
+
+<details>
   <summary><b>Why not a right-click menu inside other apps?</b></summary>
   <br/>
   Windows doesn't allow one app to add items to another app's right-click menu. A single shortcut works the same everywhere instead.
