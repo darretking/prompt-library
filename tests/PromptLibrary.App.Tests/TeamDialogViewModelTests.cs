@@ -190,6 +190,26 @@ public sealed class TeamDialogViewModelTests : IDisposable
     });
 
     [Fact]
+    public void Start_WriteFails_ShowsFixedCopyOnly_AndLogsTheDetail() => Sta.Run(() =>
+    {
+        var folder = Path.Combine(_root, "locked");
+        Directory.CreateDirectory(Path.Combine(folder, TeamFile.FileName)); // a folder where the file should go: the write fails
+        var logged = new List<Exception>();
+        using var svc = new TeamLibraryService(_http, "1.0.0", Path.Combine(_root, "cache", "team-cache.json"), _settings,
+            () => new Library(), () => true, () => DateTimeOffset.Now, logged.Add, TimeSpan.FromMilliseconds(50));
+        var vm = new TeamStartViewModel([], svc.StartAsync, svc.JoinAsync, _ => null) { Folder = folder, TeamName = "Acme" };
+
+        Wait(vm.StartAsync());
+
+        Assert.Equal("Couldn't start the team library. Check that you can save files in that folder.", vm.Error);
+        Assert.DoesNotContain(folder, vm.Error);
+        Assert.DoesNotContain("denied", vm.Error);
+        Assert.False(vm.CanJoinExisting);
+        Assert.Null(svc.Source);
+        Assert.NotEmpty(logged);
+    });
+
+    [Fact]
     public void Start_MissingFolder_SaysCantReach_WithProvider() => Sta.Run(() =>
     {
         var started = 0;

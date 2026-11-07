@@ -34,6 +34,10 @@ public sealed class TeamLibraryService : IDisposable
     private static readonly TimeSpan DefaultDebounce = TimeSpan.FromSeconds(2);
     private const string InvalidInputMessage = "That isn't a folder, file or https link.";
 
+    /// <summary>What users see when a write to the shared folder fails; the raw detail goes to the log only.</summary>
+    internal const string WriteFailedMessage = "Couldn't save the team library. Check that you can save files in that folder.";
+    internal const string StartFailedMessage = "Couldn't start the team library. Check that you can save files in that folder.";
+
     // Turns typed input into a source; it touches the file system, so it only runs off the UI thread.
     private readonly Func<string, TeamSource?> _parse;
     private readonly TeamReader _reader;
@@ -238,7 +242,13 @@ public sealed class TeamLibraryService : IDisposable
         {
             var personal = _personal();
             var created = await Task.Run(() => _writer.Create(folder, name, personal, seedCategoryIds, addBusinessExamples));
-            if (!created.Created) return created;
+            if (!created.Created)
+            {
+                // A refusal because the folder already has a library is plain copy; any other failure carries raw OS text.
+                if (created.ExistingName is not null) return created;
+                _log(new IOException(created.Message ?? "Start failed"));
+                return created with { Message = StartFailedMessage };
+            }
             var joined = await JoinAsync(created.FilePath);
             return joined.Success ? created : created with { Created = false, Message = joined.Message };
         }
@@ -273,6 +283,7 @@ public sealed class TeamLibraryService : IDisposable
                 }
                 return (saved, text);
             });
+            result = ScrubFailure(result);
 
             if (result.Status == TeamSaveStatus.Saved)
                 await OnUi(() => AfterOwnSave(source, edited, json, result.NewHash));
@@ -356,6 +367,7 @@ public sealed class TeamLibraryService : IDisposable
                 }
                 return (saved, text, team);
             });
+            result = ScrubFailure(result);
 
             if (result.Status == TeamSaveStatus.Saved)
             {
@@ -393,6 +405,14 @@ public sealed class TeamLibraryService : IDisposable
         {
             _log(ex);
         }
+    }
+
+    // A failed write carries raw OS text ("Access to the path ... is denied"): it is logged, and the user gets plain copy.
+    private TeamSaveResult ScrubFailure(TeamSaveResult result)
+    {
+        if (result.Status != TeamSaveStatus.Failed) return result;
+        _log(new IOException(result.Message ?? "Save failed"));
+        return result with { Message = WriteFailedMessage };
     }
 
     public void Dispose()
