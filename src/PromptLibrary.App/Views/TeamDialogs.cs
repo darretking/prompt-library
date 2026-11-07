@@ -23,9 +23,14 @@ public static class TeamDialogs
         return Show(new TeamStartDialog(viewModel), owner);
     }
 
-    /// <summary>Leave team library: asks first, then leaves. True when it did.</summary>
-    public static bool Leave(Window? owner, TeamConnectionViewModel team)
+    /// <summary>
+    /// Leave team library: first "Save changes?" for a team prompt being edited in the main window (Cancel stays; a
+    /// team save still writing asks again once it has gone through), then asks to leave, then leaves. True when it did.
+    /// </summary>
+    public static bool Leave(Window? owner, AppHost host, TeamConnectionViewModel team)
     {
+        if (!team.IsConnected) return false;
+        if (!host.ConfirmLeaveTeam(() => Leave(owner is { IsVisible: true } ? owner : null, host, team))) return false;
         if (!ConfirmDialog.Ask(owner, team.LeaveQuestion, "Leave", "Stay")) return false;
         team.Leave();
         return true;

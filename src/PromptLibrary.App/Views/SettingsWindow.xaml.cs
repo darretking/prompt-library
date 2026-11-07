@@ -69,7 +69,7 @@ public partial class SettingsWindow : Window
 
     private void StartTeam_Click(object sender, RoutedEventArgs e) => TeamDialogs.Start(this, _host);
 
-    private void LeaveTeam_Click(object sender, RoutedEventArgs e) => TeamDialogs.Leave(this, _team);
+    private void LeaveTeam_Click(object sender, RoutedEventArgs e) => TeamDialogs.Leave(this, _host, _team);
 
     /// <summary>Moves the focus to the backup folders (for "Set up backups").</summary>
     public void FocusBackups() => Picker.FocusFirstCard();

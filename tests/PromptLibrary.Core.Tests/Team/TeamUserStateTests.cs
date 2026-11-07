@@ -250,4 +250,23 @@ public sealed class TeamUserStateTests : IDisposable
         Assert.Empty(back.SeenTeamPrompts);
         Assert.False(back.TeamBaselineTaken);
     }
+
+    [Fact]
+    public void TeamForPrune_EmptyWhenNotJoined_LoadedCopyWhenJoined_NullWhenJoinedButNotLoaded()
+    {
+        var loaded = new Library();
+        Assert.NotNull(TeamUserState.TeamForPrune(joined: false, loaded: null));
+        Assert.Empty(TeamUserState.TeamForPrune(joined: false, loaded: null)!.Prompts);
+        Assert.Same(loaded, TeamUserState.TeamForPrune(joined: true, loaded: loaded));
+        Assert.Null(TeamUserState.TeamForPrune(joined: true, loaded: null));
+
+        // Solo: a pin whose prompt is gone is dropped, so it doesn't use up one of the 10.
+        var s = new AppSettings();
+        var kept = Guid.NewGuid();
+        var personal = new Library();
+        personal.Prompts.Add(new Prompt { Id = kept, Title = "t", Text = "x" });
+        s.PinnedPromptIds.AddRange([kept, Guid.NewGuid()]);
+        Assert.True(TeamUserState.Prune(s, personal, TeamUserState.TeamForPrune(false, null)));
+        Assert.Equal([kept], s.PinnedPromptIds);
+    }
 }

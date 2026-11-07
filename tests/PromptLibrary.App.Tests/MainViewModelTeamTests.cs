@@ -236,7 +236,8 @@ public sealed class MainViewModelTeamTests : IDisposable
     public void Pin_AtCap_ShowsMessage() => Sta.Run(() =>
     {
         var host = NewHost(withTeam: true);
-        for (var i = 0; i < TeamUserState.MaxPins; i++) host.Settings.PinnedPromptIds.Add(Guid.NewGuid());
+        var mine = AddCategory(host.Library, "Mine");
+        for (var i = 0; i < TeamUserState.MaxPins; i++) host.Settings.PinnedPromptIds.Add(AddPrompt(host.Library, mine, $"P{i}").Id);
         var vm = new MainViewModel(host, new FakeDialogs());
         OpenTeamPrompt(vm, "Follow-up email");
         var id = vm.Editor!.PromptId!.Value;
@@ -379,6 +380,121 @@ public sealed class MainViewModelTeamTests : IDisposable
         Assert.False(vm.IsTeamOffline);
         Assert.StartsWith("Acme best practice · updated ", vm.TeamHeaderText);
         Assert.Null(vm.TeamHeaderDetail);
+    });
+
+    // ---- Final review fixes ----------------------------------------------------------------------
+
+    [Fact]
+    public void Pin_DanglingPinsDontCountTowardsTheCap_Solo() => Sta.Run(() =>
+    {
+        // Solo (no team service, and a service with nothing joined): pins of prompts that are gone are dropped first.
+        foreach (var withService in new[] { false, true })
+        {
+            var host = NewHost(withTeam: false);
+            if (withService) host.Team = NewService(host);
+            var prompt = AddPrompt(host.Library, AddCategory(host.Library, "Writing"), "Essay plan");
+            for (var i = 0; i < TeamUserState.MaxPins; i++) host.Settings.PinnedPromptIds.Add(Guid.NewGuid());
+            var vm = new MainViewModel(host, new FakeDialogs());
+            Assert.Equal(prompt.Id, vm.Editor!.PromptId);
+
+            vm.PinCommand.Execute(null);
+
+            Assert.Equal("Pinned", vm.StatusText);
+            Assert.Equal([prompt.Id], host.Settings.PinnedPromptIds);
+        }
+    });
+
+    [Fact]
+    public void Pin_DanglingPinsDontCountTowardsTheCap_Team() => Sta.Run(() =>
+    {
+        var host = NewHost(withTeam: true);
+        var kept = TeamPrompt(host, "Complaint reply").Id;
+        host.Settings.PinnedPromptIds.Add(kept);
+        for (var i = 1; i < TeamUserState.MaxPins; i++) host.Settings.PinnedPromptIds.Add(Guid.NewGuid());
+        var vm = new MainViewModel(host, new FakeDialogs());
+        OpenTeamPrompt(vm, "Follow-up email");
+        var id = vm.Editor!.PromptId!.Value;
+
+        vm.PinCommand.Execute(null);
+
+        Assert.Equal("Pinned", vm.StatusText);
+        Assert.Equal([kept, id], host.Settings.PinnedPromptIds);
+    });
+
+    [Fact]
+    public void Pin_TeamJoinedButNotLoaded_KeepsItsPins() => Sta.Run(() =>
+    {
+        // Joined, but the source can't be read and there's no offline copy: team pins can't be told from dangling
+        // ones, so none are dropped.
+        var host = NewHost(withTeam: false);
+        var prompt = AddPrompt(host.Library, AddCategory(host.Library, "Writing"), "Essay plan");
+        host.Settings.TeamSource = Path.Combine(_root, "missing", TeamFile.FileName);
+        var teamPin = Guid.NewGuid();
+        host.Settings.PinnedPromptIds.Add(teamPin);
+        var service = NewService(host);
+        host.Team = service;
+        service.Start();
+        var vm = new MainViewModel(host, new FakeDialogs());
+
+        vm.PinCommand.Execute(null);
+
+        Assert.Equal([teamPin, prompt.Id], host.Settings.PinnedPromptIds);
+    });
+
+    [Fact]
+    public void Delete_PinnedPersonalPrompt_Unpins() => Sta.Run(() =>
+    {
+        var host = NewHost(withTeam: false);
+        var prompt = AddPrompt(host.Library, AddCategory(host.Library, "Writing"), "Essay plan");
+        host.Settings.PinnedPromptIds.Add(prompt.Id);
+        var vm = new MainViewModel(host, new FakeDialogs());
+        Assert.Equal(prompt.Id, vm.Editor!.PromptId);
+        var saves = host.SettingsSaves;
+
+        vm.DeleteCommand.Execute(null);
+
+        Assert.Empty(host.Library.Prompts);
+        Assert.Empty(host.Settings.PinnedPromptIds);
+        Assert.True(host.SettingsSaves > saves);
+    });
+
+    [Fact]
+    public void ReloadAfterRestore_DropsPinsOfPromptsTheRestoreRemoved() => Sta.Run(() =>
+    {
+        var host = NewHost(withTeam: true);
+        var mine = AddPrompt(host.Library, AddCategory(host.Library, "Writing"), "Essay plan");
+        var team = TeamPrompt(host, "Complaint reply").Id;
+        var gone = Guid.NewGuid(); // a prompt the restored library doesn't have
+        host.Settings.PinnedPromptIds.AddRange([mine.Id, gone, team]);
+        var vm = new MainViewModel(host, new FakeDialogs());
+
+        vm.ReloadAfterRestore("Library restored from today.");
+
+        Assert.Equal([mine.Id, team], host.Settings.PinnedPromptIds);
+    });
+
+    [Theory]
+    [InlineData("""{"kind":"prompt-library-team","schemaVersion":2,"name":"x","prompts":[{"id":1}]}""", " · update Prompt Library to read it")]
+    [InlineData("not json", " · can't read the team library")]
+    [InlineData(null, " · can't reach the team library")]
+    public void OfflineHeader_SaysWhyTheReadFailed(string? fileText, string ending) => Sta.Run(() =>
+    {
+        var host = NewHost(withTeam: true);
+        var vm = new MainViewModel(host, new FakeDialogs());
+        vm.ShowTeamCommand.Execute(null);
+        var path = host.Settings.TeamSource!;
+        if (fileText is null) File.Delete(path);
+        else File.WriteAllText(path, fileText);
+
+        var refresh = host.Team!.RefreshAsync();
+        var until = DateTime.UtcNow.AddSeconds(10);
+        while (!refresh.IsCompleted && DateTime.UtcNow < until) Sta.DoEvents();
+        Sta.DoEvents();
+
+        Assert.True(vm.IsTeamOffline);
+        Assert.StartsWith("Last updated ", vm.TeamHeaderText);
+        Assert.EndsWith(ending, vm.TeamHeaderText);
+        Assert.Equal(LibrarySide.Team, vm.Side); // the last good copy still shows
     });
 
     // ---- Helpers -------------------------------------------------------------------------------

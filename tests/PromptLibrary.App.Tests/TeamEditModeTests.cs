@@ -243,7 +243,8 @@ public sealed class TeamEditModeTests : IDisposable
         Assert.False(vm.IsEditingTeam);
         Assert.False(host.Team.HasHeldRefresh); // released, and the held refresh ran
         Assert.Equal("Team prompts updated", vm.StatusText);
-        Assert.Contains("Typed before closing", ReadTeamFile());
+        // Read with pauses: ReadTeamFile gives "" while the released refresh probes the file for writing.
+        Until(() => { Thread.Sleep(20); return ReadTeamFile().Contains("Typed before closing"); });
 
         // Nothing unsaved: it can hide at once, and editing ends.
         vm.EditTeamCommand.Execute(null);
@@ -401,6 +402,70 @@ public sealed class TeamEditModeTests : IDisposable
         Assert.False(File.Exists(copy));
         Assert.Contains("Complaint reply (theirs)", ReadTeamFile());
         Assert.Equal(3, Directory.GetFiles(historyDir).Length); // first copy, the replaced version, the restored copy
+    });
+
+    // ---- Final review fixes ----------------------------------------------------------------------
+
+    [Fact]
+    public void Delete_ChangedByOther_SaysToMakeTheChangeAgain() => Sta.Run(() =>
+    {
+        var host = NewHost();
+        var dialogs = new FakeDialogs();
+        var vm = new MainViewModel(host, dialogs);
+        vm.ShowTeamCommand.Execute(null);
+        vm.EditTeamCommand.Execute(null);
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Title == "Follow-up email");
+        var id = vm.Editor!.PromptId!.Value;
+
+        ChangeFileElsewhere("Discovery questions", "Discovery questions (v2)");
+        vm.DeleteCommand.Execute(null);
+
+        Until(() => dialogs.Messages.Count > 0);
+        Assert.Equal(
+            "Someone else changed the team library, so it's been reloaded. Please make your change again.",
+            dialogs.Messages.Single());
+        Until(() => vm.Prompts.Any(r => r.Title == "Discovery questions (v2)"));
+        Assert.Contains(vm.Prompts, r => r.Id == id); // the reload undid the delete
+    });
+
+    [Fact]
+    public void LeaveTeam_WhileEditingWithUnsavedText_AsksFirst_CancelKeepsEverything() => Sta.Run(() =>
+    {
+        var host = NewHost();
+        var dialogs = new FakeDialogs { SaveAnswer = null };
+        var vm = new MainViewModel(host, dialogs);
+        vm.ShowTeamCommand.Execute(null);
+        vm.EditTeamCommand.Execute(null);
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Title == "Follow-up email");
+        vm.Editor!.Text = "My typed text";
+        var later = 0;
+
+        Assert.False(vm.ConfirmLeaveTeam(() => later++)); // Cancel
+
+        Assert.Equal("My typed text", vm.Editor!.Text);
+        Assert.True(vm.IsEditingTeam);
+        Assert.NotNull(host.Team!.Source);
+
+        dialogs.SaveAnswer = false; // Don't save
+        Assert.True(vm.ConfirmLeaveTeam(() => later++));
+        Assert.False(vm.IsEditingTeam);
+        Assert.Equal(0, later);
+    });
+
+    [Fact]
+    public void LeaveTeam_OnYourPrompts_DoesNotAskAboutYourPrompt() => Sta.Run(() =>
+    {
+        var host = NewHost();
+        var category = new Category { Id = Guid.NewGuid(), Name = "Mine" };
+        host.Library.Categories.Add(category);
+        host.Library.Prompts.Add(NewPrompt(category, "Essay", "text"));
+        var dialogs = new FakeDialogs { SaveAnswer = null };
+        var vm = new MainViewModel(host, dialogs);
+        vm.Editor!.Text = "Typed into my own prompt";
+
+        Assert.True(vm.ConfirmLeaveTeam(() => { })); // leaving the team doesn't touch your prompts
+
+        Assert.Equal("Typed into my own prompt", vm.Editor!.Text);
     });
 
     // ---- Helpers -------------------------------------------------------------------------------

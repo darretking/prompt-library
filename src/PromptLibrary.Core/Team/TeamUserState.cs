@@ -64,6 +64,13 @@ public static class TeamUserState
         return true;
     }
 
+    /// <summary>
+    /// The team library to pass to <see cref="Prune"/>: the loaded copy while a team library is joined, an empty one
+    /// when none is (so a solo user's dangling pins are dropped too), and null while one is joined but no copy is
+    /// loaded (unreachable: its ids must not be pruned).
+    /// </summary>
+    public static Library? TeamForPrune(bool joined, Library? loaded) => joined ? loaded : new Library();
+
     public static void Unpin(AppSettings s, Guid id) => s.PinnedPromptIds.Remove(id);
 
     /// <summary>Hides a team prompt; hiding also unpins it.</summary>

@@ -494,6 +494,13 @@ public sealed class AppHost : IMainHost, IDisposable
         => _mainWindow is null || _mainWindow.ViewModel.ConfirmBeforeRestore();
 
     /// <summary>
+    /// Before leaving the team library: a team prompt with unsaved changes in the main window is offered for saving
+    /// first (see <c>MainViewModel.ConfirmLeaveTeam</c>). False on Cancel, or while a team save has to finish
+    /// (<paramref name="later"/> then runs once it has gone through).
+    /// </summary>
+    public bool ConfirmLeaveTeam(Action later) => _mainWindow is null || _mainWindow.ViewModel.ConfirmLeaveTeam(later);
+
+    /// <summary>
     /// Re-checks (off the UI thread) whether the backup folder can be reached (main window activated). When a
     /// paused folder is back, the bar clears and the skipped backup runs.
     /// </summary>

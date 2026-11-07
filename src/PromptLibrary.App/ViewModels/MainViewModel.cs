@@ -32,6 +32,10 @@ public sealed class MainViewModel : ObservableObject
 
     private const string ChangedByOtherMessage =
         "Someone else changed the team library, so it's been reloaded. Your change is still here: check it and save again.";
+
+    // A refused change with no Save button (a delete, a category change): the reload undid it, so nothing is kept.
+    private const string ChangeRedoMessage =
+        "Someone else changed the team library, so it's been reloaded. Please make your change again.";
     private const string NewerSchemaMessage =
         "This team library was made with a newer Prompt Library. Update to edit it.";
     private const string RemovesForEveryone = "This removes it for everyone.";
@@ -180,7 +184,9 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>
     /// The Team side's muted header line: <c>Acme best practice · updated today, 07:52</c>, or while the source can't
-    /// be read <c>Last updated today, 07:52 · can't reach the team library</c>. Null when no team library is loaded.
+    /// be read <c>Last updated today, 07:52 · can't reach the team library</c> (<c>· can't read the team library</c>
+    /// when the file is there but isn't usable, <c>· update Prompt Library to read it</c> when a newer app made it).
+    /// Null when no team library is loaded.
     /// </summary>
     public string? TeamHeaderText
     {
@@ -188,9 +194,14 @@ public sealed class MainViewModel : ObservableObject
         {
             if (!TeamConnected || IsTeamLoading) return null;
             if (_team!.Service is not { Team: { } library } service) return "Can't reach the team library";
-            return IsTeamOffline
-                ? $"Last updated {When(service.LastChecked ?? library.UpdatedAt)} · can't reach the team library"
-                : $"{library.Name} · updated {When(library.UpdatedAt)}";
+            if (!IsTeamOffline) return $"{library.Name} · updated {When(library.UpdatedAt)}";
+            var why = service.LastReadStatus switch
+            {
+                TeamReadStatus.TooNew => "update Prompt Library to read it",
+                TeamReadStatus.NotATeamFile => "can't read the team library",
+                _ => "can't reach the team library",
+            };
+            return $"Last updated {When(service.LastChecked ?? library.UpdatedAt)} · {why}";
         }
     }
 
@@ -580,6 +591,14 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Before leaving the team library (Settings → Leave team library): while the Team side is shown, a team prompt
+    /// with unsaved changes is offered for saving and editing ends, as when the window closes. Your own prompts aren't
+    /// affected by leaving, so nothing is asked about them. True when it can go on now; false on Cancel, or when a team
+    /// save has to finish first (<paramref name="later"/> then runs once it has gone through).
+    /// </summary>
+    public bool ConfirmLeaveTeam(Action later) => !IsTeamSide || ConfirmLeave(later);
+
+    /// <summary>
     /// At exit: gives a team save still writing up to <paramref name="limit"/> to finish, running the dispatcher
     /// meanwhile so its result applies. True when nothing is left writing.
     /// </summary>
@@ -686,6 +705,7 @@ public sealed class MainViewModel : ObservableObject
     {
         _unwritten = null;
         Editor = null;
+        if (PruneTeamState()) SaveTeamState(); // pins of prompts the restore removed
         if (IsTeamSide)
         {
             // The restore replaced your prompts: show them.
@@ -911,7 +931,7 @@ public sealed class MainViewModel : ObservableObject
         if (isTeam)
         {
             CurrentDocument.SaveLibrary();
-            TrackTeamSave(() => AfterTeamPromptSaved(editor, promptId));
+            TrackTeamSave(fromPromptSave: true, () => AfterTeamPromptSaved(editor, promptId));
             FollowEditorCategory(editor);
             return false; // not written yet: the editor stays unsaved until the save reports back
         }
@@ -977,6 +997,12 @@ public sealed class MainViewModel : ObservableObject
         if (_unwritten?.PromptId == id) _unwritten = null;
         Editor = null;
         SaveChange(); // on failure the deletion stays and is written later (the host says so)
+        // A deleted prompt is unpinned. A team delete is pruned once it has been saved (a refused one comes back pinned).
+        if (!CurrentDocument.IsTeam && _host.Settings.PinnedPromptIds.Contains(id))
+        {
+            TeamUserState.Unpin(_host.Settings, id);
+            SaveTeamState();
+        }
         RebuildCategories(_selectedCategory?.Id);
         RefreshPrompts();
     }
@@ -1379,6 +1405,7 @@ public sealed class MainViewModel : ObservableObject
         else
         {
             if (IsHiddenTeamPrompt(id)) return; // a hidden prompt can't be pinned
+            PruneTeamState(); // pins of prompts that are gone don't count towards the cap (saved with the pin below)
             if (!TeamUserState.Pin(settings, id))
             {
                 ShowStatus($"You can pin up to {TeamUserState.MaxPins} prompts.", FeedbackDuration);
@@ -1438,6 +1465,15 @@ public sealed class MainViewModel : ObservableObject
         RaiseMarkerState();
     }
 
+    /// <summary>
+    /// Drops pins (and team hides and markers) of prompts that are gone: against your prompts and the loaded team
+    /// library, or an empty one when no team library is joined. While one is joined but not loaded nothing is
+    /// dropped, so a team that is briefly unreachable keeps its pins. True when something changed (not saved yet).
+    /// </summary>
+    private bool PruneTeamState()
+        => TeamUserState.Prune(_host.Settings, _personal.Library,
+            TeamUserState.TeamForPrune(joined: TeamConnected, loaded: TeamContent));
+
     /// <summary>Pins, hides and markers live in the settings, and the quick menu shows pins and hides.</summary>
     private void SaveTeamState()
     {
@@ -1454,15 +1490,17 @@ public sealed class MainViewModel : ObservableObject
     private void SaveChange()
     {
         CurrentDocument.SaveLibraryChange();
-        if (CurrentDocument.IsTeam) TrackTeamSave();
+        if (CurrentDocument.IsTeam) TrackTeamSave(fromPromptSave: false);
     }
 
     /// <summary>
     /// Waits (without blocking) for the team save just started, then applies its outcome on the UI thread: saved runs
     /// <paramref name="onSaved"/> and says "Saved for everyone"; refused (someone else changed the file) or failed
-    /// shows why, with the library reloaded or put back to the copy on disk. The editor keeps whatever was typed.
+    /// shows why, with the library reloaded or put back to the copy on disk. The editor keeps whatever was typed; a
+    /// refused change that didn't come from a prompt's Save (<paramref name="fromPromptSave"/> false) was undone by the
+    /// reload, so the message asks for it again.
     /// </summary>
-    private void TrackTeamSave(Action? onSaved = null)
+    private void TrackTeamSave(bool fromPromptSave, Action? onSaved = null)
     {
         if (_team?.PendingSave is not { } pending) return;
         _teamSaving = true;
@@ -1472,11 +1510,11 @@ public sealed class MainViewModel : ObservableObject
             var result = task.IsCompletedSuccessfully
                 ? task.Result
                 : new TeamSaveResult(TeamSaveStatus.Failed, null, "Couldn't save the team library.");
-            _dispatcher.BeginInvoke(() => FinishTeamSave(result, baseHash, onSaved));
+            _dispatcher.BeginInvoke(() => FinishTeamSave(result, baseHash, fromPromptSave, onSaved));
         }, TaskScheduler.Default);
     }
 
-    private void FinishTeamSave(TeamSaveResult result, string? baseHash, Action? onSaved)
+    private void FinishTeamSave(TeamSaveResult result, string? baseHash, bool fromPromptSave, Action? onSaved)
     {
         _teamSaving = false;
         var next = _afterTeamSave;
@@ -1492,7 +1530,7 @@ public sealed class MainViewModel : ObservableObject
                 break;
             case TeamSaveStatus.ChangedByOther when team.Service.CurrentHash != baseHash:
                 team.Rebase(); // the service has re-read the file
-                _dialogs.ShowMessage(ChangedByOtherMessage);
+                _dialogs.ShowMessage(fromPromptSave ? ChangedByOtherMessage : ChangeRedoMessage);
                 break;
             default:
                 // Failed, or refused and the file couldn't be read back: what wasn't written doesn't stay in memory

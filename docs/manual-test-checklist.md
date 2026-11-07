@@ -89,6 +89,7 @@ Use stand-in folders, never a real shared folder: run with `PROMPTLIBRARY_DEBUG_
 - [ ] Settings → Start a team library: a folder that doesn't exist. Expected: "Can't reach that folder. Check the path, and that the drive or network is connected."
 - [ ] Start in `team-a`, name "Acme best practice", "Add example business prompts" ticked. Expected: `team-a\team-prompts.json` is written, the switch appears, the Team side shows 24 prompts in 6 categories, Settings shows "Connected to Acme best practice", the folder and "Updated today, …".
 - [ ] Start again in `team-a` from another PC or after leaving. Expected: "This folder already has a team library (Acme best practice)." with Join it; the file is not overwritten.
+- [ ] Start in a folder whose `team-prompts.json` holds "not json". Expected: "This folder already has a team file that can't be read." and the file is not overwritten.
 - [ ] Copy `team-prompts.json` to `team-b` and run `attrib +r team-prompts.json` there. Leave, then Join `team-b`. Expected: "Checking…" with a progress bar while it reads; the Team header shows "Read only" (no Edit team library, no ⋯); nothing is marked New on first join.
 - [ ] Join a folder holding some other JSON file named `team-prompts.json`. Expected: "That isn't a Prompt Library team file." and nothing changes. Join `\nohost\share`. Expected: "Checking…", then "Can't reach that folder…".
 - [ ] Join a OneDrive or Google Drive share link. Expected: "That link opens a web page, not the file…".
@@ -108,18 +109,20 @@ Use stand-in folders, never a real shared folder: run with `PROMPTLIBRARY_DEBUG_
 - [ ] Edit team library. Expected: the bar "Editing team library: changes go to everyone · Done", and Delete · Pin | Save · Copy prompt in the editor. Fix a typo and Save. Expected: "Saved for everyone", and a copy of the old file in `team-a\Prompt Library history\`.
 - [ ] Delete a team prompt. Expected: "Delete "…"? This removes it for everyone." first.
 - [ ] Mid-edit, change `team-prompts.json` in a text editor, then Save in the app. Expected: "Someone else changed the team library, so it's been reloaded. Your change is still here: check it and save again." Your typed text is still in the editor; Save again keeps both changes.
+- [ ] Mid-edit, change `team-prompts.json` in a text editor, then delete a prompt in the app. Expected: "Someone else changed the team library, so it's been reloaded. Please make your change again." and the prompt is back.
+- [ ] Type into a team prompt in edit mode, then Settings → Leave team library. Expected: "Save changes?" first; Cancel keeps the text and the team library.
 - [ ] ⋯ → Restore an older version…. Expected: versions listed "Today, 08:36 · 24 prompts", newest first; Restore asks first, then "Restored for everyone".
 - [ ] Copy `team-prompts.json` to `team-prompts-LAPTOP.json`. Expected: "Two versions of the team library found · Review". Review lists "Other version from sync · …" first. Keep current version (or Restore it). Expected: the notice clears and the copy moves into the history folder.
 - [ ] Close the window while editing. Expected: edit mode ends; unsaved text gets the usual "Save changes?".
 
 **Offline and leaving**
-- [ ] Rename `team-a` and restart the app. Expected: the Team prompts still show; the header reads "Last updated … · can't reach the team library · Retry"; Settings shows the reason with Retry. Rename it back and press Retry. Expected: back to "Acme best practice · updated …".
+- [ ] Rename `team-a` and restart the app. Expected: the Team prompts still show; the header reads "Last updated … · can't reach the team library · Retry"; Settings shows the reason with Retry. Rename it back and press Retry. Expected: back to "Acme best practice · updated …". With "not json" in the file instead, the header reads "… · can't read the team library".
 - [ ] Settings → Leave team library → Leave. Expected: the switch, Team block and pins on team prompts are gone; `%APPDATA%\PromptLibrary\team-cache.json` is deleted; your copies stay.
 - [ ] Setup guide (Help → Setup guide…), step 3 of 5 "Does your team share prompts?": Join a team library and Start a team library open the same dialogs; Next skips; once joined it shows "Connected to …".
 - [ ] Minimum window size (860×520) on the Team side, in edit mode and with a new prompt. Expected: nothing cut off (the window's minimum height grows while the switch and edit bar show).
 
 ## Scaling & accessibility
-- [ ] At 100%, 150% and 200% display scaling (sign out and in after changing): main window, quick menu, Settings, Restore and the wizard are sharp, nothing is clipped, and the minimum window size still works.
+- [ ] At 100%, 150% and 200% display scaling (sign out and in after changing): main window, quick menu, Settings, Restore and the wizard are sharp, nothing is clipped, and the minimum window size still works. At 1920×1080 and 150 %, Settings fits the screen (it scrolls) with Close visible.
 - [ ] Keyboard only: every screen is usable without the mouse and the focus ring is always visible.
 - [ ] Windows dark mode and high contrast: text stays readable.
 - [ ] Second monitor with different scaling: edge-cases.md #4.
