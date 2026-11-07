@@ -6,7 +6,7 @@
         Title="Settings"
         AutomationProperties.Name="Settings"
         Icon="/Assets/app.ico"
-        Width="560" Height="680"
+        Width="560" Height="720"
         ResizeMode="NoResize">
     <!-- Every setting applies as soon as it changes; Close (or Esc, or ×) just closes. -->
     <Grid>
@@ -73,8 +73,14 @@
                         <TextBlock Text="{Binding ConnectedLine}" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding SourceText}" Style="{StaticResource MutedText}" TextWrapping="Wrap"
                                    Margin="0,2,0,0" />
-                        <TextBlock Text="{Binding StatusText}" Style="{StaticResource MutedText}" TextWrapping="Wrap"
-                                   Margin="0,2,0,0" />
+                        <!-- "Updated today, 08:33", or why it can't be read right now + Retry. -->
+                        <WrapPanel Margin="0,2,0,0">
+                            <TextBlock Text="{Binding StatusText}" Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                                       Margin="0,0,8,0" AutomationProperties.Name="{Binding StatusText}" />
+                            <Button Style="{StaticResource LinkButton}" Content="Retry" Command="{Binding RetryCommand}"
+                                    ToolTip="Read the team library again" AutomationProperties.Name="Retry"
+                                    Visibility="{Binding ShowRetry, Converter={StaticResource BoolToVisibility}}" />
+                        </WrapPanel>
                         <Button Content="Leave team library" HorizontalAlignment="Left" Margin="0,8,0,0"
                                 Click="LeaveTeam_Click" AutomationProperties.Name="Leave team library" />
                     </StackPanel>

@@ -46,6 +46,13 @@ public sealed class TeamDialogViewModelTests : IDisposable
         task.GetAwaiter().GetResult();
     }
 
+    private static void Until(Func<bool> condition)
+    {
+        var until = DateTime.UtcNow.AddSeconds(10);
+        while (!condition() && DateTime.UtcNow < until) Sta.DoEvents();
+        Assert.True(condition(), "Timed out waiting.");
+    }
+
     private static TeamJoinViewModel JoinVm(Func<string, Task<TeamJoinResult>> join, string? provider = null)
         => new(join, _ => provider);
 
@@ -70,7 +77,7 @@ public sealed class TeamDialogViewModelTests : IDisposable
 
         Wait(vm.JoinAsync());
 
-        Assert.Equal("Can't reach that folder.", vm.Error);
+        Assert.Equal("Can't reach that folder. Check the path, and that the drive or network is connected.", vm.Error);
     });
 
     [Fact]
@@ -293,6 +300,8 @@ public sealed class TeamDialogViewModelTests : IDisposable
         Assert.True(vm.IsConnected);
         Assert.Equal("Connected to acme", vm.ConnectedLine);
         Assert.Equal(folder, vm.SourceText);
+        Assert.StartsWith("Updated ", vm.StatusText);
+        Assert.False(vm.ShowRetry);
         Assert.Equal("Leave acme? Team prompts will disappear; your copies stay.", vm.LeaveQuestion);
 
         vm.Leave();
@@ -309,4 +318,26 @@ public sealed class TeamDialogViewModelTests : IDisposable
         Assert.False(vm.IsAvailable);
         Assert.False(vm.ShowActions);
     }
+
+    [Fact]
+    public void Connection_Offline_SaysWhy_AndOffersRetry() => Sta.Run(() =>
+    {
+        var folder = MakeTeamFolder("acme");
+        using var svc = NewService();
+        using var vm = new TeamConnectionViewModel(svc);
+        Wait(svc.JoinAsync(folder));
+        Directory.Move(folder, folder + "-gone");
+
+        Wait(svc.RefreshAsync());
+        Sta.DoEvents();
+
+        Assert.True(vm.IsConnected);
+        Assert.True(vm.ShowRetry);
+        Assert.DoesNotContain("Updated", vm.StatusText);
+
+        Directory.Move(folder + "-gone", folder);
+        vm.RetryCommand.Execute(null);
+        Until(() => !vm.ShowRetry);
+        Assert.StartsWith("Updated ", vm.StatusText);
+    });
 }

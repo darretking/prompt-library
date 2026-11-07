@@ -1,14 +1,17 @@
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using PromptLibrary.App.Team;
+using PromptLibrary.Core.Backup;
 using PromptLibrary.Core.Team;
 
 namespace PromptLibrary.App.ViewModels;
 
 /// <summary>
 /// What Settings and the setup guide show about the team library: while none is joined the two entry buttons
-/// (Join a team library, Start a team library); while connected only the connected state (name, source and Leave
-/// team library), so a library is never replaced silently: you leave first. Follows the service's changes.
+/// (Join a team library, Start a team library); while connected only the connected state (name, source, when it was
+/// last updated or why it can't be read with Retry, and Leave team library), so a library is never replaced silently:
+/// you leave first. Follows the service's changes.
 /// </summary>
 public sealed class TeamConnectionViewModel : ObservableObject, IDisposable
 {
@@ -18,6 +21,7 @@ public sealed class TeamConnectionViewModel : ObservableObject, IDisposable
     {
         _service = service;
         if (_service is not null) _service.Changed += OnServiceChanged;
+        RetryCommand = new AsyncRelayCommand(() => _service?.RefreshAsync() ?? Task.CompletedTask);
     }
 
     /// <summary>False when the team feature failed to start; the section is then left out.</summary>
@@ -41,10 +45,26 @@ public sealed class TeamConnectionViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>"Connected" or why it isn't right now.</summary>
-    public string StatusText => _service?.Status == TeamStatus.Offline
-        ? _service.StatusMessage ?? "Can't reach the team library."
-        : "Connected";
+    /// <summary><c>Updated today, 08:33</c>, or why the team library can't be read right now (then Retry shows).</summary>
+    public string StatusText
+    {
+        get
+        {
+            if (_service is null) return "";
+            if (IsOffline) return _service.StatusMessage ?? "Can't reach the team library.";
+            return _service.LastUpdated is { } when
+                ? $"Updated {BackupLocation.RelativeTimeText(when.LocalDateTime, DateTime.Now, midSentence: true)}"
+                : "";
+        }
+    }
+
+    /// <summary>Retry beside the status while the last read failed.</summary>
+    public bool ShowRetry => IsConnected && IsOffline;
+
+    /// <summary>Reads the team library again at once.</summary>
+    public IAsyncRelayCommand RetryCommand { get; }
+
+    private bool IsOffline => _service?.Status == TeamStatus.Offline;
 
     public string ConnectedLine => $"Connected to {Name}";
 

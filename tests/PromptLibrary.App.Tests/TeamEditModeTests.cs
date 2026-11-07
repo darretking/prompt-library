@@ -13,7 +13,7 @@ namespace PromptLibrary.App.Tests;
 public sealed class TeamEditModeTests : IDisposable
 {
     private const string ChangedByOtherMessage =
-        "Someone else changed the team library. It's been reloaded. Please make your change again.";
+        "Someone else changed the team library, so it's been reloaded. Your change is still here: check it and save again.";
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "pl-team-edit-" + Guid.NewGuid().ToString("N"));
     private readonly HttpClient _http = new();
@@ -110,7 +110,7 @@ public sealed class TeamEditModeTests : IDisposable
 
         vm.DeleteCommand.Execute(null);
 
-        Assert.Equal("This removes it for everyone. Delete?", dialogs.LastConfirm);
+        Assert.Equal("Delete \"Follow-up email\"? This removes it for everyone.", dialogs.LastConfirm);
         Assert.Contains(host.Team!.Team!.Content.Prompts, p => p.Id == id); // cancelled
 
         dialogs.Confirm = true;

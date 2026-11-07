@@ -31,10 +31,10 @@ public sealed class MainViewModel : ObservableObject
     private static readonly TimeSpan FeedbackDuration = TimeSpan.FromSeconds(4);
 
     private const string ChangedByOtherMessage =
-        "Someone else changed the team library. It's been reloaded. Please make your change again.";
+        "Someone else changed the team library, so it's been reloaded. Your change is still here: check it and save again.";
     private const string NewerSchemaMessage =
         "This team library was made with a newer Prompt Library. Update to edit it.";
-    private const string RemovesForEveryoneMessage = "This removes it for everyone. Delete?";
+    private const string RemovesForEveryone = "This removes it for everyone.";
 
     private readonly IMainHost _host;
     private readonly IDialogs _dialogs;
@@ -797,7 +797,9 @@ public sealed class MainViewModel : ObservableObject
 
         if (promptCount == 0)
         {
-            var question = CurrentDocument.IsTeam ? RemovesForEveryoneMessage : $"Delete the category \"{item.Name}\"?";
+            var question = CurrentDocument.IsTeam
+                ? $"Delete the category \"{item.Name}\"? {RemovesForEveryone}"
+                : $"Delete the category \"{item.Name}\"?";
             if (!_dialogs.ConfirmDestructive(question, "Delete")) return;
         }
         else
@@ -959,7 +961,7 @@ public sealed class MainViewModel : ObservableObject
         }
 
         var title = CurrentDocument.Library.Prompts.FirstOrDefault(p => p.Id == id)?.Title ?? editor.DisplayTitle;
-        var question = CurrentDocument.IsTeam ? RemovesForEveryoneMessage : $"Delete \"{title}\"?";
+        var question = CurrentDocument.IsTeam ? $"Delete \"{title}\"? {RemovesForEveryone}" : $"Delete \"{title}\"?";
         if (!_dialogs.ConfirmDestructive(question, "Delete")) return;
 
         try

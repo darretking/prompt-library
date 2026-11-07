@@ -9,10 +9,16 @@ internal static class TeamDialogText
 
     /// <summary>
     /// <c>Can't reach that folder. Is OneDrive running?</c> when the folder is inside a known sync provider's folder,
-    /// otherwise the message as it is. Any other message passes through unchanged.
+    /// otherwise <c>Can't reach that folder. Check the path, and that the drive or network is connected.</c> Any other
+    /// message passes through unchanged.
     /// </summary>
     public static string Describe(string message, string? provider)
-        => message == CantReachFolder && provider is { Length: > 0 } ? $"{CantReachFolder} Is {provider} running?" : message;
+    {
+        if (message != CantReachFolder) return message;
+        return provider is { Length: > 0 }
+            ? $"{CantReachFolder} Is {provider} running?"
+            : $"{CantReachFolder} Check the path, and that the drive or network is connected.";
+    }
 
     /// <summary>The sync provider that holds <paramref name="path"/> (null for a link or an unknown place). Off the UI thread.</summary>
     public static string? ProviderOf(string path, Func<IReadOnlyList<CloudFolder>> detect)

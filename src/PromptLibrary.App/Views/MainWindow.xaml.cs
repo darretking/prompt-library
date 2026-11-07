@@ -278,6 +278,29 @@ public partial class MainWindow : Window, IDialogs
         SlipRow.MinHeight = stacked ? 40 : 64;
     }
 
+    // ---- Window size ---------------------------------------------------------------------------
+
+    /// <summary>The minimum height before any team bar: the size the three columns are laid out for (style guide).</summary>
+    private const double BaseMinHeight = 520;
+
+    /// <summary>
+    /// The switch and the team notice bar sit above the three columns, so the minimum window height grows by their
+    /// height while they show: the editor keeps the room it has at 860×520 without them, and its buttons are never cut
+    /// off (the Team side's edit bar and a new prompt's heading would otherwise push them out of the window).
+    /// </summary>
+    private void TeamBars_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (e.HeightChanged) UpdateMinHeight();
+    }
+
+    private void TeamBars_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e) => UpdateMinHeight();
+
+    private void UpdateMinHeight()
+    {
+        static double HeightOf(FrameworkElement bar) => bar.IsVisible ? bar.ActualHeight : 0;
+        MinHeight = BaseMinHeight + HeightOf(SwitchBar) + HeightOf(TeamBar);
+    }
+
     // ---- Helpers -------------------------------------------------------------------------------
 
     private void FocusSelectedCategory()

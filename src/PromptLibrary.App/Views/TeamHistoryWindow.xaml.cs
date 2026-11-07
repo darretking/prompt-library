@@ -17,7 +17,7 @@ namespace PromptLibrary.App.Views;
 public partial class TeamHistoryWindow : Window
 {
     private const string ChangedByOtherMessage =
-        "Someone else changed the team library. It's been reloaded. Please make your change again.";
+        "Someone else changed the team library, so it's been reloaded. Check it, then choose the version again.";
 
     private readonly TeamLibraryService _service;
     private readonly UserCloseTracker _closes;
