@@ -238,6 +238,7 @@ public sealed class AppHost : IMainHost, IDisposable
             var assembly = typeof(AppHost).Assembly;
             string? Metadata(string key) => assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
                 .FirstOrDefault(a => a.Key == key)?.Value is { Length: > 0 } value ? value : null;
+            if (Paths.IsSandbox) return;
             if (Metadata("UpdateRepositoryOwner") is not { } owner || Metadata("UpdateRepositoryName") is not { } repo)
                 return;
 

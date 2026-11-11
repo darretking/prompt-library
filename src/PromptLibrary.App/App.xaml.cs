@@ -25,8 +25,8 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
-        _singleInstance = new Mutex(initiallyOwned: true, MutexName, out _ownsMutex);
+        _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName + Paths.InstanceSuffix);
+        _singleInstance = new Mutex(initiallyOwned: true, MutexName + Paths.InstanceSuffix, out _ownsMutex);
         if (!_ownsMutex)
         {
             _showSignal.Set();
