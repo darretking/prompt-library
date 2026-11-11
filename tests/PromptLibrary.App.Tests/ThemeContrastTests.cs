@@ -63,6 +63,38 @@ public class ThemeContrastTests
         Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
     }
 
+    /// <summary>Secondary text (descriptions, counts, hints) is read all day: 5.5:1 on every layer it sits on, not just 4.5:1.</summary>
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void Muted_text_meets_5_5_to_1_on_window_rail_surface_and_the_soft_fills(string theme)
+    {
+        var palette = Load(theme);
+        var failures = new List<string>();
+        foreach (var background in new[] { "Brush.Window", "Brush.Rail", "Brush.Surface", "Brush.BrandSoft", "Brush.CodeBlock" })
+        {
+            var ratio = Contrast(palette["Brush.Muted"], palette[background]);
+            if (ratio < 5.5) failures.Add($"{theme}: Brush.Muted on {background} = {ratio:0.00}");
+        }
+        foreach (var background in new[] { "Brush.Window", "Brush.Rail", "Brush.Surface" })
+        {
+            var hover = Over(palette["Brush.Hover"], palette[background]);
+            var ratio = Contrast(palette["Brush.Muted"], hover);
+            if (ratio < 5.5) failures.Add($"{theme}: Brush.Muted on Hover over {background} = {ratio:0.00}");
+        }
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
+
+    /// <summary>The editor card's shadow: black, 8 % in light and 30 % in dark.</summary>
+    [Theory]
+    [InlineData("Light", 0.08)]
+    [InlineData("Dark", 0.30)]
+    public void Card_shadow_is_black_at_the_documented_strength(string theme, double opacity)
+    {
+        var shadow = Load(theme)["Brush.Shadow"];
+        Assert.Equal((0, 0, 0), (shadow.R, shadow.G, shadow.B));
+        Assert.InRange(shadow.A / 255.0, opacity - 0.01, opacity + 0.01);
+    }
+
     [Fact]
     public void Both_themes_define_the_same_keys()
     {

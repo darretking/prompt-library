@@ -9,6 +9,36 @@ namespace PromptLibrary.Core.Seed;
 /// </summary>
 public static class SeedLibrary
 {
+    /// <summary>
+    /// Adds the example prompts to <paramref name="target"/>, skipping any whose title is already there (compared
+    /// ignoring case). Categories are matched by name, or created when missing. Returns how many prompts were added.
+    /// </summary>
+    public static int AddMissing(Library target, DateTimeOffset now)
+    {
+        var seed = Create(now);
+        var titles = new HashSet<string>(target.Prompts.Select(p => p.Title.Trim()), StringComparer.OrdinalIgnoreCase);
+        var added = 0;
+        foreach (var category in seed.Categories)
+        {
+            var fresh = seed.Prompts.Where(p => p.CategoryId == category.Id && !titles.Contains(p.Title.Trim())).ToList();
+            if (fresh.Count == 0) continue;
+
+            var home = target.Categories.FirstOrDefault(c => string.Equals(c.Name, category.Name, StringComparison.OrdinalIgnoreCase));
+            if (home is null)
+            {
+                target.Categories.Add(category);
+                home = category;
+            }
+            foreach (var prompt in fresh)
+            {
+                prompt.CategoryId = home.Id;
+                target.Prompts.Add(prompt);
+                added++;
+            }
+        }
+        return added;
+    }
+
     public static Library Create(DateTimeOffset now)
     {
         Category C(string name) => new() { Id = Guid.NewGuid(), Name = name, Emoji = SeedDecor.Emoji(name) };

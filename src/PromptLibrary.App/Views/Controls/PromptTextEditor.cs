@@ -47,7 +47,7 @@ public sealed class PromptTextEditor : UserControl
         Text = "Type or paste your prompt. Use {name} where something changes each time.",
         IsHitTestVisible = false,
         TextWrapping = TextWrapping.Wrap,
-        FontSize = 13,
+        FontSize = 14,
         Margin = new Thickness(9, 8, 9, 0),
         VerticalAlignment = VerticalAlignment.Top,
     };
@@ -66,7 +66,7 @@ public sealed class PromptTextEditor : UserControl
         _editor.Padding = new Thickness(8);
         _editor.FontFamily = (FontFamily)(Application.Current?.TryFindResource("Font.Prompt")
                                            ?? new FontFamily("Cascadia Mono, Consolas"));
-        _editor.FontSize = 13;
+        _editor.FontSize = 14;
         _editor.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
         _editor.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
         _editor.Options.EnableHyperlinks = false;
@@ -127,6 +127,19 @@ public sealed class PromptTextEditor : UserControl
     {
         get => (IDictionary<string, string>?)GetValue(PlaceholderValuesProperty);
         set => SetValue(PlaceholderValuesProperty, value);
+    }
+
+    /// <summary>
+    /// Asks for the height of its content (the text, or the rendered preview), up to the room it is given, instead of
+    /// all of it: the slip around it (<see cref="SlipFrame"/>) is then as tall as the prompt, and a long prompt scrolls.
+    /// </summary>
+    protected override Size MeasureOverride(Size constraint)
+    {
+        if (Content is not UIElement inner) return base.MeasureOverride(constraint);
+        inner.Measure(new Size(constraint.Width, double.PositiveInfinity));
+        var wanted = inner.DesiredSize.Height;
+        var height = double.IsInfinity(constraint.Height) ? wanted : Math.Min(wanted, constraint.Height);
+        return base.MeasureOverride(new Size(constraint.Width, height));
     }
 
     /// <summary>The wrapped editor (tests and focus handling).</summary>
@@ -213,6 +226,7 @@ public sealed class PromptTextEditor : UserControl
     private void RebuildPreview()
     {
         if (!IsPreview) return;
+        _preview.ShowCaption = PromptTemplate.HasFields(Text);
         _preview.Show(PromptPreview.Build(Text, PlaceholderValues, DateTime.Now));
     }
 

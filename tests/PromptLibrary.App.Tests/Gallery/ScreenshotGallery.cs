@@ -39,6 +39,7 @@ public sealed class ScreenshotGallery
     public void RenderAllScreens() => Sta.Run(() =>
     {
         _out = GalleryFactAttribute.OutputFolder!;
+        Motion.Suppress = true; // never a picture half way through a fade (read when App.xaml loads)
         // Relative pack URIs (window icons) resolve against Application.ResourceAssembly, which is already testhost here: point it at the app.
         typeof(Application).GetField("_resourceAssembly", BindingFlags.Static | BindingFlags.NonPublic)!.SetValue(null, typeof(App).Assembly);
         if (Application.Current is null)

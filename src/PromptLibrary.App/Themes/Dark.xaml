@@ -9,7 +9,7 @@
     <SolidColorBrush x:Key="Brush.RailBackdrop" Color="#161920" />
     <SolidColorBrush x:Key="Brush.Surface" Color="#242833" />
     <SolidColorBrush x:Key="Brush.Ink" Color="#E8EAF0" />
-    <SolidColorBrush x:Key="Brush.Muted" Color="#A0A8B8" />
+    <SolidColorBrush x:Key="Brush.Muted" Color="#B2B9C6" />
     <SolidColorBrush x:Key="Brush.Line" Color="#353B48" />
     <!-- Brand: text, edges, links, focus ring. BrandFill: fills that carry white text (Copy button, ticked box). -->
     <SolidColorBrush x:Key="Brush.Brand" Color="#8B85F0" />
@@ -30,6 +30,8 @@
     <SolidColorBrush x:Key="Brush.OnBrand" Color="#FFFFFF" />
     <!-- Fenced code blocks in the prompt editor; version-history diff rows (text colours checked at 4.5:1 on their fill). -->
     <SolidColorBrush x:Key="Brush.CodeBlock" Color="#2D323F" />
+    <!-- Shadow of the editor card: black; its alpha is the strength (8 % light, 30 % dark). Not a text colour. -->
+    <SolidColorBrush x:Key="Brush.Shadow" Color="#4D000000" />
     <SolidColorBrush x:Key="Brush.DiffAdded" Color="#1D3A29" />
     <SolidColorBrush x:Key="Brush.DiffAddedText" Color="#A8E6BC" />
     <SolidColorBrush x:Key="Brush.DiffRemoved" Color="#4A2226" />

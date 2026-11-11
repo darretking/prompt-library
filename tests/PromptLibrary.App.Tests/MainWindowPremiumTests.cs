@@ -449,6 +449,140 @@ public sealed class MainWindowPremiumTests : IDisposable
         Assert.Equal("Typing", item.EditName);
     });
 
+    // ---- Empty states, starter prompts, no-field prompts, editor meta ---------------------------------
+
+    [Fact]
+    public void EmptyLibrary_HasOneEmptyState_TheListsAndTheEditorStaysQuiet() => Sta.Run(() =>
+    {
+        var w = Build();
+
+        Assert.True(w.Vm.ShowNoPromptsYet);
+        Assert.Equal("", w.Vm.NoEditorText); // the list column says it; the editor doesn't repeat it
+        Assert.True(w.Vm.HasNoEditor);
+    });
+
+    [Fact]
+    public void NoPromptOpen_InALibraryWithPrompts_ShowsAFaintHint() => Sta.Run(() =>
+    {
+        var w = Build(P("One"));
+        w.Vm.SelectedPrompt = null;
+
+        Assert.Equal("Select a prompt, or create one.", w.Vm.NoEditorText);
+    });
+
+    [Fact]
+    public void NoMatches_HeadlineHasNoFullStop()
+    {
+        Sta.Run(() =>
+        {
+            var w = Build(P("Alpha"));
+            w.Vm.SelectedCategory = w.Vm.Categories.First(c => c.IsAll);
+            w.Vm.SearchText = "zzz";
+            Assert.Equal("No prompts match \"zzz\"", w.Vm.NoMatchesHeadline);
+        });
+    }
+
+    [Fact]
+    public void AddStarterPrompts_FillsAnEmptyLibrary_AndPressingTwiceAddsNothingMore() => Sta.Run(() =>
+    {
+        var w = Build();
+
+        w.Vm.AddStarterPromptsCommand.Execute(null);
+
+        Assert.Equal(39, w.Host.Library.Prompts.Count);
+        Assert.Equal("Added 39 starter prompts.", w.Vm.StatusText);
+        Assert.False(w.Vm.ShowNoPromptsYet);
+        Assert.Equal(1, w.Host.LibrarySaves);
+        Assert.Contains(w.Host.Library.Categories, c => c.Name == "Travel");
+
+        var categories = w.Host.Library.Categories.Count;
+        w.Vm.AddStarterPromptsCommand.Execute(null);
+
+        Assert.Equal(39, w.Host.Library.Prompts.Count);
+        Assert.Equal(categories, w.Host.Library.Categories.Count);
+        Assert.Equal(1, w.Host.LibrarySaves); // nothing changed, nothing saved
+        Assert.Equal("All the starter prompts are already in your library.", w.Vm.StatusText);
+    });
+
+    [Fact]
+    public void AddStarterPrompts_SkipsTitlesAlreadyThere_AndUsesTheCategoryOfTheSameName() => Sta.Run(() =>
+    {
+        var w = Build(P("Plan a trip itinerary", text: "my own version"));
+        var travel = new LibraryEditor(w.Host.Library, () => DateTimeOffset.Now).AddCategory("Travel");
+        w.Vm.RefreshAll();
+
+        w.Vm.AddStarterPromptsCommand.Execute(null);
+
+        Assert.Equal(1, w.Host.Library.Prompts.Count(p => p.Title == "Plan a trip itinerary"));
+        Assert.Equal("my own version", w.Host.Library.Prompts.Single(p => p.Title == "Plan a trip itinerary").Text);
+        Assert.Equal(1, w.Host.Library.Categories.Count(c => c.Name == "Travel"));
+        Assert.True(w.Host.Library.Prompts.Count(p => p.CategoryId == travel.Id) >= 2);
+        Assert.Equal(39, w.Host.Library.Prompts.Count); // the 38 missing ones plus the one that was there
+    });
+
+    [Fact]
+    public void ViewToggle_IsOnlyOfferedWhenThereIsSomethingToPreview() => Sta.Run(() =>
+    {
+        var w = Build(
+            P("Plain", text: "Summarise this article in three bullet points, plainly."),
+            P("Code", text: "Explain what a for loop does in C#, with one short example."),
+            P("Fields", text: "Dear {name}, thanks for {reason}."),
+            P("Markdown", text: "# Plan\n\n- one\n- two"));
+
+        bool Toggle(string title)
+        {
+            w.Vm.SelectedPrompt = w.Vm.Prompts.Single(r => r.Title == title);
+            return w.Vm.Editor!.ShowViewToggle;
+        }
+
+        Assert.False(Toggle("Plain"));
+        Assert.False(Toggle("Code"));
+        Assert.True(Toggle("Fields"));
+        Assert.True(Toggle("Markdown"));
+
+        w.Vm.SelectedPrompt = w.Vm.Prompts.Single(r => r.Title == "Plain");
+        w.Vm.Editor!.IsPreview = true; // never hide the way back
+        Assert.True(w.Vm.Editor.ShowViewToggle);
+        w.Vm.Editor.IsPreview = false;
+        w.Vm.Editor.Text = "now with {a field}";
+        Assert.True(w.Vm.Editor.ShowViewToggle);
+    });
+
+    [Theory]
+    [InlineData("Just a sentence. Not markdown at all.", false)]
+    [InlineData("Use C# like a == b # not a heading", false)]
+    [InlineData("2 * 3 * 4 = 24", false)]
+    [InlineData("# Title\ntext", true)]
+    [InlineData("  - item", true)]
+    [InlineData("1. first", true)]
+    [InlineData("Some **bold** words", true)]
+    [InlineData("```js\nx\n```", true)]
+    [InlineData("", false)]
+    public void MarkdownHint_RecognisesWhatThePreviewDraws(string text, bool expected)
+        => Assert.Equal(expected, MarkdownHint.Looks(text));
+
+    [Fact]
+    public void Editor_MetaText_SaysWhenUpdatedAndHowOftenUsed() => Sta.Run(() =>
+    {
+        var w = Build(P("One"));
+        w.Prompts[0].UpdatedAt = DateTimeOffset.Now.AddDays(-2);
+        w.Vm.RefreshAll();
+        w.Vm.NewPromptCommand.Execute(null); // any other editor, so choosing the row opens the prompt afresh
+        w.Vm.SelectedPrompt = w.Vm.Prompts.Single();
+        Assert.Equal("Updated 2 days ago", w.Vm.Editor!.MetaText);
+
+        w.Host.Settings.Usage[w.Prompts[0].Id] = new PromptUsage { Count = 5, LastUsedAt = DateTimeOffset.Now };
+        w.Vm.NewPromptCommand.Execute(null); // any other editor, so choosing the row opens the prompt afresh
+        w.Vm.SelectedPrompt = w.Vm.Prompts.Single();
+        Assert.Equal("Updated 2 days ago · Used 5 times", w.Vm.Editor!.MetaText);
+
+        w.Vm.CopyCommand.Execute(null);
+        Assert.Equal("Updated 2 days ago · Used 6 times", w.Vm.Editor!.MetaText);
+
+        w.Vm.NewPromptCommand.Execute(null);
+        Assert.Equal("", w.Vm.Editor!.MetaText); // a new prompt has no history yet
+    });
+
     // ---- Fakes ---------------------------------------------------------------------------------------
 
     private sealed class FixedTokens(string clipboard) : ITokenValues

@@ -20,13 +20,15 @@ public sealed class PromptPreviewView : UserControl
     public const string CaptionText = "Preview with your last-used values";
 
     private readonly FlowDocumentScrollViewer _viewer = new();
+    private readonly TextBlock _caption;
 
     public PromptPreviewView()
     {
         Focusable = false;
         IsTabStop = false;
 
-        var caption = new TextBlock { Text = CaptionText, FontSize = 12, Margin = new Thickness(8, 8, 8, 4) };
+        _caption = new TextBlock { Text = CaptionText, FontSize = 12, Margin = new Thickness(8, 8, 8, 4) };
+        var caption = _caption;
         caption.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Muted");
 
         _viewer.IsToolBarVisible = false;
@@ -49,6 +51,13 @@ public sealed class PromptPreviewView : UserControl
         Content = grid;
     }
 
+    /// <summary>The caption only makes sense when the prompt has fields (there are last-used values to speak of).</summary>
+    public bool ShowCaption
+    {
+        get => _caption.Visibility == Visibility.Visible;
+        set => _caption.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     public new bool Focus() => _viewer.Focus();
 
     /// <summary>Draws <paramref name="blocks"/>, replacing what was shown.</summary>
@@ -57,8 +66,8 @@ public sealed class PromptPreviewView : UserControl
         var doc = new FlowDocument
         {
             PagePadding = new Thickness(8, 4, 8, 8),
-            FontSize = 13,
-            LineHeight = 20,
+            FontSize = 14,
+            LineHeight = 22,
             LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
             TextAlignment = TextAlignment.Left,
             ColumnWidth = double.PositiveInfinity, // one column, however wide
@@ -125,7 +134,7 @@ public sealed class PromptPreviewView : UserControl
     /// <summary>A fenced code block: the lines in a CodeBlock box with a Line frame, monospaced.</summary>
     private static BlockUIContainer Code(PreviewBlock block)
     {
-        var text = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 13, LineHeight = 20 };
+        var text = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 14, LineHeight = 22 };
         text.SetResourceReference(TextBlock.FontFamilyProperty, "Font.Prompt");
         text.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Ink");
         AddPieces(text.Inlines, block.Pieces, 12);

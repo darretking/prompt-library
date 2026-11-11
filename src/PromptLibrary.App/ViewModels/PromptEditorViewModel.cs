@@ -4,6 +4,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using PromptLibrary.Core.History;
 using PromptLibrary.Core.Models;
+using PromptLibrary.Core.Templates;
 
 namespace PromptLibrary.App.ViewModels;
 
@@ -38,6 +39,8 @@ public sealed class PromptEditorViewModel : ObservableObject
     private bool _showSaved;
     private bool _isReadOnly;
     private bool _isPreview;
+    private DateTimeOffset? _updatedAt;
+    private int _uses;
 
     private PromptEditorViewModel(Guid? promptId)
     {
@@ -138,6 +141,7 @@ public sealed class PromptEditorViewModel : ObservableObject
         {
             if (!SetProperty(ref _isPreview, value)) return;
             OnPropertyChanged(nameof(IsEditMode));
+            OnPropertyChanged(nameof(ShowViewToggle));
         }
     }
 
@@ -191,6 +195,7 @@ public sealed class PromptEditorViewModel : ObservableObject
             OnPropertyChanged(nameof(IsDirty));
             OnPropertyChanged(nameof(TextStats));
             OnPropertyChanged(nameof(CanCopy));
+            OnPropertyChanged(nameof(ShowViewToggle));
         }
     }
 
@@ -217,6 +222,33 @@ public sealed class PromptEditorViewModel : ObservableObject
     }
 
     public bool CanCopy => _text.Length > 0;
+
+    /// <summary>
+    /// The Edit | Preview switch is only offered when there is something to preview: the prompt has {fields} or markdown
+    /// (it stays while Preview is on, so the way back is never hidden).
+    /// </summary>
+    public bool ShowViewToggle => _isPreview || PromptTemplate.HasFields(_text) || MarkdownHint.Looks(_text);
+
+    /// <summary>How many times the prompt was copied or sent (for <see cref="MetaText"/>); set by the main view model.</summary>
+    public int Uses
+    {
+        get => _uses;
+        set
+        {
+            if (SetProperty(ref _uses, value)) OnPropertyChanged(nameof(MetaText));
+        }
+    }
+
+    /// <summary>The quiet line under the prompt, e.g. <c>Updated 2 days ago · Used 5 times</c>; empty for a new prompt.</summary>
+    public string MetaText
+    {
+        get
+        {
+            if (_updatedAt is not { } updated || updated == default) return "";
+            var text = "Updated " + HistoryViewModel.RelativeAge(updated, DateTimeOffset.Now);
+            return _uses > 0 ? $"{text} · Used {(_uses == 1 ? "once" : _uses + " times")}" : text;
+        }
+    }
 
     public string? TitleError
     {
@@ -333,6 +365,8 @@ public sealed class PromptEditorViewModel : ObservableObject
         _savedText = prompt.Text;
         _savedTags = [.. prompt.Tags ?? []];
         _savedSendTo = prompt.SendTo;
+        _updatedAt = prompt.UpdatedAt;
+        OnPropertyChanged(nameof(MetaText));
         Revert();
     }
 

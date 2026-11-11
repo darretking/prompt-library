@@ -12,6 +12,7 @@ using PromptLibrary.Core.Exchange;
 using PromptLibrary.Core.History;
 using PromptLibrary.Core.Models;
 using PromptLibrary.Core.Search;
+using PromptLibrary.Core.Seed;
 using PromptLibrary.Core.Send;
 using PromptLibrary.Core.Team;
 using PromptLibrary.Core.Templates;
@@ -127,6 +128,7 @@ public sealed class MainViewModel : ObservableObject
         RestoreCommand = new RelayCommand(_host.OpenRestore);
         ImportCommand = new RelayCommand(ImportPrompts, () => !IsTeamSide);
         ExportCommand = new RelayCommand(ExportPrompts, () => !IsTeamSide);
+        AddStarterPromptsCommand = new RelayCommand(AddStarterPrompts, () => !IsTeamSide);
         OpenSettingsCommand = new RelayCommand(() => _host.OpenSettings());
         SetUpBackupsCommand = new RelayCommand(() => _host.OpenSettings(focusBackups: true));
         ExitCommand = new RelayCommand(() => _host.ExitApp());
@@ -483,6 +485,9 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>File → Import prompts…: reads an export file or a folder of Markdown/text files into your prompts (not on the Team side).</summary>
     public IRelayCommand ImportCommand { get; }
 
+    /// <summary>The empty library's "Add starter prompts": puts the example prompts (those whose titles are missing) into your library.</summary>
+    public IRelayCommand AddStarterPromptsCommand { get; }
+
     /// <summary>File → Export prompts…: writes your prompts to one JSON file or a folder of Markdown files (not on the Team side).</summary>
     public IRelayCommand ExportCommand { get; }
     public IRelayCommand OpenSettingsCommand { get; }
@@ -626,12 +631,16 @@ public sealed class MainViewModel : ObservableObject
     public bool ShowNoMatches => Prompts.Count == 0 && !string.IsNullOrWhiteSpace(_searchText);
     public string NoMatchesText => $"No prompts match \"{_searchText.Trim()}\".";
 
-    /// <summary>What the editor area says when no prompt is open.</summary>
-    public string NoEditorText => IsTeamSide && CurrentDocument.IsReadOnly
-        ? IsTeamLoading ? "" : CurrentDocument.Library.Prompts.Count == 0 ? "No team prompts yet." : "Select a team prompt."
-        : CurrentDocument.Library.Prompts.Count == 0
-            ? "No prompts yet. Press Ctrl+N or choose New prompt."
-            : "Select a prompt, or create one.";
+    /// <summary>The no-match empty state's headline: the same sentence without the full stop.</summary>
+    public string NoMatchesHeadline => $"No prompts match \"{_searchText.Trim()}\"";
+
+    /// <summary>
+    /// The faint hint in the editor area when no prompt is open. Empty when the library is empty: the list column already
+    /// says so (one empty state per view).
+    /// </summary>
+    public string NoEditorText => CurrentDocument.Library.Prompts.Count == 0 || (IsTeamSide && IsTeamLoading)
+        ? ""
+        : IsTeamSide && CurrentDocument.IsReadOnly ? "Select a team prompt." : "Select a prompt, or create one.";
 
     /// <summary>A short muted confirmation under the categories, e.g. <c>Moved 2 prompts to Code review.</c>; null when none.</summary>
     public string? StatusText
@@ -1041,6 +1050,27 @@ public sealed class MainViewModel : ObservableObject
         _dialogs.ShowImportResults(result);
     }
 
+    /// <summary>
+    /// Add starter prompts: the 39 example prompts of a new library, skipping any whose title is already there (categories
+    /// are matched by name). Safe to press twice.
+    /// </summary>
+    private void AddStarterPrompts()
+    {
+        if (IsTeamSide || _teamSaving) return;
+        var added = SeedLibrary.AddMissing(_personal.Library, DateTimeOffset.Now);
+        if (added == 0)
+        {
+            ShowStatus("All the starter prompts are already in your library.", FeedbackDuration);
+            return;
+        }
+
+        _personal.SaveLibraryChange(); // on failure the prompts stay and are written later (the host says so)
+        RebuildCategories(_selectedCategory?.Id);
+        RefreshPrompts();
+        OpenFirstPromptIfNone();
+        ShowStatus($"Added {Count(added, "starter prompt")}.", FeedbackDuration);
+    }
+
     /// <summary>Export prompts…: one .json file, or a folder of .md files (one per prompt, a subfolder per category).</summary>
     private void ExportPrompts()
     {
@@ -1193,11 +1223,14 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    private int UsesOf(Guid id) => _host.Settings.Usage.TryGetValue(id, out var usage) ? usage.Count : 0;
+
     /// <summary>Counts a copy or send for the ranking of the search window and quick menu.</summary>
     private void RecordUsage(PromptEditorViewModel editor)
     {
         if (editor.PromptId is not { } id) return;
         UsageTracker.Record(_host.Settings, id, DateTimeOffset.Now);
+        editor.Uses = UsesOf(id);
         _host.SaveSettings();
         RefreshUserState(); // the Recent row and list
     }
@@ -1568,6 +1601,7 @@ public sealed class MainViewModel : ObservableObject
     {
         if (!CurrentDocument.Library.Prompts.Contains(prompt)) return; // deleted meanwhile
         var editor = PromptEditorViewModel.ForPrompt(prompt);
+        editor.Uses = UsesOf(prompt.Id);
         editor.IsReadOnly = CurrentDocument.IsReadOnly;
         Editor = editor;
         _selectedPrompt = Prompts.FirstOrDefault(r => ReferenceEquals(r.Prompt, prompt));
@@ -1665,6 +1699,7 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowNewPromptFooter));
         OnPropertyChanged(nameof(ShowNoMatches));
         OnPropertyChanged(nameof(NoMatchesText));
+        OnPropertyChanged(nameof(NoMatchesHeadline));
         OnPropertyChanged(nameof(NoEditorText));
         OnPropertyChanged(nameof(ShowNoTeamPrompts));
         OnPropertyChanged(nameof(ShowAllHidden));
@@ -2145,6 +2180,7 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsYoursSide));
         ImportCommand.NotifyCanExecuteChanged();
         ExportCommand.NotifyCanExecuteChanged();
+        AddStarterPromptsCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(ShowSwitch));
         OnPropertyChanged(nameof(TeamHeaderText));
         OnPropertyChanged(nameof(TeamHeaderDetail));

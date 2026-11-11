@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using PromptLibrary.App.Search;
 using PromptLibrary.App.Team;
+using PromptLibrary.App.Theming;
 using PromptLibrary.App.ViewModels;
 using PromptLibrary.Core.Backup;
 using PromptLibrary.Core.Exchange;
@@ -48,6 +49,10 @@ public partial class MainWindow : Window, IDialogs
         };
         DataContext = ViewModel;
 
+        // The editor card's shadow follows the theme (8 % black in light, 30 % in dark) and is off on low-tier graphics.
+        ApplyCardShadow();
+        ThemeManager.Current.ThemeChanged += (_, _) => Dispatcher.BeginInvoke(ApplyCardShadow);
+
         // Coming back to the window re-checks a paused backup folder (e.g. Google Drive signed in again).
         Activated += (_, _) => _host.RecheckBackups();
 
@@ -60,6 +65,18 @@ public partial class MainWindow : Window, IDialogs
     }
 
     public MainViewModel ViewModel { get; }
+
+    private void ApplyCardShadow()
+    {
+        if (System.Windows.Media.RenderCapability.Tier >> 16 < 2)
+        {
+            EditorCard.Effect = null; // software rendering: no blur
+            return;
+        }
+        if (TryFindResource("Brush.Shadow") is not System.Windows.Media.SolidColorBrush brush) return;
+        CardShadow.Color = System.Windows.Media.Color.FromRgb(brush.Color.R, brush.Color.G, brush.Color.B);
+        CardShadow.Opacity = brush.Color.A / 255.0;
+    }
 
     /// <summary>Really closes the window; used when the app exits.</summary>
     public void CloseForExit()
@@ -405,12 +422,24 @@ public partial class MainWindow : Window, IDialogs
 
     // ---- Editor buttons ------------------------------------------------------------------------
 
-    /// <summary>The bottom bar's ... button: opens its menu above the button.</summary>
+    /// <summary>The header's ... button: opens its menu under the button.</summary>
     private void Overflow_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { ContextMenu: { } menu } button) return;
-        menu.PlacementTarget = button;
-        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
+        OpenBelow(menu, button);
+    }
+
+    /// <summary>Opens <paramref name="menu"/> just under <paramref name="target"/>, its right edge in line with the target's.</summary>
+    private static void OpenBelow(ContextMenu menu, FrameworkElement target)
+    {
+        menu.PlacementTarget = target;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Custom;
+        menu.CustomPopupPlacementCallback = (popupSize, targetSize, _) =>
+        [
+            new System.Windows.Controls.Primitives.CustomPopupPlacement(
+                new Point(targetSize.Width - popupSize.Width, targetSize.Height + 2),
+                System.Windows.Controls.Primitives.PopupPrimaryAxis.None),
+        ];
         menu.IsOpen = true;
     }
 
@@ -422,12 +451,7 @@ public partial class MainWindow : Window, IDialogs
     {
         if (sender is not Button button) return;
         var item = (Style)FindResource("FlyoutItem");
-        var menu = new ContextMenu
-        {
-            Style = (Style)FindResource("FlyoutMenu"),
-            PlacementTarget = button,
-            Placement = System.Windows.Controls.Primitives.PlacementMode.Top,
-        };
+        var menu = new ContextMenu { Style = (Style)FindResource("FlyoutMenu") };
 
         var choices = ViewModel.SendChoices;
         foreach (var choice in choices)
@@ -452,7 +476,7 @@ public partial class MainWindow : Window, IDialogs
             menu.Items.Add(setDefault);
         }
 
-        menu.IsOpen = true;
+        OpenBelow(menu, button);
     }
 
     // ---- Toast ---------------------------------------------------------------------------------
