@@ -68,7 +68,24 @@ public sealed class ScreenshotGallery
     private IEnumerable<(string, Action<string>)> Scenes()
     {
         yield return ("01-main", n => Main(n, w => { }));
-        yield return ("02-main-preview", n => Main(n, w => w.Vm.Editor!.IsPreview = true));
+        yield return ("02-main-preview", n => Main(n, w =>
+        {
+            // Some fields remembered from the last fill-in, the rest still empty (muted chips).
+            w.Vm.PlaceholderValues["number"] = "4";
+            w.Vm.PlaceholderValues["destination"] = "Lisbon";
+            w.Vm.PlaceholderValues["who's going"] = "two adults";
+            w.Vm.PlaceholderValues["relaxed / packed"] = "relaxed";
+            w.Vm.Editor!.IsPreview = true;
+        }));
+        yield return ("23-import-results", ImportResults);
+        yield return ("25-file-menu", n => Main(n, w => { }, after: win => FileMenu(n, win)));
+        yield return ("26-main-preview-markdown", n => Main(n, w =>
+        {
+            w.Vm.PlaceholderValues["owner"] = "Priya";
+            w.Vm.Editor!.Text = "# Weekly review\n\nWrite a **short** summary of {topic} for {date}, {time}.\n\n" +
+                                "- Wins this week\n- Blockers\n  - owner: {owner}\n2. Next steps\n\n```bash\nnpm test {cursor}\n```\n\nContext: {clipboard}";
+            w.Vm.Editor.IsPreview = true;
+        }));
         yield return ("03-main-search-itin-trp", n => Main(n, w =>
         {
             w.Vm.SelectedCategory = w.Vm.Categories.First(c => c.IsAll);
@@ -95,7 +112,8 @@ public sealed class ScreenshotGallery
         }));
         yield return ("10-history", History);
         yield return ("11-fill-in-dialog", FillIn);
-        yield return ("12-delete-category-dialog", DeleteCategory);
+        yield return ("12-delete-category-dialog", n => DeleteCategory(n, deletePrompts: true));
+        yield return ("24-delete-category-move", n => DeleteCategory(n, deletePrompts: false));
         yield return ("13-export-dialog", n => Window(n, new ChooseKindDialog("Export prompts",
             "Export your prompts so you can keep a copy or use them elsewhere.", "One file (.json)", "A folder of Markdown files", "Choose…"), null, null));
         yield return ("14-search-empty", n => Search(n, vm => { }));
@@ -170,14 +188,46 @@ public sealed class ScreenshotGallery
         Window(name, dialog, null, null);
     }
 
-    private void DeleteCategory(string name)
+    private void DeleteCategory(string name, bool deletePrompts)
     {
         var host = NewHost(true);
         var travel = host.Library.Categories.First(c => c.Name == "Travel");
         var dialog = new MoveCategoryDialog("Travel", host.Library.Prompts.Count(p => p.CategoryId == travel.Id),
             host.Library.Categories.Where(c => c != travel).ToList());
-        dialog.DeleteBox.IsChecked = true;
+        // Never contradictory: ticked = no "Move prompts to" at all and a Danger warning; unticked = a category already chosen.
+        Assert.True(dialog.IsMoveChoiceShown);
+        Assert.NotNull(dialog.ChosenTarget);
+        Assert.Equal("Prompts move to the category you pick.", dialog.HintMessage);
+        if (deletePrompts)
+        {
+            dialog.DeleteTickBox.IsChecked = true;
+            Assert.False(dialog.IsMoveChoiceShown);
+            Assert.Equal("These prompts will be deleted. This can't be undone.", dialog.HintMessage);
+        }
         Window(name, dialog, null, null);
+    }
+
+    private void ImportResults(string name)
+    {
+        var result = new PromptLibrary.Core.Exchange.ImportResult(
+        [
+            new("Coding/Explain this code.md", 1, 0, 0, null),
+            new("Coding/Refactor.md", 1, 0, 0, null),
+            new("Email/Follow-up.md", 0, 1, 0, null),
+            new("Email/notes.txt", 0, 0, 0, "empty"),
+            new("Travel/everything.md", 0, 0, 0, "larger than 1 MB"),
+            new("old-export.json", 0, 0, 0, "not a Prompt Library export"),
+            new("broken.json", 0, 0, 0, "not valid JSON"),
+        ]);
+        Window(name, new ImportResultsDialog(result), null, null);
+    }
+
+    /// <summary>The File menu's drop-down, drawn on its own (popups are not part of the window picture).</summary>
+    private void FileMenu(string name, MainWindow window)
+    {
+        var file = Find<MenuItem>(window) ?? throw new InvalidOperationException("no menu in the main window");
+        var popup = (System.Windows.Controls.Primitives.Popup)file.Template.FindName("PART_Popup", file);
+        Capture(name, Isolate(popup.Child));
     }
 
     private void Onboarding(string name, bool last)
@@ -271,6 +321,11 @@ public sealed class ScreenshotGallery
     private void Capture(string name, FrameworkElement element)
     {
         var isWindow = element is Window;
+        // A window's ActualWidth/Height include the title bar and frame, which are not part of its visual tree: draw only
+        // the client area (its root), or a grey band shows below and beside the content.
+        if (element is Window shown && VisualTreeHelper.GetChildrenCount(shown) > 0
+            && VisualTreeHelper.GetChild(shown, 0) is FrameworkElement client && client.ActualWidth > 0)
+            element = client;
         double w = element.ActualWidth, h = element.ActualHeight;
         var margin = isWindow ? 0 : 12; // a little of the window colour around a loose popup
         foreach (var (folder, scale) in Scales)

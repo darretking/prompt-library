@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:PromptLibrary.App.Views.Controls"
+        xmlns:emoji="clr-namespace:Emoji.Wpf;assembly=Emoji.Wpf"
         xmlns:views="clr-namespace:PromptLibrary.App.Views"
         Style="{StaticResource AppWindow}"
         Title="{Binding WindowTitle}"
@@ -20,10 +21,10 @@
     </Window.InputBindings>
 
     <Window.Resources>
-        <ContextMenu x:Key="CategoryMenu" x:Shared="False">
-            <MenuItem Header="_Rename" InputGestureText="F2" Click="RenameCategory_Click" />
-            <MenuItem Header="Change _emoji…" Click="ChangeEmoji_Click" />
-            <MenuItem Header="_Delete" InputGestureText="Del" Click="DeleteCategory_Click" />
+        <ContextMenu x:Key="CategoryMenu" x:Shared="False" Style="{StaticResource FlyoutMenu}">
+            <MenuItem Style="{StaticResource FlyoutItem}" Header="_Rename" InputGestureText="F2" Click="RenameCategory_Click" />
+            <MenuItem Style="{StaticResource FlyoutItem}" Header="Change _emoji…" Click="ChangeEmoji_Click" />
+            <MenuItem Style="{StaticResource FlyoutItem}" Header="_Delete" InputGestureText="Del" Click="DeleteCategory_Click" />
         </ContextMenu>
 
         <!-- Local tab navigation inside each row: Tab from the selected row goes to its Rename and Delete buttons
@@ -32,6 +33,7 @@
             <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
             <Setter Property="KeyboardNavigation.TabNavigation" Value="Local" />
             <Setter Property="MinHeight" Value="40" />
+            <Setter Property="Padding" Value="13,8,12,8" />
             <Style.Triggers>
                 <!-- Team categories (read only) have no Rename or Delete; nor do All prompts and Recent. -->
                 <MultiDataTrigger>
@@ -45,9 +47,9 @@
         </Style>
 
         <!-- A prompt row's right-click menu: Pin / Unpin, and for team prompts Hide from menu / Unhide. -->
-        <ContextMenu x:Key="PromptMenu" x:Shared="False">
-            <MenuItem Header="{Binding PinLabel}" IsEnabled="{Binding CanPin}" Click="PinPrompt_Click" />
-            <MenuItem Header="{Binding HideLabel}" Click="HidePrompt_Click"
+        <ContextMenu x:Key="PromptMenu" x:Shared="False" Style="{StaticResource FlyoutMenu}">
+            <MenuItem Style="{StaticResource FlyoutItem}" Header="{Binding PinLabel}" IsEnabled="{Binding CanPin}" Click="PinPrompt_Click" />
+            <MenuItem Style="{StaticResource FlyoutItem}" Header="{Binding HideLabel}" Click="HidePrompt_Click"
                       Visibility="{Binding IsTeam, Converter={StaticResource BoolToVisibility}}" />
         </ContextMenu>
 
@@ -121,17 +123,17 @@
         <!-- A category's name with its emoji in front (menu entries). -->
         <DataTemplate x:Key="CategoryNameTemplate">
             <StackPanel Orientation="Horizontal">
-                <TextBlock Text="{Binding Emoji}" Margin="0,0,6,0">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
+                <emoji:TextBlock Text="{Binding Emoji}" Margin="0,0,6,0">
+                    <emoji:TextBlock.Style>
+                        <Style TargetType="emoji:TextBlock">
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding Emoji}" Value="{x:Null}">
                                     <Setter Property="Visibility" Value="Collapsed" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
-                    </TextBlock.Style>
-                </TextBlock>
+                    </emoji:TextBlock.Style>
+                </emoji:TextBlock>
                 <TextBlock Text="{Binding Name}" />
             </StackPanel>
         </DataTemplate>
@@ -168,23 +170,23 @@
     </Window.Resources>
 
     <DockPanel>
-        <Menu DockPanel.Dock="Top" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,0,1"
+        <Menu DockPanel.Dock="Top"
               AutomationProperties.Name="Menu">
-            <MenuItem Header="_File" AutomationProperties.Name="File">
-                <MenuItem Header="_Back up now" Command="{Binding BackupNowCommand}" />
-                <MenuItem Header="_Restore from backup…" Command="{Binding RestoreCommand}" />
-                <Separator />
-                <MenuItem Header="_Import prompts…" Command="{Binding ImportCommand}" />
-                <MenuItem Header="_Export prompts…" Command="{Binding ExportCommand}" />
-                <Separator />
-                <MenuItem Header="_Settings…" Command="{Binding OpenSettingsCommand}" />
-                <Separator />
-                <MenuItem Header="E_xit" Command="{Binding ExitCommand}" />
+            <MenuItem Style="{StaticResource MenuBarHeader}" Header="_File" AutomationProperties.Name="File">
+                <MenuItem Style="{StaticResource FlyoutItem}" Header="_Back up now" Command="{Binding BackupNowCommand}" />
+                <MenuItem Style="{StaticResource FlyoutItem}" Header="_Restore from backup…" Command="{Binding RestoreCommand}" />
+                <Separator Style="{StaticResource FlyoutSeparator}" />
+                <MenuItem Style="{StaticResource FlyoutItem}" Header="_Import prompts…" Command="{Binding ImportCommand}" />
+                <MenuItem Style="{StaticResource FlyoutItem}" Header="_Export prompts…" Command="{Binding ExportCommand}" />
+                <Separator Style="{StaticResource FlyoutSeparator}" />
+                <MenuItem Style="{StaticResource FlyoutItem}" Header="_Settings…" Command="{Binding OpenSettingsCommand}" />
+                <Separator Style="{StaticResource FlyoutSeparator}" />
+                <MenuItem Style="{StaticResource FlyoutItem}" Header="E_xit" Command="{Binding ExitCommand}" />
             </MenuItem>
-            <MenuItem Header="_Help" AutomationProperties.Name="Help">
-                <MenuItem Header="_Setup guide…" Command="{Binding SetupGuideCommand}" />
-                <MenuItem Header="Check for _updates…" Command="{Binding CheckForUpdatesCommand}" />
-                <MenuItem Header="_About Prompt Library" Command="{Binding AboutCommand}" />
+            <MenuItem Style="{StaticResource MenuBarHeader}" Header="_Help" AutomationProperties.Name="Help">
+                <MenuItem Style="{StaticResource FlyoutItem}" Header="_Setup guide…" Command="{Binding SetupGuideCommand}" />
+                <MenuItem Style="{StaticResource FlyoutItem}" Header="Check for _updates…" Command="{Binding CheckForUpdatesCommand}" />
+                <MenuItem Style="{StaticResource FlyoutItem}" Header="_About Prompt Library" Command="{Binding AboutCommand}" />
             </MenuItem>
         </Menu>
 
@@ -254,8 +256,8 @@
                                     Visibility="{Binding ShowTeamMoreMenu, Converter={StaticResource BoolToVisibility}}"
                                     AutomationProperties.Name="More team library actions">
                                 <Button.ContextMenu>
-                                    <ContextMenu>
-                                        <MenuItem Header="_Restore an older version…"
+                                    <ContextMenu Style="{StaticResource FlyoutMenu}">
+                                        <MenuItem Style="{StaticResource FlyoutItem}" Header="_Restore an older version…"
                                                   Command="{Binding TeamHistoryCommand}" />
                                     </ContextMenu>
                                 </Button.ContextMenu>
@@ -322,9 +324,9 @@
             </Border>
 
             <Grid Grid.Row="3">
-                <!-- At the minimum window size the list column gives way so the editor keeps its 420 px. -->
+                <!-- Rail 200 px (long names ellipsize, tooltip has the full name). At the minimum window size the list column gives way so the editor keeps its 420 px. -->
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="180" />
+                    <ColumnDefinition Width="200" />
                     <ColumnDefinition Width="*" MinWidth="200" MaxWidth="260" />
                     <ColumnDefinition Width="*" MinWidth="420" />
                 </Grid.ColumnDefinitions>
@@ -360,11 +362,12 @@
                                             </Grid.ColumnDefinitions>
                                             <!-- A fixed 20 px column so names line up: the category's emoji, or a small
                                                  Fluent glyph on All prompts and Recent. -->
-                                            <TextBlock Text="{Binding Emoji}" FontFamily="Segoe UI Emoji" FontSize="14"
-                                                       VerticalAlignment="Center" />
+                                            <emoji:TextBlock Text="{Binding Emoji}" FontSize="14" HorizontalAlignment="Left"
+                                                             VerticalAlignment="Center" />
                                             <TextBlock Text="{Binding Glyph}" Style="{StaticResource InlineGlyph}"
                                                        FontSize="14" Foreground="{DynamicResource Brush.Muted}" />
                                             <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding Name}"
                                                        VerticalAlignment="Center" />
                                             <TextBlock x:Name="CountText" Grid.Column="2" Text="{Binding Count}"
                                                        Style="{StaticResource MutedText}"
@@ -443,6 +446,9 @@
                             </ListBox.ItemTemplate>
                         </ListBox>
 
+                        <!-- A hairline above the footer, so a row cut off by the scroll edge reads as scrolled, not clipped. -->
+                        <Border Grid.Row="2" VerticalAlignment="Top" Height="1" IsHitTestVisible="False"
+                                Background="{DynamicResource Brush.Line}" />
                         <StackPanel Grid.Row="2" Margin="8,8,8,16">
                             <!-- A newer version is known (the user said Not now): stays until they update. -->
                             <Button Style="{StaticResource LinkButton}" Content="{Binding UpdateReminder}"
@@ -711,17 +717,17 @@
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate>
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding Emoji}" Margin="0,0,6,0">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
+                                                <emoji:TextBlock Text="{Binding Emoji}" Margin="0,0,6,0">
+                                                    <emoji:TextBlock.Style>
+                                                        <Style TargetType="emoji:TextBlock">
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding Emoji}" Value="{x:Null}">
                                                                     <Setter Property="Visibility" Value="Collapsed" />
                                                                 </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
+                                                    </emoji:TextBlock.Style>
+                                                </emoji:TextBlock>
                                                 <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                                             </StackPanel>
                                         </DataTemplate>
@@ -761,13 +767,13 @@
                             <TextBlock Text="Prompt" Style="{StaticResource FieldLabel}" Margin="0" VerticalAlignment="Center" />
                         </DockPanel>
 
-                        <!-- The prompt slip: white, 1 px Line frame, 4 px Brand left edge. -->
+                        <!-- The prompt slip: a Surface page with a 1 px Line frame, 8 px corners and a 4 px Brand left edge. -->
                         <Grid Grid.Row="3">
                             <Border Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Line}"
-                                    BorderThickness="1" CornerRadius="{StaticResource Radius}" />
+                                    BorderThickness="1" CornerRadius="8" />
                             <Border Width="4" HorizontalAlignment="Left" Background="{DynamicResource Brush.Brand}"
-                                    CornerRadius="4,0,0,4" />
-                            <controls:PromptTextEditor x:Name="PromptBox" Margin="4,1,1,1"
+                                    CornerRadius="8,0,0,8" />
+                            <controls:PromptTextEditor x:Name="PromptBox" Margin="4,2,2,2"
                                      Text="{Binding Editor.Text, UpdateSourceTrigger=PropertyChanged}"
                                      IsReadOnly="{Binding Editor.IsReadOnly}"
                                      IsPreview="{Binding Editor.IsPreview}"
@@ -775,7 +781,7 @@
                                      AutomationProperties.Name="Prompt text"
                                      AutomationProperties.HelpText="Ctrl+Tab inserts a tab" />
                             <Border BorderBrush="{DynamicResource Brush.Brand}" BorderThickness="2"
-                                    CornerRadius="{StaticResource Radius}" IsHitTestVisible="False">
+                                    CornerRadius="8" IsHitTestVisible="False">
                                 <Border.Style>
                                     <Style TargetType="Border">
                                         <Setter Property="Visibility" Value="Collapsed" />

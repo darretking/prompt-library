@@ -574,12 +574,62 @@
             </Setter>
         </Style>
 
+        <!-- The File / Help menu bar (R16): flat and transparent over the window (and its Mica), 13 px Ink text; the headers
+             are MenuBarHeader and their entries FlyoutItem, so it shares the flyout look of the other menus. -->
         <Style TargetType="Menu">
-            <Setter Property="Background" Value="{DynamicResource Brush.Window}" />
+            <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
             <Setter Property="FontFamily" Value="{StaticResource Font.UI}" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="Padding" Value="8,4" />
+            <Setter Property="KeyboardNavigation.TabNavigation" Value="Once" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Menu">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <StackPanel IsItemsHost="True" Orientation="Horizontal" KeyboardNavigation.DirectionalNavigation="Cycle" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- A header of the menu bar (File, Help): 28 px, 4 px radius, Hover while pointed at or open; its drop-down is a
+             flyout (Surface, 1 px Line, 8 px radius, 4 px padding). -->
+        <Style x:Key="MenuBarHeader" TargetType="MenuItem">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Grid>
+                            <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="10,0" MinHeight="28"
+                                    Margin="0,0,2,0" SnapsToDevicePixels="True">
+                                <ContentPresenter ContentSource="Header" VerticalAlignment="Center" RecognizesAccessKey="True" />
+                            </Border>
+                            <Popup x:Name="PART_Popup" Placement="Bottom" VerticalOffset="2" AllowsTransparency="True"
+                                   Focusable="False" PopupAnimation="None"
+                                   IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}">
+                                <Border Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Line}"
+                                        BorderThickness="1" CornerRadius="8" Padding="4" MinWidth="220"
+                                        TextElement.FontSize="13" TextElement.FontFamily="{StaticResource Font.UI}"
+                                        TextElement.Foreground="{DynamicResource Brush.Ink}">
+                                    <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Hover}" />
+                            </Trigger>
+                            <Trigger Property="IsSubmenuOpen" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Hover}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
 
@@ -595,7 +645,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="ContextMenu">
                         <Border Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Line}"
-                                BorderThickness="1" CornerRadius="8" Padding="0,4" MinWidth="200"
+                                BorderThickness="1" CornerRadius="8" Padding="4" MinWidth="200"
                                 SnapsToDevicePixels="True">
                             <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
                         </Border>
@@ -608,7 +658,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Separator">
-                        <Border Height="1" Margin="8,4" Background="{DynamicResource Brush.Line}" />
+                        <Border Height="1" Margin="4,4" Background="{DynamicResource Brush.Line}" />
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -620,7 +670,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="MenuItem">
-                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Margin="4,1" Padding="8,0"
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Margin="0,1" Padding="8,0"
                                 MinHeight="32" SnapsToDevicePixels="True">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -642,7 +692,7 @@
                                        Focusable="False" PopupAnimation="None"
                                        IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}">
                                     <Border Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Line}"
-                                            BorderThickness="1" CornerRadius="8" Padding="0,4" MinWidth="160">
+                                            BorderThickness="1" CornerRadius="8" Padding="4" MinWidth="160">
                                         <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
                                     </Border>
                                 </Popup>
@@ -677,19 +727,28 @@
             <Setter Property="MinHeight" Value="32" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="ToolTip" Value="Click to edit" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
-                        <Border x:Name="Frame" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
-                                CornerRadius="4" SnapsToDevicePixels="True">
-                            <Grid>
-                                <TextBlock x:Name="Placeholder" Text="{TemplateBinding Tag}" FontWeight="Normal"
-                                           Foreground="{DynamicResource Brush.Muted}" Margin="7,0" VerticalAlignment="Center"
-                                           IsHitTestVisible="False" Visibility="Collapsed" />
-                                <ScrollViewer x:Name="PART_ContentHost" Focusable="False" Margin="{TemplateBinding Padding}"
-                                              HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" />
-                            </Grid>
-                        </Border>
+                        <!-- At rest a hairline underline says the field can be edited; hover swaps it for a 1 px Line frame,
+                             focus for a 2 px Brand ring. -->
+                        <Grid>
+                            <Border x:Name="Frame" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
+                                    CornerRadius="4" SnapsToDevicePixels="True">
+                                <Grid>
+                                    <TextBlock x:Name="Placeholder" Text="{TemplateBinding Tag}" FontWeight="Normal"
+                                               Foreground="{DynamicResource Brush.Muted}" Margin="7,0" VerticalAlignment="Center"
+                                               IsHitTestVisible="False" Visibility="Collapsed" />
+                                    <ScrollViewer x:Name="PART_ContentHost" Focusable="False" Margin="{TemplateBinding Padding}"
+                                                  HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" />
+                                </Grid>
+                            </Border>
+                            <Border x:Name="Underline" Height="1" VerticalAlignment="Bottom" Margin="1,0" IsHitTestVisible="False"
+                                    Background="{DynamicResource Brush.Line}" />
+                            <Border x:Name="Ring" BorderBrush="{DynamicResource Brush.Brand}" BorderThickness="2" CornerRadius="4"
+                                    Visibility="Collapsed" IsHitTestVisible="False" />
+                        </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="Text" Value="">
                                 <Setter TargetName="Placeholder" Property="Visibility" Value="Visible" />
@@ -700,9 +759,16 @@
                                     <Condition Property="IsReadOnly" Value="False" />
                                 </MultiTrigger.Conditions>
                                 <Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource Brush.Line}" />
+                                <Setter TargetName="Underline" Property="Visibility" Value="Collapsed" />
                             </MultiTrigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource Brush.Brand}" />
+                                <Setter TargetName="Ring" Property="Visibility" Value="Visible" />
+                                <Setter TargetName="Underline" Property="Visibility" Value="Collapsed" />
+                            </Trigger>
+                            <!-- A team prompt that can't be changed (or any read-only box): no edit cues. -->
+                            <Trigger Property="IsReadOnly" Value="True">
+                                <Setter Property="ToolTip" Value="{x:Null}" />
+                                <Setter TargetName="Underline" Property="Visibility" Value="Collapsed" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>

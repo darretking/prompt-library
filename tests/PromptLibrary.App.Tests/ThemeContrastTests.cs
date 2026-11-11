@@ -33,6 +33,8 @@ public class ThemeContrastTests
         }
         Check("Brush.Brand", "Brush.Surface");
         Check("Brush.Danger", "Brush.Surface");
+        Check("Brush.Danger", "Brush.Window"); // helper text of the delete-category dialog, import failure reasons
+        Check("Brush.Brand", "Brush.Window");
         Check("Brush.OnBrand", "Brush.BrandFill");
         Check("Brush.OnBrand", "Brush.BrandHover");
         Check("Brush.OnBrand", "Brush.DangerFill");
