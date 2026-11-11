@@ -50,21 +50,76 @@ public sealed class HistoryViewModel : ObservableObject
             OnPropertyChanged(nameof(Diff));
             OnPropertyChanged(nameof(CanRestore));
             OnPropertyChanged(nameof(Caption));
+            OnPropertyChanged(nameof(DiffTitle));
         }
     }
 
     public bool CanRestore => _selected is not null;
 
-    /// <summary>What changed from the chosen version to the editor's text: removed lines were in the version only.</summary>
+    private bool _compareWithCurrent;
+
+    /// <summary>
+    /// Off: the diff is what saving changed in the chosen version (the chosen version against the one saved just after it,
+    /// or the editor's text for the newest). On: the chosen version against the editor's text now.
+    /// </summary>
+    public bool CompareWithCurrent
+    {
+        get => _compareWithCurrent;
+        set
+        {
+            if (!SetProperty(ref _compareWithCurrent, value)) return;
+            OnPropertyChanged(nameof(Diff));
+            OnPropertyChanged(nameof(DiffTitle));
+            OnPropertyChanged(nameof(Caption));
+        }
+    }
+
+    /// <summary>The text the chosen version is compared with.</summary>
+    internal string ComparedText
+    {
+        get
+        {
+            if (_selected is null) return _currentText;
+            var index = IndexOf(_selected);
+            return _compareWithCurrent || index <= 0 ? _currentText : Items[index - 1].Version.Text;
+        }
+    }
+
+    private int IndexOf(HistoryItem item)
+    {
+        for (var i = 0; i < Items.Count; i++)
+            if (ReferenceEquals(Items[i], item)) return i;
+        return -1;
+    }
+
+    /// <summary>Removed lines were in the chosen version only; added lines are in the text it is compared with.</summary>
     public IReadOnlyList<DiffRow> Diff => _selected is null
         ? []
-        : LineDiff.Compute(_selected.Version.Text, _currentText)
+        : LineDiff.Compute(_selected.Version.Text, ComparedText)
             .Select(l => new DiffRow(l.Kind, l.Kind switch { DiffKind.Added => "+", DiffKind.Removed => "−", _ => " " }, l.Text))
             .ToList();
 
+    public string DiffTitle => _compareWithCurrent ? "This version compared with the current text" : "Changes made in this version";
+
     public string Caption => _selected is null
         ? ""
-        : $"Changes since this version: red lines were removed, green lines were added.";
+        : _compareWithCurrent
+            ? "Red lines are only in this version, green lines are only in the text you have now."
+            : "What saving changed in this version: red lines were removed, green lines were added.";
+
+    /// <summary>The version the user asked to restore as a new prompt, or null.</summary>
+    public PromptVersion? CopyRequested { get; private set; }
+
+    /// <summary>
+    /// "Restore as a new prompt": the chosen version becomes a copy next to the prompt (the caller creates it once the
+    /// window has closed, see <see cref="CopyRequested"/>); the open prompt isn't touched.
+    /// </summary>
+    public bool RestoreAsNew()
+    {
+        if (_selected is null) return false;
+        CopyRequested = _selected.Version;
+        return true;
+    }
 
     /// <summary>Loads the chosen version into the editor (title, description, text, tags) as unsaved changes.</summary>
     public bool Restore()

@@ -27,8 +27,8 @@ public partial class MoveCategoryDialog : Window
             ? $"\"{categoryName}\" has {prompts}. Move {them} to another category, then \"{categoryName}\" is deleted."
             : $"\"{categoryName}\" has {prompts} and there is no other category to move {them} to. " +
               $"Create one first, or delete {them} with \"{categoryName}\".";
-        TargetBox.ItemsSource = targets; // nothing pre-selected: the user picks where the prompts go
-        MovePanel.Visibility = _canMove ? Visibility.Visible : Visibility.Collapsed;
+        TargetBox.ItemsSource = targets;
+        TargetBox.SelectedIndex = _canMove ? 0 : -1; // never empty: the first other category is the default
 
         var label = $"Also delete the {prompts} in this category";
         DeleteBox.Content = label;
@@ -50,13 +50,29 @@ public partial class MoveCategoryDialog : Window
 
     private void DeleteBox_Changed(object sender, RoutedEventArgs e) => Update();
 
-    /// <summary>Ticked: the move-to choice is off and the button deletes. Unticked: the button needs a target.</summary>
+    /// <summary>True while "Move prompts to" and its label are shown.</summary>
+    internal bool IsMoveChoiceShown => MovePanel.Visibility == Visibility.Visible;
+
+    /// <summary>The helper line under the choice (empty when there is none).</summary>
+    internal string HintMessage => HintText.Visibility == Visibility.Visible ? HintText.Text : "";
+
+    internal CheckBox DeleteTickBox => DeleteBox;
+
+    internal Category? ChosenTarget => TargetBox.SelectedItem as Category;
+
+    /// <summary>
+    /// Ticked: the move-to choice and its label are off (disabled and collapsed), the helper line says the prompts are
+    /// deleted for good, in Danger text, and the button deletes. Unticked: the choice is back with a category selected.
+    /// </summary>
     private void Update()
     {
         if (ActionButton is null) return; // while the XAML is still being loaded
         var delete = DeleteBox.IsChecked == true;
         TargetBox.IsEnabled = !delete;
-        HintText.Text = delete ? $"The {Plural(_promptCount)} will be deleted too." : "No prompts are deleted.";
+        MovePanel.Visibility = _canMove && !delete ? Visibility.Visible : Visibility.Collapsed;
+        HintText.Visibility = _canMove || delete ? Visibility.Visible : Visibility.Collapsed;
+        HintText.Text = delete ? "These prompts will be deleted. This can't be undone." : "Prompts move to the category you pick.";
+        HintText.SetResourceReference(StyleProperty, delete ? "ErrorText" : "MutedText");
 
         var text = delete ? $"Delete category and {Plural(_promptCount)}" : "Move and delete";
         ActionButton.Content = text;

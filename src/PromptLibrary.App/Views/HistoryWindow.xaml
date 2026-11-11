@@ -76,12 +76,22 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
-                <TextBlock Text="{Binding Caption}" Style="{StaticResource MutedText}" TextWrapping="Wrap"
-                           Margin="0,0,0,8" />
+                <StackPanel Margin="0,0,0,8">
+                    <DockPanel>
+                        <CheckBox DockPanel.Dock="Right" Content="Compare with current" Margin="12,0,0,0"
+                                  IsChecked="{Binding CompareWithCurrent}"
+                                  FocusVisualStyle="{StaticResource FocusRing}"
+                                  ToolTip="Compare this version with the text in the editor now"
+                                  AutomationProperties.Name="Compare with current" />
+                        <TextBlock Text="{Binding DiffTitle}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    </DockPanel>
+                    <TextBlock Text="{Binding Caption}" Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                               Margin="0,2,0,0" />
+                </StackPanel>
                 <Border Grid.Row="1" Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Line}"
                         BorderThickness="1" CornerRadius="{StaticResource Radius}">
                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                                  AutomationProperties.Name="Changes since the chosen version">
+                                  AutomationProperties.Name="Changes in the chosen version">
                         <ItemsControl ItemsSource="{Binding Diff}" Margin="0,4" Focusable="False">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -107,6 +117,10 @@
         <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
             <Button Content="Close" IsCancel="True" Margin="0,0,8,0" Click="Close_Click"
                     AutomationProperties.Name="Close" />
+            <Button Content="Restore as a new prompt" Margin="0,0,8,0"
+                    IsEnabled="{Binding CanRestore}" Click="RestoreNew_Click"
+                    ToolTip="Keeps this version as a new prompt and leaves the open one as it is"
+                    AutomationProperties.Name="Restore as a new prompt" />
             <Button Style="{StaticResource PrimaryButton}" Content="Restore this version" IsDefault="True"
                     IsEnabled="{Binding CanRestore}" Click="Restore_Click"
                     ToolTip="Puts this version in the editor as an unsaved change"
