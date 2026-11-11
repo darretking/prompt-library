@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using PromptLibrary.App.Team;
 using PromptLibrary.App.ViewModels;
+using PromptLibrary.Core.History;
 using PromptLibrary.Core.Models;
 
 namespace PromptLibrary.App.Views;
@@ -26,8 +27,10 @@ public partial class MainWindow : Window, IDialogs
         _closes = new UserCloseTracker(this, host);
         _closeQuestion = new CloseQuestion(this);
         InitializeComponent();
-        ViewModel = new MainViewModel(host, this);
+        ViewModel = new MainViewModel(host, this, new PromptHistoryStore(Paths.HistoryFolder, Paths.CrashLogFile));
         ViewModel.TitleFocusRequested += (_, _) => FocusLater(TitleBox);
+        ViewModel.ToastRequested += (_, text) => ShowToast(text);
+        ViewModel.HistoryDialog = model => new HistoryWindow(_host, model) { Owner = this }.ShowDialog() == true;
         DataContext = ViewModel;
 
         // Coming back to the window re-checks a paused backup folder (e.g. Google Drive signed in again).
@@ -91,6 +94,17 @@ public partial class MainWindow : Window, IDialogs
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
+        if (e.Key == Key.Enter && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+        {
+            ViewModel.SendCommand.Execute(null); // Send to the prompt's default AI app
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F6 && Keyboard.Modifiers is ModifierKeys.None or ModifierKeys.Shift)
+        {
+            CycleFocusPane(backwards: Keyboard.Modifiers == ModifierKeys.Shift);
+            e.Handled = true;
+        }
+
         if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
         {
             SearchBox.Focus();
@@ -221,20 +235,6 @@ public partial class MainWindow : Window, IDialogs
         }
     }
 
-    /// <summary>
-    /// Tab and Shift+Tab leave the prompt box like any other field; Ctrl+Tab types a tab character
-    /// (replacing any selected text).
-    /// </summary>
-    private void PromptBox_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key != Key.Tab || Keyboard.Modifiers != ModifierKeys.Control || PromptBox.IsReadOnly) return;
-
-        var start = PromptBox.SelectionStart;
-        PromptBox.SelectedText = "\t";
-        PromptBox.Select(start + 1, 0);
-        e.Handled = true;
-    }
-
     private void PromptList_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Delete && PromptList.SelectedItem is not null)
@@ -263,19 +263,137 @@ public partial class MainWindow : Window, IDialogs
 
     // ---- Editor buttons ------------------------------------------------------------------------
 
-    /// <summary>
-    /// The editor's two button groups share one line when they fit; near the minimum width (the Team side's row is
-    /// the wider one) the right group, ending in Copy prompt, moves to a second line, still right-aligned. The slip
-    /// and the gap above the buttons then give up that line's height, so nothing is cut off at the minimum size.
-    /// </summary>
-    private void ButtonRow_SizeChanged(object sender, SizeChangedEventArgs e)
+    /// <summary>The bottom bar's ... button: opens its menu above the button.</summary>
+    private void Overflow_Click(object sender, RoutedEventArgs e)
     {
-        if (!e.WidthChanged) return;
-        var stacked = LeftButtons.ActualWidth + RightButtons.ActualWidth + 8 > ButtonRow.ActualWidth;
-        Grid.SetRow(RightButtons, stacked ? 1 : 0);
-        RightButtons.Margin = stacked ? new Thickness(0, 8, 0, 0) : new Thickness(0);
-        ButtonRow.Margin = new Thickness(0, stacked ? 8 : 16, 0, 0);
-        SlipRow.MinHeight = stacked ? 40 : 64;
+        if (sender is not Button { ContextMenu: { } menu } button) return;
+        menu.PlacementTarget = button;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
+        menu.IsOpen = true;
+    }
+
+    /// <summary>
+    /// The Send to arrow: the AI apps (a check on the prompt's default), then <c>Set as default for this prompt</c>
+    /// with the same apps as a submenu. Built when opened, so the check is always current.
+    /// </summary>
+    private void SendMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button) return;
+        var item = (Style)FindResource("FlyoutItem");
+        var menu = new ContextMenu
+        {
+            Style = (Style)FindResource("FlyoutMenu"),
+            PlacementTarget = button,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Top,
+        };
+
+        var choices = ViewModel.SendChoices;
+        foreach (var choice in choices)
+        {
+            var id = choice.Id;
+            var entry = new MenuItem { Style = item, Header = choice.Name, IsChecked = choice.IsDefault };
+            entry.Click += (_, _) => ViewModel.SendCommand.Execute(id);
+            menu.Items.Add(entry);
+        }
+
+        if (ViewModel.Editor is { IsEditable: true })
+        {
+            menu.Items.Add(new Separator { Style = (Style)FindResource("FlyoutSeparator") });
+            var setDefault = new MenuItem { Style = item, Header = "Set as default for this prompt" };
+            foreach (var choice in choices)
+            {
+                var id = choice.Id;
+                var entry = new MenuItem { Style = item, Header = choice.Name, IsChecked = choice.IsDefault };
+                entry.Click += (_, _) => ViewModel.SetDefaultSendCommand.Execute(id);
+                setDefault.Items.Add(entry);
+            }
+            menu.Items.Add(setDefault);
+        }
+
+        menu.IsOpen = true;
+    }
+
+    // ---- Toast ---------------------------------------------------------------------------------
+
+    private readonly DispatcherTimer _toastTimer = new() { Interval = TimeSpan.FromMilliseconds(1500) };
+    private bool _toastTimerHooked;
+
+    private static readonly Duration ToastFade = new(TimeSpan.FromMilliseconds(167));
+
+    /// <summary>
+    /// A small pill at the bottom of the editor: fades in over 167 ms (Fluent enter curve), stays 1.5 s, fades out
+    /// (exit curve). With animations off in Windows it just appears and disappears.
+    /// </summary>
+    private void ShowToast(string text)
+    {
+        if (!_toastTimerHooked)
+        {
+            _toastTimerHooked = true;
+            _toastTimer.Tick += (_, _) =>
+            {
+                _toastTimer.Stop();
+                FadeToast(show: false);
+            };
+        }
+
+        ToastText.Text = text;
+        System.Windows.Automation.AutomationProperties.SetName(Toast, text);
+        Toast.Visibility = Visibility.Visible;
+        FadeToast(show: true);
+        _toastTimer.Stop();
+        _toastTimer.Start();
+    }
+
+    private void FadeToast(bool show)
+    {
+        if (!SystemParameters.ClientAreaAnimation)
+        {
+            Toast.BeginAnimation(OpacityProperty, null);
+            Toast.Opacity = show ? 1 : 0;
+            if (!show) Toast.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        // Fluent: enter cubic-bezier(0,0,0,1), exit (1,0,1,1).
+        var spline = show ? new System.Windows.Media.Animation.KeySpline(0, 0, 0, 1) : new System.Windows.Media.Animation.KeySpline(1, 0, 1, 1);
+        var animation = new System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames { Duration = ToastFade };
+        animation.KeyFrames.Add(new System.Windows.Media.Animation.SplineDoubleKeyFrame(
+            show ? 1 : 0, System.Windows.Media.Animation.KeyTime.FromTimeSpan(ToastFade.TimeSpan), spline));
+        if (!show)
+            animation.Completed += (_, _) =>
+            {
+                if (!_toastTimer.IsEnabled) Toast.Visibility = Visibility.Collapsed;
+            };
+        Toast.BeginAnimation(OpacityProperty, animation);
+    }
+
+    // ---- F6 ------------------------------------------------------------------------------------
+
+    /// <summary>F6 / Shift+F6: moves the focus rail → prompt list → editor → rail.</summary>
+    private void CycleFocusPane(bool backwards)
+    {
+        // 0 = rail, 1 = list, 2 = editor; anything else (search box, menu) counts as before the rail.
+        var current = RailList.IsKeyboardFocusWithin ? 0
+            : PromptList.IsKeyboardFocusWithin ? 1
+            : PromptBox.IsKeyboardFocusWithin || TitleBox.IsKeyboardFocusWithin ? 2
+            : -1;
+        var next = backwards ? (current <= 0 ? 2 : current - 1) : (current + 1) % 3;
+        if (next == 2 && !ViewModel.HasEditor) next = backwards ? 1 : 0;
+
+        switch (next)
+        {
+            case 0:
+                if (RailList.ItemContainerGenerator.ContainerFromItem(RailList.SelectedItem) is ListBoxItem railRow) railRow.Focus();
+                else RailList.Focus();
+                break;
+            case 1:
+                if (PromptList.ItemContainerGenerator.ContainerFromItem(PromptList.SelectedItem) is ListBoxItem listRow) listRow.Focus();
+                else PromptList.Focus();
+                break;
+            default:
+                PromptBox.Focus();
+                break;
+        }
     }
 
     // ---- Window size ---------------------------------------------------------------------------
