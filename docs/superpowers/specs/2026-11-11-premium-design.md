@@ -146,3 +146,46 @@ Tests: `dotnet test PromptLibrary.sln`. Shell is Git Bash. **Never run the real 
   unpins them, clears their usage entries and history files. Team side follows the same rules in team edit mode.
 - A safety copy is not needed (daily backups + existing safety-copy rules), but the status bar says
   `Deleted "<name>" and N prompts.`
+
+## 12. Added after web research (2026-11-11)
+
+Product research (speed, reach, reliability and trust beat visual polish) and Windows 11 design research (Fluent
+guidance, PowerToys Command Palette). Sources are listed in `docs/design/premium-review-results.md`.
+
+- **Dynamic tokens** (Core `PromptTemplate`): `{clipboard}` = current clipboard text, `{date}` = today in the user's
+  short date format, `{time}` = short time, `{cursor}` = removed on fill. When pasting into another app, the caret ends
+  at that spot (send ← key presses for the remaining character count after paste; skip if the count is > 2000).
+  These names are reserved: they never appear as form fields. Token values are injected through a provider interface so
+  tests can control them.
+- **Import / export** (File menu): `Export prompts…` writes one `.json` file (same schema as library.json plus a
+  `"format": "prompt-library-export/1"` marker) or a folder of `.md` files, one per prompt, with YAML front matter
+  (title, description, category, tags) and grouped in category subfolders. `Import prompts…` reads that JSON or a folder
+  of .md/.txt files (a file name becomes the title; the parent folder becomes the category). Duplicate titles in the same
+  category are skipped and counted. Summary dialog: `Imported 12 prompts. Skipped 3 duplicates.` Personal library only.
+  (**R11**)
+- **Paste reliability**: Settings option `Put back what was on the clipboard after pasting` (on by default). After an
+  auto-paste, restore the previous clipboard text after 500 ms. Only plain text is restored; when other formats were
+  present, restore nothing. Never do this when the user only chose Copy (no paste).
+- **Footprint**: create the search window once at startup, hidden, and reuse it. It must show within 150 ms of the
+  shortcut. Don't reload the library per open.
+- **Skipped** (**R12**): a keyword or hotkey per prompt (keyboard-hook reliability risk), cloud sync, and in-app AI runs.
+
+### Windows 11 visual rules (adds to §4/§10 and ui-style.md)
+
+- Corner radius: 8 px for windows, dialogs, flyouts, menus and the search window. 4 px for buttons, text boxes, list
+  rows, chips and toasts. An inner radius is never equal to or bigger than its container's.
+- Spacing: 4 px grid (4/8/12/16/24). Controls are 32 px tall; list rows are ≥ 40 px.
+- Type: keep 13 px body (**R13**: an existing, tested layout). Use semibold, never bold, and no other font sizes.
+- Icons: Segoe Fluent Icons only (fallback to Segoe MDL2 Assets on Win10), 16 px, one icon set. Emoji appear only as
+  user content (category emoji).
+- Materials: Mica only on the main and settings windows. The search window uses Acrylic
+  (`DWMSBT_TRANSIENTWINDOW`). Content layers stay solid. Use a solid fallback when transparency is off, the window is
+  inactive, or the build is < 22621.
+- Depth: 1 px `Brush.Line` strokes instead of shadows. DWM draws the window shadow.
+- Motion: 83 / 167 / 250 ms. Enter easing cubic-bezier(0,0,0,1), exit (1,0,1,1). Toasts fade 167 ms. Search window
+  appears with a 167 ms fade and an 8 px slide-up. Respect `SystemParameters.ClientAreaAnimation` (off = no animation).
+- States: every custom control has rest, hover, pressed, disabled and focus visuals. Focus is a 2 px Brand ring.
+- Search window extras (from Command Palette): Alt+1…9 runs the Nth visible result. Esc clears the query first, then
+  closes. Backspace on an empty form goes back to the list. Ctrl+K opens the result's actions menu (Copy, Paste, Send to…,
+  Open in main window, Pin).
+- Main window: F6 moves focus between the rail, list and editor panes.
