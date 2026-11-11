@@ -152,7 +152,7 @@ public class SearchViewModelTests
         var row = Assert.Single(vm.Items);
         Assert.Equal("Explain this code", vm.Selected!.Title);
         Assert.Contains(row.TitleSegments, s => s.Highlight && s.Text.StartsWith("Expl", StringComparison.OrdinalIgnoreCase));
-        Assert.Equal("💻 Coding · Plain-English walkthrough", row.Subtitle);
+        Assert.Equal("Coding · Plain-English walkthrough", row.Subtitle);
     });
 
     [Fact]

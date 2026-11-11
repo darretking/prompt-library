@@ -9,6 +9,8 @@ namespace PromptLibrary.App.ViewModels;
 public sealed class FillField : ObservableObject
 {
     private string _value;
+    private bool _listOpen;
+    private string? _highlighted;
 
     public FillField(TemplateField field, string value)
     {
@@ -28,28 +30,70 @@ public sealed class FillField : ObservableObject
     /// <summary>The grey hint shown in an empty text box (<c>e.g. …</c>), or empty.</summary>
     public string Hint => Field.Hint ?? "";
 
-    /// <summary>The grey hint shown in an empty drop-down.</summary>
+    /// <summary>The grey hint shown in an empty choice field.</summary>
     public string ChoiceHint => "Choose or type";
 
-    /// <summary>The option equal to the current value (the remembered one on opening), or null when the value is free text.</summary>
-    public string? SelectedOption
-    {
-        get => Options.FirstOrDefault(o => string.Equals(o, _value, StringComparison.OrdinalIgnoreCase));
-        set
-        {
-            if (value is not null) Value = value;
-        }
-    }
-
+    /// <summary>The text. A choice field is a plain text box too: nothing but the typed text ever changes it.</summary>
     public string Value
     {
         get => _value;
+        set => SetProperty(ref _value, value ?? "");
+    }
+
+    // ---- Choice fields: type freely, with the options as autocomplete and a list to pick from ----------------------
+
+    /// <summary>True while the list of options is open under the box.</summary>
+    public bool IsListOpen
+    {
+        get => _listOpen;
         set
         {
-            if (!SetProperty(ref _value, value ?? "")) return;
-            OnPropertyChanged(nameof(SelectedOption));
+            if (value && Options.Count == 0) value = false;
+            if (!SetProperty(ref _listOpen, value)) return;
+            if (value) Highlighted = Options.FirstOrDefault(o => Same(o, _value)) ?? Options[0];
         }
     }
+
+    /// <summary>The option the arrow keys are on while the list is open.</summary>
+    public string? Highlighted
+    {
+        get => _highlighted;
+        set => SetProperty(ref _highlighted, value);
+    }
+
+    /// <summary>
+    /// The option to complete <paramref name="typed"/> to (the first that starts with it and is longer), or null. The box
+    /// then shows the rest selected, so the next letter replaces it and Tab or Enter keeps it.
+    /// </summary>
+    public string? CompletionFor(string typed)
+        => typed.Length == 0 ? null
+            : Options.FirstOrDefault(o => o.Length > typed.Length && o.StartsWith(typed, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Down opens the list; Down and Up then move through it, stopping at the ends.</summary>
+    public void MoveHighlight(int delta)
+    {
+        if (Options.Count == 0) return;
+        if (!IsListOpen) { IsListOpen = true; return; }
+        var at = _highlighted is null ? -1 : Options.ToList().IndexOf(_highlighted);
+        Highlighted = Options[Math.Clamp(at + delta, 0, Options.Count - 1)];
+    }
+
+    /// <summary>Enter in an open list: takes the highlighted option and closes the list. False when no list is open.</summary>
+    public bool PickHighlighted()
+    {
+        if (!IsListOpen || _highlighted is null) return false;
+        Pick(_highlighted);
+        return true;
+    }
+
+    /// <summary>Takes an option (a click, or Enter on the highlighted one) and closes the list.</summary>
+    public void Pick(string option)
+    {
+        Value = option;
+        IsListOpen = false;
+    }
+
+    private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>
@@ -79,7 +123,10 @@ public sealed class FillInViewModel : ObservableObject
         {
             var remembered = settings.PlaceholderValues.TryGetValue(field.Name.ToLowerInvariant(), out var v) ? v : "";
             var item = new FillField(field, remembered ?? "");
-            item.PropertyChanged += (_, _) => OnPropertyChanged(nameof(PreviewText));
+            item.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(FillField.Value)) OnPropertyChanged(nameof(PreviewText));
+            };
             Fields.Add(item);
         }
     }
@@ -97,12 +144,6 @@ public sealed class FillInViewModel : ObservableObject
 
     /// <summary>The prompt as it will come out now (unfilled blanks keep their <c>{…}</c>).</summary>
     public string PreviewText => Fill().Text;
-
-    /// <summary>The preview starts open for a short form and closed above this many fields (the fields need the room).</summary>
-    public const int MaxFieldsWithOpenPreview = 3;
-
-    /// <summary>True when the live preview should start expanded.</summary>
-    public bool PreviewStartsOpen => Fields.Count <= MaxFieldsWithOpenPreview;
 
     /// <summary>True when <paramref name="field"/> is the last one (Enter there completes the form).</summary>
     public bool IsLast(FillField field) => Fields.Count > 0 && ReferenceEquals(Fields[^1], field);

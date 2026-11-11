@@ -47,7 +47,13 @@ public interface ISearchActions
 public sealed record TagChip(string Text, bool IsMatch);
 
 /// <summary>One key and what it does, for the footer ("Enter" "paste").</summary>
-public readonly record struct FooterHint(string Key, string Label);
+public readonly record struct FooterHint(string Key, string Label)
+{
+    /// <summary>What a screen reader says: <c>Enter: paste</c>.</summary>
+    public string AutomationName => $"{Key}: {Label}";
+
+    public override string ToString() => AutomationName;
+}
 
 /// <summary>One line of the result list: a group header or a prompt.</summary>
 public sealed class SearchItem
@@ -64,8 +70,26 @@ public sealed class SearchItem
     /// <summary>The title split into matched and unmatched pieces.</summary>
     public IReadOnlyList<TextSegment> TitleSegments { get; init; } = [];
 
-    /// <summary>Emoji, category name and description on one muted line.</summary>
+    /// <summary>Category name and description on one muted line.</summary>
     public string Subtitle { get; init; } = "";
+
+    /// <summary>The category's name (no emoji), or empty.</summary>
+    public string CategoryName { get; init; } = "";
+
+    /// <summary>The category's emoji for the leading glyph column, or empty (the view then shows a document or team icon).</summary>
+    public string Emoji { get; init; } = "";
+
+    public bool HasEmoji => Emoji.Length > 0;
+    public bool ShowsTeamGlyph => !HasEmoji && IsTeam;
+    public bool ShowsDocumentGlyph => !HasEmoji && !IsTeam;
+
+    /// <summary>What a screen reader says for the row: <c>Plan a trip itinerary, Travel, team, pinned</c>.</summary>
+    public string AutomationName => IsHeader
+        ? Header
+        : string.Join(", ", new[] { Title, CategoryName, IsTeam ? "team" : "", IsPinned ? "pinned" : "" }
+            .Where(s => s.Length > 0));
+
+    public override string ToString() => AutomationName;
 
     /// <summary>
     /// Third line, when the match came from the tags: the prompt's tags as <c>#tag</c> chips, matched ones first and bold.
@@ -83,7 +107,13 @@ public sealed class SearchItem
 }
 
 /// <summary>One entry of the Ctrl+K menu.</summary>
-public sealed record SearchAction(string Label, Action Run, bool OpensSubmenu = false);
+public sealed record SearchAction(string Label, Action Run, bool OpensSubmenu = false)
+{
+    /// <summary>What a screen reader says: the label, and that it opens another list.</summary>
+    public string AutomationName => OpensSubmenu ? $"{Label}, opens a list" : Label;
+
+    public override string ToString() => AutomationName;
+}
 
 /// <summary>
 /// The launcher: ranked or grouped results, the preview, the keys, the fill-in form and the Ctrl+K menu. The window
@@ -185,6 +215,9 @@ public sealed class SearchViewModel : ObservableObject
     public bool HasResults => Items.Count > 0;
 
     public string EmptyText => string.IsNullOrWhiteSpace(_query) ? "No prompts yet." : $"No prompts match \"{_query.Trim()}\".";
+
+    /// <summary>The line under <see cref="EmptyText"/>: how to widen the search (nothing while the library itself is empty).</summary>
+    public string EmptyHint => string.IsNullOrWhiteSpace(_query) ? "" : "Try fewer words, or #tag / cat:name";
 
     /// <summary>The keys that work right now, for the footer: the list, the actions popup or the fill-in form.</summary>
     public IReadOnlyList<FooterHint> Footer => IsFormOpen
@@ -407,7 +440,7 @@ public sealed class SearchViewModel : ObservableObject
 
     // ---- Building the list ---------------------------------------------------------------------
 
-    private sealed record Entry(Prompt Prompt, bool IsTeam, string Category);
+    private sealed record Entry(Prompt Prompt, bool IsTeam, string Category, string Emoji);
 
     private void Rebuild(Guid? keepSelectionOf = null)
     {
@@ -435,6 +468,7 @@ public sealed class SearchViewModel : ObservableObject
         Selected = keep ?? Items.FirstOrDefault(i => i.IsRow);
         OnPropertyChanged(nameof(HasResults));
         OnPropertyChanged(nameof(EmptyText));
+        OnPropertyChanged(nameof(EmptyHint));
     }
 
     private void AddGroups(Dictionary<Guid, Entry> entries, HashSet<Guid> pinned)
@@ -475,10 +509,8 @@ public sealed class SearchViewModel : ObservableObject
             foreach (var p in lib.Prompts)
             {
                 if (hidden?.Contains(p.Id) == true) continue;
-                var category = categories.TryGetValue(p.CategoryId, out var c)
-                    ? (string.IsNullOrEmpty(c.Emoji) ? c.Name : $"{c.Emoji} {c.Name}")
-                    : "";
-                map[p.Id] = new Entry(p, isTeam, category);
+                categories.TryGetValue(p.CategoryId, out var c);
+                map[p.Id] = new Entry(p, isTeam, c?.Name ?? "", c?.Emoji ?? "");
             }
         }
     }
@@ -513,6 +545,8 @@ public sealed class SearchViewModel : ObservableObject
             IsPinned = pinned.Contains(e.Prompt.Id),
             TitleSegments = Segments(e.Prompt.Title, matches.Select(m => (m.Start, m.Length))),
             Subtitle = subtitle,
+            CategoryName = e.Category,
+            Emoji = e.Emoji,
             TagChips = tags,
             SnippetSegments = snippet,
         };
