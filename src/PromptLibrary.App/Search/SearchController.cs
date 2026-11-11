@@ -14,14 +14,6 @@ using PromptLibrary.Core.Usage;
 
 namespace PromptLibrary.App.Search;
 
-/// <summary>Token values captured when the search window opened (the clipboard before our window took the focus).</summary>
-internal sealed class TokenValues(string? clipboard) : ITokenValues
-{
-    public string? Clipboard { get; } = clipboard;
-    public DateTime Now => DateTime.Now;
-    public CultureInfo Culture => CultureInfo.CurrentCulture;
-}
-
 /// <summary>
 /// Owns the one search window (created hidden at startup, reused), remembers which window the user was in, and does
 /// what a chosen prompt asks for: copy, paste into that window, put the clipboard back, send to an AI site, open in
@@ -75,7 +67,7 @@ internal sealed class SearchController : ISearchActions, IDisposable
 
         // Both are taken before our window takes the focus.
         _returnTo = fromTray ? IntPtr.Zero : AutoPaster.ForegroundWindow();
-        _tokens = new TokenValues(NeedsClipboard() ? ClipboardSnapshot.ReadText() : null);
+        _tokens = TokenValues.Capture(NeedsClipboard());
 
         Ensure();
         _viewModel!.Reset();
@@ -209,12 +201,14 @@ internal sealed class SearchController : ISearchActions, IDisposable
     {
         _host.SaveSettings();
         _host.RefreshQuickMenu();
+        _host.RaiseUserStateChanged(); // the main window's pin glyphs follow
     }
 
     private void RecordUse(Prompt prompt)
     {
         UsageTracker.Record(_host.Settings, prompt.Id, DateTimeOffset.Now);
         _host.SaveSettings();
+        _host.RaiseUserStateChanged(); // the main window's Recent list follows
     }
 }
 

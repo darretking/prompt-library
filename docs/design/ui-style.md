@@ -21,6 +21,7 @@ Define once as `SolidColorBrush` resources in `Themes/Light.xaml` and `Themes/Da
 | `Brush.Brand` | `#4338CA` | `#8B85F0` | Selection edge, focus ring, links, brand text. Matches the app icon (indigo bubble). |
 | `Brush.BrandFill` | `#4338CA` | `#4338CA` | Copy button and ticked checkbox fill, with white text |
 | `Brush.BrandSoft` | `#E8E7FB` | `#27264A` | Selected list item background |
+| `Brush.Hover` | `#E8E7FB` at 50 % | `#27264A` at 50 % | List and rail row hover (BrandSoft at half opacity; text checked over Window, Rail and Surface) |
 | `Brush.Accent` | `#F5A524` | `#F5A524` | Bookmark amber from the icon. Use sparingly: onboarding illustration only, never for text. |
 | `Brush.Danger` | `#B42318` | `#F97066` | Delete confirmation text, error text |
 | `Brush.DangerFill` | `#B42318` | `#B42318` | Filled delete button, with white text |
@@ -60,7 +61,7 @@ No gradients. No drop shadows inside the window (Windows draws the window shadow
 - Window default 1100×700, minimum 860×520. Remember size/position is out of scope.
 - 16 px outer padding in the editor; 8 px grid for all spacing.
 - Left-aligned text throughout. Counts right-aligned in the rail.
-- **Selection:** selected category/prompt = `BrandSoft` background + 3 px `Brand` left edge. No other row decoration, no hover animations.
+- **Selection:** selected category/prompt = `BrandSoft` background + 3 px `Brand` left edge. Hover = `Brush.Hover`, no animation. Rows are at least 40 px; the rail shows `emoji name` (20 px emoji column) and a Recent row under All prompts.
 
 ## The one bold move: the prompt slip
 

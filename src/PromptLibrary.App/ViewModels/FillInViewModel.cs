@@ -49,13 +49,14 @@ public sealed class FillInViewModel : ObservableObject
     private readonly ITokenValues _tokens;
 
     public FillInViewModel(string promptText, AppSettings settings, ITokenValues tokens,
-        string primaryLabel = "Paste", string title = "")
+        string primaryLabel = "Paste", string title = "", string cancelLabel = "Back")
     {
         _text = promptText ?? "";
         _settings = settings;
         _tokens = tokens;
         PrimaryLabel = primaryLabel;
         Title = title;
+        CancelLabel = cancelLabel;
 
         foreach (var field in PromptTemplate.Parse(_text))
         {
@@ -73,6 +74,9 @@ public sealed class FillInViewModel : ObservableObject
 
     /// <summary>The prompt's title, shown above the fields when not empty.</summary>
     public string Title { get; }
+
+    /// <summary>The label of the other button: <c>Back</c> in the search window, <c>Cancel</c> in a dialog.</summary>
+    public string CancelLabel { get; }
 
     /// <summary>The prompt as it will come out now (unfilled blanks keep their <c>{…}</c>).</summary>
     public string PreviewText => Fill().Text;

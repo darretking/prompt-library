@@ -426,6 +426,7 @@
             <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
             <Setter Property="Padding" Value="13,8,16,8" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingInset}" />
             <Setter Property="Template">
                 <Setter.Value>
@@ -433,9 +434,13 @@
                         <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent"
                                 BorderThickness="3,0,0,0" Padding="{TemplateBinding Padding}"
                                 SnapsToDevicePixels="True">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                         </Border>
                         <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Hover}" />
+                            </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.BrandSoft}" />
                                 <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Brand}" />

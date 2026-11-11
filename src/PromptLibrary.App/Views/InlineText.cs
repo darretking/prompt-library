@@ -11,6 +11,9 @@ public enum InlineHighlight
     /// <summary>Brand-coloured text (matched search letters).</summary>
     Match,
 
+    /// <summary>Brand-coloured semibold text (matched letters in a main-window list row).</summary>
+    MatchBold,
+
     /// <summary>Brand text on a soft brand fill (a placeholder in the preview).</summary>
     Chip,
 }
@@ -41,13 +44,15 @@ public static class InlineText
         block.Inlines.Clear();
         if (GetSegments(block) is not { } segments) return;
 
-        var chip = GetHighlight(block) == InlineHighlight.Chip;
+        var highlight = GetHighlight(block);
+        var chip = highlight == InlineHighlight.Chip;
         foreach (var segment in segments)
         {
             var run = new Run(segment.Text);
             if (segment.Highlight)
             {
                 run.SetResourceReference(TextElement.ForegroundProperty, "Brush.Brand");
+                if (highlight == InlineHighlight.MatchBold) run.FontWeight = FontWeights.SemiBold;
                 if (chip)
                 {
                     run.SetResourceReference(TextElement.BackgroundProperty, "Brush.BrandSoft");

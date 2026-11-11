@@ -44,6 +44,20 @@ public class ThemeContrastTests
         Check("Brush.DiffAddedText", "Brush.DiffAdded");
         Check("Brush.DiffRemovedText", "Brush.DiffRemoved");
 
+        // Row hover is BrandSoft at 50 % over whatever the row sits on; text and matched letters stay readable on it.
+        foreach (var background in new[] { "Brush.Window", "Brush.Rail", "Brush.Surface" })
+        {
+            var hover = Over(palette["Brush.Hover"], palette[background]);
+            foreach (var text in new[] { "Brush.Ink", "Brush.Muted", "Brush.Brand" })
+            {
+                var ratio = Contrast(palette[text], hover);
+                if (ratio < Minimum)
+                    failures.Add($"{theme}: {text} on Hover over {background} = {ratio:0.00}");
+            }
+        }
+        // Tag chips: muted 12 px text on BrandSoft.
+        Check("Brush.Muted", "Brush.BrandSoft");
+
         Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
     }
 
@@ -63,6 +77,14 @@ public class ThemeContrastTests
         using var stream = File.OpenRead(Path.Combine(dir!, "src", "PromptLibrary.App", "Themes", theme + ".xaml"));
         var dictionary = (ResourceDictionary)XamlReader.Load(stream);
         return dictionary.Keys.Cast<string>().ToDictionary(k => k, k => ((SolidColorBrush)dictionary[k]).Color);
+    }
+
+    /// <summary>The colour that shows when <paramref name="top"/> (with its own alpha) lies over the opaque <paramref name="bottom"/>.</summary>
+    private static Color Over(Color top, Color bottom)
+    {
+        var a = top.A / 255.0;
+        byte Mix(byte t, byte b) => (byte)Math.Round(t * a + b * (1 - a));
+        return Color.FromRgb(Mix(top.R, bottom.R), Mix(top.G, bottom.G), Mix(top.B, bottom.B));
     }
 
     private static double Contrast(Color a, Color b)

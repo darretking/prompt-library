@@ -11,23 +11,48 @@
     <StackPanel Margin="16">
         <TextBlock x:Name="MessageText" TextWrapping="Wrap" Margin="0,0,0,16" />
 
-        <TextBlock Text="Move prompts to" Style="{StaticResource FieldLabel}" />
-        <!-- Nothing is chosen at first, so the prompts never go somewhere by accident; Move and delete waits. -->
-        <ComboBox x:Name="TargetBox" DisplayMemberPath="Name" AutomationProperties.Name="Move prompts to"
-                  SelectionChanged="TargetBox_SelectionChanged">
-            <ComboBox.ItemContainerStyle>
-                <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
-                    <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
-                </Style>
-            </ComboBox.ItemContainerStyle>
-        </ComboBox>
-        <TextBlock Text="No prompts are deleted." Style="{StaticResource MutedText}" Margin="0,4,0,0" />
+        <StackPanel x:Name="MovePanel">
+            <TextBlock Text="Move prompts to" Style="{StaticResource FieldLabel}" />
+            <!-- Nothing is chosen at first, so the prompts never go somewhere by accident; Move and delete waits. -->
+            <ComboBox x:Name="TargetBox" AutomationProperties.Name="Move prompts to"
+                      SelectionChanged="TargetBox_SelectionChanged">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Emoji}" Margin="0,0,6,0">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Emoji}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+                <ComboBox.ItemContainerStyle>
+                    <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+                        <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+                    </Style>
+                </ComboBox.ItemContainerStyle>
+            </ComboBox>
+            <TextBlock x:Name="HintText" Text="No prompts are deleted." Style="{StaticResource MutedText}"
+                       TextWrapping="Wrap" Margin="0,4,0,0" />
+        </StackPanel>
+
+        <!-- The other way out: delete the prompts with the category. Only for a category that has some. -->
+        <CheckBox x:Name="DeleteBox" Margin="0,16,0,0" Checked="DeleteBox_Changed" Unchecked="DeleteBox_Changed"
+                  ToolTip="Delete the prompts too instead of moving them" />
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
             <Button Content="Cancel" IsCancel="True" Margin="0,0,8,0" AutomationProperties.Name="Cancel" />
-            <Button x:Name="MoveButton" Style="{StaticResource PrimaryButton}" Content="Move and delete" IsDefault="True"
+            <Button x:Name="ActionButton" Style="{StaticResource PrimaryButton}" Content="Move and delete" IsDefault="True"
                     IsEnabled="False"
-                    Click="Move_Click" AutomationProperties.Name="Move and delete" />
+                    Click="Action_Click" AutomationProperties.Name="Move and delete" />
         </StackPanel>
     </StackPanel>
 </Window>

@@ -16,6 +16,8 @@
     <SolidColorBrush x:Key="Brush.BrandFill" Color="#4338CA" />
     <SolidColorBrush x:Key="Brush.BrandSoft" Color="#E8E7FB" />
     <SolidColorBrush x:Key="Brush.BrandHover" Color="#3730A3" />
+    <!-- Row hover: BrandSoft at 50 % opacity (list and rail rows). -->
+    <SolidColorBrush x:Key="Brush.Hover" Color="#80E8E7FB" />
     <!-- Danger: text. DangerFill: the filled delete button with white text. -->
     <SolidColorBrush x:Key="Brush.Danger" Color="#B42318" />
     <SolidColorBrush x:Key="Brush.DangerFill" Color="#B42318" />

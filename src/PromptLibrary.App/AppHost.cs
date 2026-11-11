@@ -119,6 +119,12 @@ public sealed class AppHost : IMainHost, IDisposable
 
     public event EventHandler? LibraryChanged;
 
+    /// <summary>Raised when pins or usage changed outside the main window (the search window, the tray menu): its lists refresh.</summary>
+    public event EventHandler? UserStateChanged;
+
+    /// <summary>Tells the main window that pins or usage changed.</summary>
+    public void RaiseUserStateChanged() => UserStateChanged?.Invoke(this, EventArgs.Empty);
+
     /// <summary>Raised when <see cref="BackupWarning"/> changes.</summary>
     public event EventHandler? BackupStateChanged;
 
@@ -409,6 +415,7 @@ public sealed class AppHost : IMainHost, IDisposable
 
         UsageTracker.Record(Settings, prompt.Id, DateTimeOffset.Now);
         SaveSettings();
+        RaiseUserStateChanged();
 
         var hasTarget = AutoPaster.IsOtherAppWindow(pick.ReturnTo, out var isOurs);
         var outcome = PasteDecision.ShouldPaste(Settings.PasteAfterCopy, fromShortcutMenu: pick.ReturnTo != IntPtr.Zero,
@@ -426,11 +433,15 @@ public sealed class AppHost : IMainHost, IDisposable
     /// Copies <paramref name="text"/> (normalised to CRLF) and shows <c>Copied: title</c> in the tray.
     /// False if the clipboard stayed busy.
     /// </summary>
-    public bool CopyText(string text, string title)
+    public bool CopyText(string text, string title) => CopyText(text, title, notifyInTray: true);
+
+    /// <summary>As <see cref="CopyText(string, string)"/>; without <paramref name="notifyInTray"/> a copy is silent (a failure is still shown).</summary>
+    public bool CopyText(string text, string title, bool notifyInTray)
     {
         if (_clipboard.TryCopy(text))
         {
-            Tray.ShowMessage(AppName, PasteDecision.CopiedMessage(title, PasteOutcome.NotAttempted)!);
+            if (notifyInTray)
+                Tray.ShowMessage(AppName, PasteDecision.CopiedMessage(title, PasteOutcome.NotAttempted)!);
             return true;
         }
 

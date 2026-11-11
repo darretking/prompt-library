@@ -48,6 +48,15 @@ public interface IMainHost
     /// <summary>Copies <paramref name="text"/> and shows <c>Copied: title</c>; false if the clipboard stayed busy.</summary>
     bool CopyText(string text, string title);
 
+    /// <summary>
+    /// As <see cref="CopyText(string, string)"/>; with <paramref name="notifyInTray"/> false the tray says nothing about
+    /// the copy (the window shows its own message, e.g. when sending to an AI app). A failure is still reported.
+    /// </summary>
+    bool CopyText(string text, string title, bool notifyInTray) => CopyText(text, title);
+
+    /// <summary>Pins, usage or other per-user state changed outside the main window (the search window): lists refresh.</summary>
+    event EventHandler? UserStateChanged { add { } remove { } }
+
     Task<BackupResult?> RunBackupAsync(BackupTrigger trigger, bool showInTray = true);
 
     void OpenRestore();

@@ -3,8 +3,11 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using PromptLibrary.App.Search;
 using PromptLibrary.App.Team;
 using PromptLibrary.App.ViewModels;
+using PromptLibrary.Core.Backup;
+using PromptLibrary.Core.Exchange;
 using PromptLibrary.Core.History;
 using PromptLibrary.Core.Models;
 
@@ -31,6 +34,18 @@ public partial class MainWindow : Window, IDialogs
         ViewModel.TitleFocusRequested += (_, _) => FocusLater(TitleBox);
         ViewModel.ToastRequested += (_, text) => ShowToast(text);
         ViewModel.HistoryDialog = model => new HistoryWindow(_host, model) { Owner = this }.ShowDialog() == true;
+
+        // Copy / Send on a template prompt: the fill-in form as a small dialog. The tokens ({clipboard}, {date}…) are
+        // taken now, at the press, before the dialog takes the focus; the values typed are remembered.
+        ViewModel.TokenSource = TokenValues.For;
+        ViewModel.FillInResolver = text =>
+        {
+            var model = new FillInViewModel(text, _host.Settings, TokenValues.For(text), ViewModel.FillInPrimaryLabel,
+                ViewModel.FillInTitle, cancelLabel: "Cancel");
+            var filled = FillInDialog.Ask(this, model);
+            if (filled is not null) _host.SaveSettings();
+            return filled;
+        };
         DataContext = ViewModel;
 
         // Coming back to the window re-checks a paused backup folder (e.g. Google Drive signed in again).
@@ -121,10 +136,70 @@ public partial class MainWindow : Window, IDialogs
     public bool ConfirmDestructive(string message, string action)
         => ConfirmDialog.Ask(this, message, action, "Cancel", danger: true);
 
-    public Guid? ChooseMoveTarget(string categoryName, int promptCount, IReadOnlyList<Category> targets)
+    public CategoryDeletion? ChooseCategoryDeletion(string categoryName, int promptCount, IReadOnlyList<Category> targets)
     {
         var dialog = new MoveCategoryDialog(categoryName, promptCount, targets) { Owner = this };
-        return dialog.ShowDialog() == true ? dialog.SelectedCategoryId : null;
+        return dialog.ShowDialog() == true ? new CategoryDeletion(dialog.SelectedCategoryId, dialog.DeletePrompts) : null;
+    }
+
+    public ExchangePick? ChooseImportSource()
+    {
+        var kind = new ChooseKindDialog("Import prompts",
+            "Import prompts from a file or a folder. Prompts that are already in your library are skipped.",
+            "One file (.json)", "A folder of Markdown or text files", "Choose…") { Owner = this };
+        if (kind.ShowDialog() != true) return null;
+
+        var start = ExchangeStartFolder();
+        if (kind.IsFolder)
+        {
+            var folder = new Microsoft.Win32.OpenFolderDialog { Title = "Import prompts from a folder", InitialDirectory = start };
+            return folder.ShowDialog(this) == true ? new ExchangePick(folder.FolderName, IsFolder: true) : null;
+        }
+
+        var file = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Import prompts",
+            Filter = "Prompt Library export (*.json)|*.json|All files (*.*)|*.*",
+            InitialDirectory = start,
+        };
+        return file.ShowDialog(this) == true ? new ExchangePick(file.FileName, IsFolder: false) : null;
+    }
+
+    public ExchangePick? ChooseExportTarget()
+    {
+        var kind = new ChooseKindDialog("Export prompts",
+            "Export your prompts so you can keep a copy or use them elsewhere.",
+            "One file (.json)", "A folder of Markdown files", "Choose…") { Owner = this };
+        if (kind.ShowDialog() != true) return null;
+
+        var start = ExchangeStartFolder();
+        if (kind.IsFolder)
+        {
+            var folder = new Microsoft.Win32.OpenFolderDialog { Title = "Export prompts to a folder", InitialDirectory = start };
+            return folder.ShowDialog(this) == true ? new ExchangePick(folder.FolderName, IsFolder: true) : null;
+        }
+
+        var file = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Export prompts",
+            Filter = "Prompt Library export (*.json)|*.json",
+            DefaultExt = ".json",
+            FileName = $"Prompt Library prompts {DateTime.Now:yyyy-MM-dd}.json",
+            InitialDirectory = start,
+        };
+        return file.ShowDialog(this) == true ? new ExchangePick(file.FileName, IsFolder: false) : null;
+    }
+
+    /// <summary>The folder the import and export pickers open in: Documents, Desktop or the profile, never a cloud drive.</summary>
+    private static string? ExchangeStartFolder()
+    {
+        var cloudRoots = CloudFolderDetector.Detect(new SystemCloudProbe()).Select(c => c.RootPath).ToList();
+        return ExportLocations.SafeStartFolder(
+        [
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        ], cloudRoots);
     }
 
     public void ShowMessage(string message)
@@ -150,7 +225,7 @@ public partial class MainWindow : Window, IDialogs
             ViewModel.StartRename(RailList.SelectedItem as CategoryItem);
             e.Handled = true;
         }
-        else if (e.Key == Key.Delete && RailList.SelectedItem is CategoryItem { IsAll: false } item)
+        else if (e.Key == Key.Delete && RailList.SelectedItem is CategoryItem { IsCategory: true } item)
         {
             ViewModel.DeleteCategory(item);
             e.Handled = true;
@@ -187,6 +262,7 @@ public partial class MainWindow : Window, IDialogs
         // Deferred so the click that moved focus finishes first: committing rebuilds the rail, which
         // would otherwise swallow that click.
         if (((FrameworkElement)sender).DataContext is not CategoryItem { IsRenaming: true } item) return;
+        if (StaysInEditor(sender, e.NewFocus)) return; // from the name box to the emoji button (or back) is not leaving
         Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
         {
             if (item.IsRenaming && !ViewModel.CommitRename(item))
@@ -213,8 +289,68 @@ public partial class MainWindow : Window, IDialogs
     private void NewCategoryBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
         // Leaving an empty box closes it; a typed name stays so it isn't lost.
+        if (StaysInEditor(sender, e.NewFocus)) return; // the emoji button beside the box is part of the editor
         if (ViewModel.IsAddingCategory && string.IsNullOrWhiteSpace(ViewModel.NewCategoryName))
             ViewModel.CancelNewCategory();
+    }
+
+    /// <summary>After an emoji is picked for the new category, the cursor goes back to the name box.</summary>
+    private void NewEmoji_Picked(object? sender, EventArgs e) => FocusLater(NewCategoryBox);
+
+    /// <summary>After an emoji is picked while renaming, the cursor goes back to the name box; "Change emoji…" saves at once.</summary>
+    private void RenameEmoji_Picked(object? sender, EventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: CategoryItem item } button) return;
+        if (_commitAfterEmoji == item)
+        {
+            _commitAfterEmoji = null;
+            if (ViewModel.CommitRename(item)) FocusSelectedCategory();
+            return;
+        }
+        if (button.Parent is Panel panel && panel.Children.OfType<TextBox>().FirstOrDefault() is { } box)
+            FocusLater(box);
+    }
+
+    // The row whose "Change emoji…" is open: choosing an emoji saves it without pressing Enter.
+    private CategoryItem? _commitAfterEmoji;
+
+    /// <summary>The category menu's Change emoji…: opens the inline editor with the emoji grid showing.</summary>
+    private void ChangeEmoji_Click(object sender, RoutedEventArgs e)
+    {
+        if (((FrameworkElement)sender).DataContext is not CategoryItem item) return;
+        ViewModel.StartRename(item);
+        if (!item.IsRenaming) return;
+        _commitAfterEmoji = item;
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            if (RailList.ItemContainerGenerator.ContainerFromItem(item) is DependencyObject row
+                && FindDescendant<Controls.EmojiButton>(row) is { } picker)
+                picker.Open();
+        });
+    }
+
+    /// <summary>
+    /// True when the keyboard moved to another part of the same inline editor (the name box and its emoji button, or the
+    /// emoji grid): the editor stays open.
+    /// </summary>
+    private static bool StaysInEditor(object sender, IInputElement? newFocus)
+    {
+        if (sender is not FrameworkElement { Parent: { } container } || newFocus is not DependencyObject target) return false;
+        for (DependencyObject? node = target; node is not null;
+             node = LogicalTreeHelper.GetParent(node) ?? (node is System.Windows.Media.Visual ? System.Windows.Media.VisualTreeHelper.GetParent(node) : null))
+            if (ReferenceEquals(node, container)) return true;
+        return false;
+    }
+
+    private static T? FindDescendant<T>(DependencyObject from) where T : DependencyObject
+    {
+        for (var i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(from); i++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(from, i);
+            if (child is T match) return match;
+            if (FindDescendant<T>(child) is { } deeper) return deeper;
+        }
+        return null;
     }
 
     /// <summary>Inline name boxes take the cursor as soon as they appear.</summary>

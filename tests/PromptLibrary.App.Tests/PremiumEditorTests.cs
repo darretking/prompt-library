@@ -379,7 +379,6 @@ public sealed class PremiumEditorTests : IDisposable
     {
         public bool? AskSaveChanges(string question) => null;
         public bool ConfirmDestructive(string message, string action) => true;
-        public Guid? ChooseMoveTarget(string categoryName, int promptCount, IReadOnlyList<Category> targets) => null;
         public void ShowMessage(string message) { }
         public bool ShowTeamHistory(TeamLibraryService service, bool review) => false;
     }

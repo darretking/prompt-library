@@ -110,7 +110,7 @@
         </Grid>
 
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="Back" Click="Cancel_Click" AutomationProperties.Name="Back to the list" />
+            <Button Content="{Binding CancelLabel}" Click="Cancel_Click" AutomationProperties.Name="{Binding CancelLabel}" />
             <Button Content="{Binding PrimaryLabel}" Style="{StaticResource PrimaryButton}" Margin="8,0,0,0"
                     Click="Complete_Click" AutomationProperties.Name="{Binding PrimaryLabel}" />
         </StackPanel>

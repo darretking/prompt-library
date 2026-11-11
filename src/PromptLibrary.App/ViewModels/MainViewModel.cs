@@ -1,12 +1,14 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PromptLibrary.App.Team;
 using PromptLibrary.Core.Backup;
 using PromptLibrary.Core.Editing;
+using PromptLibrary.Core.Exchange;
 using PromptLibrary.Core.History;
 using PromptLibrary.Core.Models;
 using PromptLibrary.Core.Search;
@@ -72,6 +74,7 @@ public sealed class MainViewModel : ObservableObject
     private bool _isAddingCategory;
     private string _newCategoryName = "";
     private string? _newCategoryError;
+    private string? _newCategoryEmoji;
 
     // True while the lists are being rebuilt; the list boxes push null selections then, which are ignored.
     private bool _refreshing;
@@ -122,6 +125,8 @@ public sealed class MainViewModel : ObservableObject
         ClearSearchCommand = new RelayCommand(() => SearchText = "");
         BackupNowCommand = new RelayCommand(() => _ = _host.RunBackupAsync(BackupTrigger.Manual));
         RestoreCommand = new RelayCommand(_host.OpenRestore);
+        ImportCommand = new RelayCommand(ImportPrompts, () => !IsTeamSide);
+        ExportCommand = new RelayCommand(ExportPrompts, () => !IsTeamSide);
         OpenSettingsCommand = new RelayCommand(() => _host.OpenSettings());
         SetUpBackupsCommand = new RelayCommand(() => _host.OpenSettings(focusBackups: true));
         ExitCommand = new RelayCommand(() => _host.ExitApp());
@@ -158,6 +163,8 @@ public sealed class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(BackupWarningDetail));
             OnPropertyChanged(nameof(ShowBackupWarning));
         };
+
+        _host.UserStateChanged += (_, _) => RefreshUserState();
 
         _statusTimer = new DispatcherTimer { Interval = StatusDuration };
         _statusTimer.Tick += (_, _) =>
@@ -286,17 +293,38 @@ public sealed class MainViewModel : ObservableObject
     public Func<HistoryViewModel, bool>? HistoryDialog { get; set; }
 
     /// <summary>
-    /// Later task: set this to show the fill-in dialog. Given a prompt's text with placeholders, it returns the text
-    /// to use, or null when the user cancelled. Until then (and for prompts without placeholders) the raw text is used.
+    /// Set by the window: shows the fill-in dialog. Given a prompt's text with placeholders, it returns the text to
+    /// use, or null when the user cancelled. Without it (and for prompts without placeholders) the text is used as is
+    /// (apart from the dynamic tokens, see <see cref="TokenSource"/>).
     /// </summary>
     public Func<string, string?>? FillInResolver { get; set; }
 
     /// <summary>
-    /// The one place Copy and Send get their text: the editor's text, passed through <see cref="FillInResolver"/> when
-    /// it has placeholders. Null means the user cancelled the fill-in.
+    /// Set by the window: the values of <c>{clipboard}</c>, <c>{date}</c> and <c>{time}</c> at this moment, for the given
+    /// text (the clipboard is only read when the text uses it). Without it the tokens stay as written.
     /// </summary>
-    public string? ResolveTextForUse(string text)
-        => FillInResolver is null || !PromptTemplate.HasFields(text) ? text : FillInResolver(text);
+    public Func<string, ITokenValues>? TokenSource { get; set; }
+
+    /// <summary>The label of the fill-in dialog's main button while it is open: <c>Copy</c> or <c>Send</c>.</summary>
+    public string FillInPrimaryLabel { get; private set; } = "Copy";
+
+    /// <summary>The title of the prompt the fill-in dialog is open for.</summary>
+    public string FillInTitle => _editor?.DisplayTitle ?? "";
+
+    /// <summary>
+    /// The one place Copy and Send get their text: the editor's text, passed through <see cref="FillInResolver"/> when
+    /// it has placeholders (the dialog's button says <paramref name="primaryLabel"/>); a text with only dynamic tokens
+    /// gets them filled without a dialog. Null means the user cancelled the fill-in.
+    /// </summary>
+    public string? ResolveTextForUse(string text, string primaryLabel = "Copy")
+    {
+        if (FillInResolver is not null && PromptTemplate.HasFields(text))
+        {
+            FillInPrimaryLabel = primaryLabel;
+            return FillInResolver(text);
+        }
+        return TokenSource is { } tokens ? PromptTemplate.Fill(text, new Dictionary<string, string>(), tokens(text)).Text : text;
+    }
 
     /// <summary>A short pill over the editor ("Copied", "Sent to ChatGPT", "Saved"); the window animates it.</summary>
     public event EventHandler<string>? ToastRequested;
@@ -451,6 +479,12 @@ public sealed class MainViewModel : ObservableObject
     public IRelayCommand ClearSearchCommand { get; }
     public IRelayCommand BackupNowCommand { get; }
     public IRelayCommand RestoreCommand { get; }
+
+    /// <summary>File → Import prompts…: reads an export file or a folder of Markdown/text files into your prompts (not on the Team side).</summary>
+    public IRelayCommand ImportCommand { get; }
+
+    /// <summary>File → Export prompts…: writes your prompts to one JSON file or a folder of Markdown files (not on the Team side).</summary>
+    public IRelayCommand ExportCommand { get; }
     public IRelayCommand OpenSettingsCommand { get; }
     public IRelayCommand SetUpBackupsCommand { get; }
     public IRelayCommand ExitCommand { get; }
@@ -582,10 +616,10 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>The Team side's list is empty only because what it would show is hidden from the menu.</summary>
     public bool ShowAllHidden => IsTeamSide && !_showHiddenTeamPrompts && Prompts.Count == 0
                                  && string.IsNullOrWhiteSpace(_searchText)
-                                 && PromptFilter.Apply(CurrentDocument.Library, _selectedCategory?.Id, null).Count > 0;
+                                 && PromptFilter.Apply(CurrentDocument.Library, CategoryFilter, null).Count > 0;
 
     /// <summary>"All team prompts are hidden.", or "All prompts in this category are hidden." for one category.</summary>
-    public string AllHiddenText => _selectedCategory?.Id is null || HiddenCount == CurrentDocument.Library.Prompts.Count
+    public string AllHiddenText => CategoryFilter is null || HiddenCount == CurrentDocument.Library.Prompts.Count
         ? "All team prompts are hidden."
         : "All prompts in this category are hidden.";
 
@@ -634,6 +668,13 @@ public sealed class MainViewModel : ObservableObject
     {
         get => _newCategoryError;
         private set => SetProperty(ref _newCategoryError, value);
+    }
+
+    /// <summary>The emoji picked for the category being added (null = none).</summary>
+    public string? NewCategoryEmoji
+    {
+        get => _newCategoryEmoji;
+        set => SetProperty(ref _newCategoryEmoji, value);
     }
 
     /// <summary>
@@ -796,6 +837,7 @@ public sealed class MainViewModel : ObservableObject
         if (CannotChange) return;
         foreach (var item in Categories) item.IsRenaming = false;
         NewCategoryName = "";
+        NewCategoryEmoji = null;
         NewCategoryError = null;
         IsAddingCategory = true;
     }
@@ -817,7 +859,9 @@ public sealed class MainViewModel : ObservableObject
         Category category;
         try
         {
-            category = NewLibraryEditor().AddCategory(name);
+            var editor = NewLibraryEditor();
+            category = editor.AddCategory(name);
+            if (_newCategoryEmoji is not null) editor.SetCategoryEmoji(category.Id, _newCategoryEmoji);
         }
         catch (ArgumentException)
         {
@@ -834,10 +878,11 @@ public sealed class MainViewModel : ObservableObject
 
     public void StartRename(CategoryItem? item)
     {
-        if (item is null || item.IsAll || CannotChange) return;
+        if (item is not { IsCategory: true } || CannotChange) return;
         CancelNewCategory();
         foreach (var other in Categories) other.IsRenaming = false;
         item.EditName = item.Name;
+        item.EditEmoji = item.Emoji;
         item.Error = null;
         item.IsRenaming = true;
     }
@@ -855,18 +900,24 @@ public sealed class MainViewModel : ObservableObject
         if (_teamSaving) return false; // the rename stays open until the save in progress is done
 
         var name = item.EditName.Trim();
-        if (name == item.Name)
+        var emojiChanged = item.EditEmoji != item.Emoji;
+        if (name == item.Name && !emojiChanged)
         {
             CancelRename(item);
             return true;
         }
 
-        item.Error = CategoryNameError(name, exceptId: id);
-        if (item.Error is not null) return false;
+        if (name != item.Name)
+        {
+            item.Error = CategoryNameError(name, exceptId: id);
+            if (item.Error is not null) return false;
+        }
 
         try
         {
-            NewLibraryEditor().RenameCategory(id, name);
+            var editor = NewLibraryEditor();
+            if (name != item.Name) editor.RenameCategory(id, name);
+            if (emojiChanged) editor.SetCategoryEmoji(id, item.EditEmoji);
         }
         catch (ArgumentException ex)
         {
@@ -882,10 +933,11 @@ public sealed class MainViewModel : ObservableObject
 
     public void DeleteCategory(CategoryItem? item)
     {
-        if (item?.Id is not { } id || CannotChange) return;
+        if (item is not { IsCategory: true, Id: { } id } || CannotChange) return;
 
         var promptCount = NewLibraryEditor().PromptCount(id);
         Guid? moveTo = null;
+        var deletePrompts = false;
 
         if (promptCount == 0)
         {
@@ -900,21 +952,17 @@ public sealed class MainViewModel : ObservableObject
                 .Where(c => c.Id != id)
                 .OrderBy(c => c.Name, NameOrder)
                 .ToList();
-            if (targets.Count == 0)
-            {
-                _dialogs.ShowMessage(
-                    $"\"{item.Name}\" still has {Count(promptCount, "prompt")}. " +
-                    "Create another category first so they have somewhere to go.");
-                return;
-            }
 
-            moveTo = _dialogs.ChooseMoveTarget(item.Name, promptCount, targets);
-            if (moveTo is null) return;
+            if (_dialogs.ChooseCategoryDeletion(item.Name, promptCount, targets) is not { } choice) return;
+            deletePrompts = choice.DeletePrompts;
+            moveTo = deletePrompts ? null : choice.MoveTo;
+            if (!deletePrompts && moveTo is null) return;
         }
 
+        IReadOnlyList<Guid> removed;
         try
         {
-            NewLibraryEditor().DeleteCategory(id, moveTo);
+            removed = NewLibraryEditor().DeleteCategory(id, moveTo, deletePrompts);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
@@ -922,16 +970,100 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
-        _editor?.ReplaceCategory(id, moveTo);
+        if (deletePrompts)
+        {
+            // The open prompt went with its category (what was typed in it too: the user chose to delete these prompts).
+            if (_editor is { } open && (open.CategoryId == id || (open.PromptId is { } openId && removed.Contains(openId))))
+            {
+                if (_unwritten is { } unwritten && removed.Contains(unwritten.PromptId)) _unwritten = null;
+                Editor = null;
+            }
+            // Pins, usage and history of the removed prompts go too (a team library has no history here, and its pins are
+            // pruned once the save went through, as for a deleted prompt).
+            if (!CurrentDocument.IsTeam)
+            {
+                foreach (var removedId in removed) _history?.Delete(removedId);
+                var settings = _host.Settings;
+                var referenced = removed.Any(r => settings.PinnedPromptIds.Contains(r) || settings.Usage.ContainsKey(r));
+                PromptReferences.Remove(settings, removed);
+                if (referenced) SaveTeamState();
+            }
+        }
+        else
+        {
+            _editor?.ReplaceCategory(id, moveTo);
+        }
         SaveChange(); // on failure the deletion stays and is written later (the host says so)
 
-        // Show where the prompts went; if the deleted category was empty, fall back to All prompts.
+        // Show where the prompts went; if the deleted category was empty or its prompts went too, fall back to All prompts.
         var selectId = _selectedCategory?.Id == id ? moveTo : _selectedCategory?.Id;
         RebuildCategories(selectId);
         RefreshPrompts();
 
-        if (moveTo is { } targetId && CurrentDocument.Library.Categories.FirstOrDefault(c => c.Id == targetId) is { } target)
+        if (deletePrompts)
+            ShowStatus($"Deleted \"{item.Name}\" and {Count(removed.Count, "prompt")}.");
+        else if (moveTo is { } targetId && CurrentDocument.Library.Categories.FirstOrDefault(c => c.Id == targetId) is { } target)
             ShowStatus($"Moved {Count(promptCount, "prompt")} to {target.Name}.");
+    }
+
+    // ---- Import and export -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Import prompts…: reads an export file (or a library file) or a folder of .md / .txt files into your prompts.
+    /// Duplicates (same title in the same category) are skipped; the summary says what happened.
+    /// </summary>
+    private void ImportPrompts()
+    {
+        if (IsTeamSide || _teamSaving) return;
+        if (_dialogs.ChooseImportSource() is not { } pick) return;
+
+        var library = _personal.Library;
+        ImportResult result;
+        try
+        {
+            result = pick.IsFolder
+                ? PromptImport.FromFolder(library, pick.Path, () => DateTimeOffset.Now)
+                : PromptImport.FromJsonFile(library, pick.Path, () => DateTimeOffset.Now);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            _dialogs.ShowMessage($"Couldn't import: {ex.Message}");
+            return;
+        }
+
+        if (result.Imported > 0)
+        {
+            _personal.SaveLibraryChange(); // on failure the prompts stay and are written later (the host says so)
+            RebuildCategories(_selectedCategory?.Id);
+            RefreshPrompts();
+            OpenFirstPromptIfNone();
+        }
+        _dialogs.ShowMessage(result.Summary);
+    }
+
+    /// <summary>Export prompts…: one .json file, or a folder of .md files (one per prompt, a subfolder per category).</summary>
+    private void ExportPrompts()
+    {
+        if (IsTeamSide) return;
+        var library = _personal.Library;
+        if (library.Prompts.Count == 0)
+        {
+            _dialogs.ShowMessage("There are no prompts to export yet.");
+            return;
+        }
+        if (_dialogs.ChooseExportTarget() is not { } pick) return;
+
+        try
+        {
+            var count = pick.IsFolder
+                ? PromptExport.WriteMarkdownFolder(pick.Path, library)
+                : PromptExport.WriteJson(pick.Path, library);
+            ShowStatus($"Exported {Count(count, "prompt")}.", FeedbackDuration);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            _dialogs.ShowMessage($"Couldn't export: {ex.Message}");
+        }
     }
 
     // ---- Prompts -------------------------------------------------------------------------------
@@ -945,7 +1077,7 @@ public sealed class MainViewModel : ObservableObject
         if (CannotChange) return;
         if (!ProceedOrDefer(NewPrompt)) return;
 
-        var categoryId = _selectedCategory?.Id
+        var categoryId = CategoryFilter
             ?? CurrentDocument.Library.Categories.OrderBy(c => c.Name, NameOrder).FirstOrDefault()?.Id;
         if (categoryId is null)
         {
@@ -1040,7 +1172,7 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Rebuilds the lists after a prompt's Save; if the prompt moved out of the category shown, follows it.</summary>
     private void FollowEditorCategory(PromptEditorViewModel editor)
     {
-        var showCategory = _selectedCategory?.Id is { } shown && shown != editor.CategoryId
+        var showCategory = CategoryFilter is { } shown && shown != editor.CategoryId
             ? editor.CategoryId
             : _selectedCategory?.Id;
         RebuildCategories(showCategory);
@@ -1067,6 +1199,7 @@ public sealed class MainViewModel : ObservableObject
         if (editor.PromptId is not { } id) return;
         UsageTracker.Record(_host.Settings, id, DateTimeOffset.Now);
         _host.SaveSettings();
+        RefreshUserState(); // the Recent row and list
     }
 
     /// <summary>
@@ -1077,10 +1210,10 @@ public sealed class MainViewModel : ObservableObject
     {
         var editor = _editor;
         if (editor is null || !editor.CanCopy) return;
-        if (ResolveTextForUse(editor.Text) is not { } text) return;
+        if (ResolveTextForUse(editor.Text, "Send") is not { } text) return;
 
         var target = SendTargets.Resolve(targetId ?? editor.SendTo);
-        if (!_host.CopyText(text, editor.DisplayTitle)) return;
+        if (!_host.CopyText(text, editor.DisplayTitle, notifyInTray: false)) return;
         try
         {
             _openUrl(target.BuildUrl(text));
@@ -1343,7 +1476,46 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>True if switching to category <paramref name="id"/> can keep the editor open.</summary>
     private bool EditorSurvivesCategory(Guid? id)
-        => _editor is null || id is null || _editor.CategoryId == id;
+        => _editor is null || id is null || id == CategoryItem.RecentId || _editor.CategoryId == id;
+
+    /// <summary>The category the list is limited to: null for All prompts and Recent.</summary>
+    private Guid? CategoryFilter => _selectedCategory is { IsCategory: true } category ? category.Id : null;
+
+    /// <summary>
+    /// The last-used prompts of the side shown, most recent first, at most 10 (hidden team prompts only with Show hidden).
+    /// </summary>
+    private List<Prompt> RecentPrompts()
+    {
+        var byId = new Dictionary<Guid, Prompt>();
+        foreach (var prompt in CurrentDocument.Library.Prompts) byId.TryAdd(prompt.Id, prompt);
+
+        var result = new List<Prompt>();
+        foreach (var id in UsageTracker.Recent(_host.Settings, int.MaxValue))
+        {
+            if (!byId.TryGetValue(id, out var prompt) || !IsListed(prompt)) continue;
+            result.Add(prompt);
+            if (result.Count == RecentLimit) break;
+        }
+        return result;
+    }
+
+    private const int RecentLimit = 10;
+
+    /// <summary>
+    /// Pins, usage or hides changed somewhere else (the search window, the tray): the pin glyphs, the Recent row and its
+    /// list follow. An open rename is left alone.
+    /// </summary>
+    public void RefreshUserState()
+    {
+        var pinned = _host.Settings.PinnedPromptIds;
+        foreach (var row in Prompts) row.IsPinned = pinned.Contains(row.Id);
+        RaiseEditorState();
+        if (Categories.Any(c => c.IsRenaming)) return;
+
+        var before = _selectedCategory?.Id;
+        RebuildCategories(before);
+        if (before == CategoryItem.RecentId || _selectedCategory?.Id != before) RefreshPrompts();
+    }
 
     private void ShowCategory(Guid? id)
     {
@@ -1383,9 +1555,11 @@ public sealed class MainViewModel : ObservableObject
             var shown = library.Prompts.Where(IsListed).ToList();
             var canEdit = !CurrentDocument.IsReadOnly;
             Categories.Add(new CategoryItem(null, "All prompts", shown.Count, canEdit));
+            if (RecentPrompts() is { Count: > 0 } recent)
+                Categories.Add(new CategoryItem(CategoryItem.RecentId, "Recent", recent.Count, canEdit));
             foreach (var category in sorted)
                 Categories.Add(new CategoryItem(category.Id, category.Name,
-                    shown.Count(p => p.CategoryId == category.Id), canEdit));
+                    shown.Count(p => p.CategoryId == category.Id), canEdit, category.Emoji));
 
             CategoryChoices.Clear();
             foreach (var category in sorted)
@@ -1410,14 +1584,34 @@ public sealed class MainViewModel : ObservableObject
         try
         {
             Prompts.Clear();
+            var now = DateTimeOffset.Now;
+            var isRecent = _selectedCategory?.IsRecent == true;
             if (_searchingBoth)
             {
-                foreach (var hit in PromptFilter.Search(_personal.Library, TeamContent, _host.Settings, _searchText))
-                    Prompts.Add(NewRow(hit.Prompt, hit.IsTeam, showTeamIcon: hit.IsTeam));
+                // Both libraries, best match first; hidden team prompts are listed greyed so they can be unhidden.
+                foreach (var hit in FuzzySearch.Search(_personal.Library, TeamContent, _host.Settings, _searchText, now))
+                    Prompts.Add(NewRow(hit.Prompt, hit.IsTeam, showTeamIcon: hit.IsTeam, hit.TitleMatches, hit.DescriptionMatches));
+            }
+            else if (!FuzzySearch.ParseQuery(_searchText).IsEmpty)
+            {
+                // The shown category (or the Recent list), best match first.
+                var categoryId = CategoryFilter;
+                var recentIds = isRecent ? RecentPrompts().Select(p => p.Id).ToHashSet() : null;
+                foreach (var hit in FuzzySearch.Search(CurrentDocument.Library, null, _host.Settings, _searchText, now))
+                    if (IsListed(hit.Prompt)
+                        && (categoryId is null || hit.Prompt.CategoryId == categoryId)
+                        && (recentIds is null || recentIds.Contains(hit.Prompt.Id)))
+                        Prompts.Add(NewRow(hit.Prompt, CurrentDocument.IsTeam, showTeamIcon: false,
+                            hit.TitleMatches, hit.DescriptionMatches));
+            }
+            else if (isRecent)
+            {
+                foreach (var prompt in RecentPrompts())
+                    Prompts.Add(NewRow(prompt, CurrentDocument.IsTeam, showTeamIcon: false));
             }
             else
             {
-                foreach (var prompt in PromptFilter.Apply(CurrentDocument.Library, _selectedCategory?.Id, _searchText))
+                foreach (var prompt in PromptFilter.Apply(CurrentDocument.Library, CategoryFilter, null))
                     if (IsListed(prompt))
                         Prompts.Add(NewRow(prompt, CurrentDocument.IsTeam, showTeamIcon: false));
             }
@@ -1852,7 +2046,8 @@ public sealed class MainViewModel : ObservableObject
         }
 
         var target = _categoryBeforeSearch;
-        if (target is not null && _editor?.CategoryId is { } editorCategory && editorCategory != target)
+        if (target is not null && target != CategoryItem.RecentId
+            && _editor?.CategoryId is { } editorCategory && editorCategory != target)
             target = editorCategory;
         SetRailSelection(target);
     }
@@ -1879,14 +2074,16 @@ public sealed class MainViewModel : ObservableObject
     private bool IsListed(Prompt prompt)
         => !CurrentDocument.IsTeam || _showHiddenTeamPrompts || !_host.Settings.HiddenTeamPromptIds.Contains(prompt.Id);
 
-    private PromptRow NewRow(Prompt prompt, bool isTeam, bool showTeamIcon)
+    private PromptRow NewRow(Prompt prompt, bool isTeam, bool showTeamIcon,
+        IReadOnlyList<(int Start, int Length)>? titleMatches = null,
+        IReadOnlyList<(int Start, int Length)>? descriptionMatches = null)
     {
         var settings = _host.Settings;
         return new PromptRow(prompt, isTeam,
             isHidden: isTeam && settings.HiddenTeamPromptIds.Contains(prompt.Id),
             isPinned: settings.PinnedPromptIds.Contains(prompt.Id),
             marker: isTeam ? TeamUserState.MarkerFor(settings, prompt) : TeamMarker.None,
-            showTeamIcon);
+            showTeamIcon, titleMatches, descriptionMatches);
     }
 
     private void RaiseEditorState()
@@ -1914,6 +2111,8 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(Side));
         OnPropertyChanged(nameof(IsTeamSide));
         OnPropertyChanged(nameof(IsYoursSide));
+        ImportCommand.NotifyCanExecuteChanged();
+        ExportCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(ShowSwitch));
         OnPropertyChanged(nameof(TeamHeaderText));
         OnPropertyChanged(nameof(TeamHeaderDetail));
