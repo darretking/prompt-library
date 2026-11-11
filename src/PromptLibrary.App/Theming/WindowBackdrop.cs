@@ -13,6 +13,9 @@ public enum BackdropKind
 
     /// <summary>Small dialogs: the lighter transient-window backdrop.</summary>
     Dialog,
+
+    /// <summary>The search window: Acrylic (the transient-window backdrop).</summary>
+    Transient,
 }
 
 /// <summary>
@@ -33,6 +36,20 @@ public static class WindowBackdrop
     public static bool MicaSupported { get; } = Environment.OSVersion.Version.Build >= 22621;
 
     private static bool RoundedSupported { get; } = Environment.OSVersion.Version.Build >= 22000;
+
+    /// <summary>False when the user turned off Windows' "Transparency effects": the backdrop is then solid.</summary>
+    public static bool TransparencyEnabled()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            return key?.GetValue("EnableTransparency") is not int value || value != 0;
+        }
+        catch (Exception)
+        {
+            return true;
+        }
+    }
 
     public static readonly DependencyProperty KindProperty = DependencyProperty.RegisterAttached(
         "Kind", typeof(BackdropKind), typeof(WindowBackdrop), new PropertyMetadata(BackdropKind.Main));
@@ -99,7 +116,7 @@ public static class WindowBackdrop
             if (!MicaSupported)
                 return;
 
-            Set(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, kind == BackdropKind.Dialog ? DWMSBT_TRANSIENTWINDOW : DWMSBT_MAINWINDOW);
+            Set(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, kind == BackdropKind.Main ? DWMSBT_MAINWINDOW : DWMSBT_TRANSIENTWINDOW);
 
             // Let the backdrop show through the whole window: glass over the client area, and nothing opaque
             // painted by WPF underneath (the Window and Rail brushes are translucent tints while Mica is on).

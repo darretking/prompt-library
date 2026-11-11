@@ -18,8 +18,13 @@
         <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Focusable="False">
             <StackPanel Margin="16,16,16,8">
 
+                <!-- General -->
+                <TextBlock Text="General" Style="{StaticResource FieldLabel}" />
+                <CheckBox x:Name="StartupBox" Content="Start Prompt Library when Windows starts"
+                          AutomationProperties.Name="Start Prompt Library when Windows starts" />
+
                 <!-- Shortcut -->
-                <TextBlock Text="Shortcut" Style="{StaticResource FieldLabel}" />
+                <TextBlock Text="Shortcut" Style="{StaticResource FieldLabel}" Margin="0,24,0,4" />
                 <StackPanel Orientation="Horizontal">
                     <views:ShortcutBox x:Name="ShortcutField" Style="{StaticResource {x:Type TextBox}}" Width="280"
                                        AutomationProperties.Name="Shortcut"
@@ -29,14 +34,41 @@
                 </StackPanel>
                 <TextBlock x:Name="ShortcutStatus" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,4,0,0" />
 
-                <CheckBox x:Name="PasteBox" Margin="0,12,0,0" Content="Paste into the app I was using"
+                <TextBlock Text="Shortcut opens" Margin="0,12,0,4" />
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="OpensSearchRadio" GroupName="ShortcutOpens" Content="Search window"
+                                 AutomationProperties.Name="Shortcut opens the search window" />
+                    <RadioButton x:Name="OpensMenuRadio" GroupName="ShortcutOpens" Content="Menu" Margin="24,0,0,0"
+                                 AutomationProperties.Name="Shortcut opens the menu" />
+                </StackPanel>
+
+                <!-- Pasting -->
+                <TextBlock Text="Pasting" Style="{StaticResource FieldLabel}" Margin="0,24,0,4" />
+                <CheckBox x:Name="PasteBox" Content="Paste into the app I was using"
                           AutomationProperties.Name="Paste into the app I was using"
-                          AutomationProperties.HelpText="After you pick a prompt from the shortcut menu, it's pasted where you were typing. Turn off to only copy." />
+                          AutomationProperties.HelpText="After you pick a prompt with the shortcut, it's pasted where you were typing. Turn off to only copy." />
                 <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="24,2,0,0"
-                           Text="After you pick a prompt from the shortcut menu, it's pasted where you were typing. Turn off to only copy." />
+                           Text="After you pick a prompt with the shortcut, it's pasted where you were typing. Turn off to only copy." />
+                <CheckBox x:Name="RestoreBox" Margin="0,12,0,0" Content="Put back what was on the clipboard after pasting"
+                          AutomationProperties.Name="Put back what was on the clipboard after pasting"
+                          AutomationProperties.HelpText="After pasting, the text you had copied before comes back. Only plain text is put back." />
+                <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="24,2,0,0"
+                           Text="After pasting, the text you had copied before comes back. Only plain text is put back." />
+
+                <!-- Appearance -->
+                <TextBlock Text="Appearance" Style="{StaticResource FieldLabel}" Margin="0,24,0,4" />
+                <TextBlock Text="Theme" Margin="0,0,0,4" />
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="ThemeSystemRadio" GroupName="Theme" Content="System"
+                                 AutomationProperties.Name="Theme: follow Windows" />
+                    <RadioButton x:Name="ThemeLightRadio" GroupName="Theme" Content="Light" Margin="24,0,0,0"
+                                 AutomationProperties.Name="Theme: light" />
+                    <RadioButton x:Name="ThemeDarkRadio" GroupName="Theme" Content="Dark" Margin="24,0,0,0"
+                                 AutomationProperties.Name="Theme: dark" />
+                </StackPanel>
 
                 <!-- Backups -->
-                <TextBlock Text="Back up to" Style="{StaticResource FieldLabel}" Margin="0,16,0,4" />
+                <TextBlock Text="Back up to" Style="{StaticResource FieldLabel}" Margin="0,24,0,4" />
                 <TextBlock Text="Your library is copied here once a day and when you exit."
                            Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,8" />
                 <views:BackupLocationPicker x:Name="Picker" />
@@ -47,11 +79,6 @@
                               AutomationProperties.Name="Number of backups to keep" />
                     <TextBlock Text="backups" VerticalAlignment="Center" />
                 </StackPanel>
-
-                <!-- Startup -->
-                <CheckBox x:Name="StartupBox" Margin="0,16,0,0"
-                          Content="Start Prompt Library when Windows starts"
-                          AutomationProperties.Name="Start Prompt Library when Windows starts" />
 
                 <!-- Team prompts: Join / Start until a team library is connected, then only the connected state + Leave. -->
                 <StackPanel x:Name="TeamSection" Margin="0,24,0,0"
