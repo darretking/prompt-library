@@ -68,7 +68,7 @@ Tests: `dotnet test PromptLibrary.sln`. Shell is Git Bash. **Never run the real 
 - **R5**: Light + dark palettes, following Windows (`AppsUseLightTheme` registry, live via `SystemEvents.UserPreferenceChanged`)
   unless Settings overrides (`Theme`). All brushes become `DynamicResource`. Dark tokens:
   Window `#1C1F26`, Rail `#161920`, Surface `#242833`, Ink `#E8EAF0`, Muted `#A0A8B8`, Line `#353B48`, Brand `#8B85F0`
-  (text/edges), BrandFill `#4338CA` (Copy button fill, white text), BrandSoft `#2E2D52`, Danger `#F97066`,
+  (text/edges), BrandFill `#4338CA` (Copy button fill, white text), BrandSoft `#27264A`, Danger `#F97066`,
   Warn `#3A2F12`/text `#F5D48A`. All text ≥ 4.5:1 — verify with a small contrast test in App.Tests.
 - Windows 11: Mica backdrop (`DWMWA_SYSTEMBACKDROP_TYPE`), dark title bar (`DWMWA_USE_IMMERSIVE_DARK_MODE`), rounded corners
   (`DWMWA_WINDOW_CORNER_PREFERENCE`). Windows 10: silently skip. One helper applied to every window.
