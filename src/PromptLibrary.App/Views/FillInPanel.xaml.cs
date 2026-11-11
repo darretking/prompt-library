@@ -16,8 +16,19 @@ public partial class FillInPanel : UserControl
     {
         InitializeComponent();
         PreviewKeyDown += OnPreviewKeyDown;
-        DataContextChanged += (_, _) => FocusFirstField();
+        DataContextChanged += (_, _) =>
+        {
+            if (ViewModel is { } vm) PreviewExpander.IsExpanded = vm.PreviewStartsOpen;
+            FocusFirstField();
+        };
         Loaded += (_, _) => FocusFirstField();
+    }
+
+    /// <summary>Shows the "Esc back" hint beside the buttons. The search window turns it off: its footer already says it.</summary>
+    public bool ShowEscHint
+    {
+        get => EscHint.Visibility == Visibility.Visible;
+        set => EscHint.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private FillInViewModel? ViewModel => DataContext as FillInViewModel;

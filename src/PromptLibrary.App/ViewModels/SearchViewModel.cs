@@ -43,6 +43,12 @@ public interface ISearchActions
     void Close();
 }
 
+/// <summary>A <c>#tag</c> chip in a result row; <see cref="IsMatch"/> when the search matched it (shown bold).</summary>
+public sealed record TagChip(string Text, bool IsMatch);
+
+/// <summary>One key and what it does, for the footer ("Enter" "paste").</summary>
+public readonly record struct FooterHint(string Key, string Label);
+
 /// <summary>One line of the result list: a group header or a prompt.</summary>
 public sealed class SearchItem
 {
@@ -60,6 +66,17 @@ public sealed class SearchItem
 
     /// <summary>Emoji, category name and description on one muted line.</summary>
     public string Subtitle { get; init; } = "";
+
+    /// <summary>
+    /// Third line, when the match came from the tags: the prompt's tags as <c>#tag</c> chips, matched ones first and bold.
+    /// </summary>
+    public IReadOnlyList<TagChip> TagChips { get; init; } = [];
+
+    /// <summary>Third line, when the match came from the prompt text: about 60 characters around it, the match highlighted.</summary>
+    public IReadOnlyList<TextSegment> SnippetSegments { get; init; } = [];
+
+    public bool HasTagLine => TagChips.Count > 0;
+    public bool HasSnippetLine => SnippetSegments.Count > 0;
 
     /// <summary><c>Alt+1</c>… for the first nine rows, else empty.</summary>
     public string NumberHint { get; set; } = "";
@@ -140,6 +157,7 @@ public sealed class SearchViewModel : ObservableObject
             if (!SetProperty(ref _form, value)) return;
             OnPropertyChanged(nameof(IsFormOpen));
             OnPropertyChanged(nameof(IsListOpen));
+            OnPropertyChanged(nameof(Footer));
             OnPropertyChanged(nameof(FooterText));
         }
     }
@@ -150,7 +168,12 @@ public sealed class SearchViewModel : ObservableObject
     public bool IsActionsOpen
     {
         get => _actionsOpen;
-        private set => SetProperty(ref _actionsOpen, value);
+        private set
+        {
+            if (!SetProperty(ref _actionsOpen, value)) return;
+            OnPropertyChanged(nameof(Footer));
+            OnPropertyChanged(nameof(FooterText));
+        }
     }
 
     public SearchAction? SelectedAction
@@ -163,9 +186,15 @@ public sealed class SearchViewModel : ObservableObject
 
     public string EmptyText => string.IsNullOrWhiteSpace(_query) ? "No prompts yet." : $"No prompts match \"{_query.Trim()}\".";
 
-    public string FooterText => IsFormOpen
-        ? "Tab next field · Enter paste · Esc back"
-        : "Enter paste · Ctrl+Enter send · Ctrl+K more · Ctrl+O open · Esc close";
+    /// <summary>The keys that work right now, for the footer: the list, the actions popup or the fill-in form.</summary>
+    public IReadOnlyList<FooterHint> Footer => IsFormOpen
+        ? [new("Tab", "next field"), new("Enter", _form!.PrimaryLabel.ToLowerInvariant()), new("Esc", "back")]
+        : IsActionsOpen
+            ? [new("Enter", "choose"), new("Esc", "back")]
+            : [new("Enter", "paste"), new("Ctrl+Enter", "send"), new("Ctrl+K", "actions"), new("Esc", "close")];
+
+    /// <summary>The footer as plain text (for screen readers and tests).</summary>
+    public string FooterText => string.Join(" · ", Footer.Select(h => $"{h.Key} {h.Label}"));
 
     /// <summary>Clears the query and form and rebuilds the list from the current libraries (the window is about to show).</summary>
     public void Reset()
@@ -394,7 +423,7 @@ public sealed class SearchViewModel : ObservableObject
                 .Where(r => !r.IsHidden).Take(MaxResults);
             foreach (var hit in hits)
                 if (entries.TryGetValue(hit.Prompt.Id, out var e))
-                    Items.Add(Row(e, pinned, hit.TitleMatches));
+                    Items.Add(Row(e, pinned, hit));
         }
 
         var n = 0;
@@ -429,7 +458,7 @@ public sealed class SearchViewModel : ObservableObject
         foreach (var (name, list) in groups)
         {
             if (groups.Count > 1) Items.Add(new SearchItem { IsHeader = true, Header = name });
-            foreach (var e in list) Items.Add(Row(e, pinned, []));
+            foreach (var e in list) Items.Add(Row(e, pinned, null));
         }
     }
 
@@ -454,8 +483,25 @@ public sealed class SearchViewModel : ObservableObject
         }
     }
 
-    private static SearchItem Row(Entry e, HashSet<Guid> pinned, IReadOnlyList<(int Start, int Length)> matches)
+    private const int MaxTagChips = 4;
+
+    private static SearchItem Row(Entry e, HashSet<Guid> pinned, SearchResult? hit)
     {
+        var matches = hit?.TitleMatches ?? [];
+        // The third line: only when the match came from the tags or the text (the title and description lines show theirs).
+        var tags = new List<TagChip>();
+        if (hit?.TagMatches is { Count: > 0 } matched)
+        {
+            var all = e.Prompt.Tags;
+            tags.AddRange(matched.Where(i => i < all.Count).Select(i => new TagChip("#" + all[i], true)));
+            tags.AddRange(Enumerable.Range(0, all.Count).Where(i => !matched.Contains(i))
+                .Select(i => new TagChip("#" + all[i], false)));
+            if (tags.Count > MaxTagChips) tags.RemoveRange(MaxTagChips, tags.Count - MaxTagChips);
+        }
+        var snippet = tags.Count == 0 && hit?.TextSnippet is { } s
+            ? Segments(s.Text, [(s.Start, s.Length)])
+            : [];
+
         var description = FirstLine(e.Prompt.Description);
         var subtitle = e.Category.Length == 0 ? description
             : description.Length == 0 ? e.Category
@@ -467,6 +513,8 @@ public sealed class SearchViewModel : ObservableObject
             IsPinned = pinned.Contains(e.Prompt.Id),
             TitleSegments = Segments(e.Prompt.Title, matches.Select(m => (m.Start, m.Length))),
             Subtitle = subtitle,
+            TagChips = tags,
+            SnippetSegments = snippet,
         };
     }
 

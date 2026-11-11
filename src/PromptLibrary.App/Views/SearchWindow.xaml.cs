@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
+using PromptLibrary.App.Search;
 using PromptLibrary.App.Theming;
 using PromptLibrary.App.ViewModels;
 
@@ -29,13 +30,12 @@ public sealed class InverseBoolToVisibility : IValueConverter
 /// </summary>
 public partial class SearchWindow : Window
 {
-    private const double WantedWidth = 640;
-    private const double WantedHeight = 420;
-    private const double TopFraction = 0.25;
     private static readonly Duration FadeTime = new(TimeSpan.FromMilliseconds(167));
+    private static readonly Duration ExitTime = new(TimeSpan.FromMilliseconds(83));
 
     private readonly SearchViewModel _viewModel;
     private bool _warming;
+    private int _hideGeneration;
 
     public SearchWindow(SearchViewModel viewModel)
     {
@@ -46,7 +46,7 @@ public partial class SearchWindow : Window
         PreviewKeyDown += OnPreviewKeyDown;
         Deactivated += (_, _) =>
         {
-            if (!_warming) Hide();
+            if (!_warming) Dismiss();
         };
         viewModel.FocusSearchRequested += FocusSearchLater;
         viewModel.PropertyChanged += OnViewModelChanged;
@@ -55,6 +55,9 @@ public partial class SearchWindow : Window
             if (e.NewValue is false) _viewModel.CloseActions();
         };
     }
+
+    /// <summary>Test seam: show far off screen and never take the focus (the speed test must not disturb the desktop).</summary>
+    internal bool Offscreen { get; set; }
 
     /// <summary>Raised after <see cref="ShowNearMouse"/> has shown and activated the window.</summary>
     public event EventHandler? Shown;
@@ -82,14 +85,44 @@ public partial class SearchWindow : Window
     /// <summary>Shows the window centred on the monitor holding the mouse, about a quarter from its top, and focuses the search box.</summary>
     public void ShowNearMouse()
     {
+        _hideGeneration++; // cancels a fade-out still running
+        if (Offscreen) ShowActivated = false;
         ApplyBackground();
         Place();
         Show();
-        Activate();
-        BringToFront();
+        Place(); // again once shown: the first move can change the window's DPI
+        if (!Offscreen)
+        {
+            Activate();
+            BringToFront();
+        }
         FocusSearch();
         PlayShowAnimation();
         Shown?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Hides the window with an 83 ms fade (Fluent exit curve, cubic-bezier(1,0,1,1)); at once when Windows animations
+    /// are off. The window is inert while it fades.
+    /// </summary>
+    public void Dismiss()
+    {
+        if (!IsVisible) return;
+        if (_warming || Offscreen || !SystemParameters.ClientAreaAnimation)
+        {
+            Hide();
+            return;
+        }
+
+        var generation = ++_hideGeneration;
+        var animation = new DoubleAnimationUsingKeyFrames { Duration = ExitTime };
+        animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(Body.Opacity, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+        animation.KeyFrames.Add(new SplineDoubleKeyFrame(0, KeyTime.FromTimeSpan(ExitTime.TimeSpan), new KeySpline(1, 0, 1, 1)));
+        animation.Completed += (_, _) =>
+        {
+            if (generation == _hideGeneration) Hide();
+        };
+        Body.BeginAnimation(OpacityProperty, animation);
     }
 
     // Solid when Windows' transparency effects are off; otherwise the translucent tint over Acrylic (Brush.WindowBackdrop).
@@ -101,19 +134,17 @@ public partial class SearchWindow : Window
             SetResourceReference(BackgroundProperty, "Brush.Window");
     }
 
+    // Placed in device pixels with the DPI of the monitor under the mouse (not the window's current DPI), so a
+    // window last shown on another monitor still lands right on a mixed-DPI setup. See Placement.Launcher.
     private void Place()
     {
         var mouse = System.Windows.Forms.Cursor.Position;
-        var area = System.Windows.Forms.Screen.FromPoint(mouse).WorkingArea;
-        var scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
-
-        Width = WantedWidth;
-        Height = Math.Min(WantedHeight, Math.Max(240, area.Height / scale - 32));
-        Left = (area.Left + area.Width / 2.0) / scale - Width / 2;
-        Top = (area.Top + area.Height * TopFraction) / scale;
-        // Never lower than the bottom of the work area.
-        var bottom = area.Bottom / scale;
-        if (Top + Height > bottom) Top = Math.Max(area.Top / scale, bottom - Height);
+        var (work, scale) = Offscreen ? (new PixelRect(-20000, 0, 1920, 1040), 1.0) : Monitors.UnderPoint(mouse.X, mouse.Y);
+        var spot = Placement.Launcher(work, scale);
+        var handle = new WindowInteropHelper(this).EnsureHandle();
+        // Twice: the first move may make Windows change the window's DPI (and size); the second sets the exact pixels.
+        SetWindowPos(handle, IntPtr.Zero, spot.X, spot.Y, spot.Width, spot.Height, SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(handle, IntPtr.Zero, spot.X, spot.Y, spot.Width, spot.Height, SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
     private void FocusSearch()
@@ -190,6 +221,12 @@ public partial class SearchWindow : Window
         _viewModel.RunSelectedAction();
         e.Handled = true;
     }
+
+    private const uint SWP_NOZORDER = 0x4, SWP_NOACTIVATE = 0x10;
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int cx, int cy, uint flags);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

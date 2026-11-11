@@ -28,10 +28,27 @@ public sealed class FillField : ObservableObject
     /// <summary>The grey hint shown in an empty text box (<c>e.g. …</c>), or empty.</summary>
     public string Hint => Field.Hint ?? "";
 
+    /// <summary>The grey hint shown in an empty drop-down.</summary>
+    public string ChoiceHint => "Choose or type";
+
+    /// <summary>The option equal to the current value (the remembered one on opening), or null when the value is free text.</summary>
+    public string? SelectedOption
+    {
+        get => Options.FirstOrDefault(o => string.Equals(o, _value, StringComparison.OrdinalIgnoreCase));
+        set
+        {
+            if (value is not null) Value = value;
+        }
+    }
+
     public string Value
     {
         get => _value;
-        set => SetProperty(ref _value, value ?? "");
+        set
+        {
+            if (!SetProperty(ref _value, value ?? "")) return;
+            OnPropertyChanged(nameof(SelectedOption));
+        }
     }
 }
 
@@ -80,6 +97,12 @@ public sealed class FillInViewModel : ObservableObject
 
     /// <summary>The prompt as it will come out now (unfilled blanks keep their <c>{…}</c>).</summary>
     public string PreviewText => Fill().Text;
+
+    /// <summary>The preview starts open for a short form and closed above this many fields (the fields need the room).</summary>
+    public const int MaxFieldsWithOpenPreview = 3;
+
+    /// <summary>True when the live preview should start expanded.</summary>
+    public bool PreviewStartsOpen => Fields.Count <= MaxFieldsWithOpenPreview;
 
     /// <summary>True when <paramref name="field"/> is the last one (Enter there completes the form).</summary>
     public bool IsLast(FillField field) => Fields.Count > 0 && ReferenceEquals(Fields[^1], field);

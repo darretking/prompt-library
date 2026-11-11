@@ -23,9 +23,7 @@ public static class AutoPaster
     private const uint TOKEN_QUERY = 0x0008;
     private const int TokenElevation = 20;
 
-    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(15);
     private static readonly TimeSpan ModifierReleaseTimeout = TimeSpan.FromMilliseconds(800);
-    private static readonly TimeSpan ForegroundTimeout = TimeSpan.FromMilliseconds(300);
 
     /// <summary>True for a live window of another process (we never send keys to our own windows).</summary>
     public static bool IsOtherAppWindow(IntPtr window, out bool isOurs)
@@ -39,27 +37,30 @@ public static class AutoPaster
 
     /// <summary>
     /// Sends Ctrl+V to <paramref name="target"/>. Waits up to 800 ms for Ctrl, Alt, Shift and Win to be let go (the
-    /// user may still hold the shortcut), then up to 300 ms for the window to be in front (asking for it again if
+    /// user may still hold the shortcut), then up to 1 s (polling every 10 ms) for the window to be in front (asking for it again if
     /// needed). If a modifier is still held or the window isn't in front, nothing is sent (Failed).
     /// </summary>
     public static async Task<PasteOutcome> PasteAsync(IntPtr target)
     {
-        if (IsElevated(target) && !IsCurrentProcessElevated())
+        if (!PasteDecision.CanSendKeysTo(IsElevated(target), IsCurrentProcessElevated()))
             return PasteOutcome.Elevated;
 
         var waited = Stopwatch.StartNew();
         while (AnyModifierDown() && waited.Elapsed < ModifierReleaseTimeout)
-            await Task.Delay(PollInterval);
+            await Task.Delay(PasteDecision.ForegroundPoll);
         var modifiersStillDown = AnyModifierDown();
 
         var foregroundMatched = false;
         if (!modifiersStillDown)
         {
+            // Adaptive: as soon as the window is in front (usually one or two polls), at most one second.
             waited.Restart();
-            while (!(foregroundMatched = GetForegroundWindow() == target) && waited.Elapsed < ForegroundTimeout)
+            SetForegroundWindow(target); // same window the tray gives focus back to, so the two never disagree
+            while (!(foregroundMatched = GetForegroundWindow() == target)
+                   && PasteDecision.KeepWaitingForForeground(foregroundMatched, waited.Elapsed))
             {
-                SetForegroundWindow(target); // same window the tray gives focus back to, so the two never disagree
-                await Task.Delay(PollInterval);
+                await Task.Delay(PasteDecision.ForegroundPoll);
+                if (GetForegroundWindow() != target) SetForegroundWindow(target);
             }
         }
 
@@ -75,6 +76,35 @@ public static class AutoPaster
         ];
         var accepted = SendInput((uint)keys.Length, keys, Marshal.SizeOf<INPUT>());
         return PasteDecision.OutcomeOfSend(keys.Length, (int)accepted);
+    }
+
+    /// <summary>
+    /// After Ctrl+V: waits until the target has had time to read the clipboard, so putting the old clipboard back can't
+    /// race it. At least 400 ms and until the target's input queue is idle (checked with <c>WaitForInputIdle(0)</c>
+    /// where the process has one), never longer than 1.5 s.
+    /// </summary>
+    public static async Task WaitForTargetToReadClipboardAsync(IntPtr target)
+    {
+        GetWindowThreadProcessId(target, out var pid);
+        Process? process = null;
+        try { process = Process.GetProcessById((int)pid); }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { }
+
+        var waited = Stopwatch.StartNew();
+        try
+        {
+            while (!PasteDecision.ClipboardRestoreReady(waited.Elapsed, IsIdle(process)))
+                await Task.Delay(PasteDecision.ForegroundPoll * 2);
+        }
+        finally { process?.Dispose(); }
+    }
+
+    // Idle when the process says so; true too where it can't be asked (no message loop, gone, no access).
+    private static bool IsIdle(Process? process)
+    {
+        if (process is null) return true;
+        try { return process.WaitForInputIdle(0); }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) { return true; }
     }
 
     /// <summary>The window that has the keyboard focus right now (zero if none).</summary>

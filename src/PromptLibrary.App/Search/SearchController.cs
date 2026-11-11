@@ -21,17 +21,21 @@ namespace PromptLibrary.App.Search;
 /// </summary>
 internal sealed class SearchController : ISearchActions, IDisposable
 {
-    private static readonly TimeSpan CaretDelay = TimeSpan.FromMilliseconds(120);
-    private static readonly TimeSpan RestoreDelay = TimeSpan.FromMilliseconds(500);
-
     private readonly AppHost _host;
+    private readonly IToast _toast = ToastService.Instance;
+    private bool? _needsClipboard;
+    private Library? _needsClipboardTeam;
     private SearchViewModel? _viewModel;
     private SearchWindow? _window;
     private IntPtr _returnTo;
     private ITokenValues _tokens = new TokenValues(null);
     private bool _disposed;
 
-    public SearchController(AppHost host) => _host = host;
+    public SearchController(AppHost host)
+    {
+        _host = host;
+        host.LibraryChanged += (_, _) => _needsClipboard = null; // a prompt's text may have changed
+    }
 
     public bool IsOpen => _window is { IsVisible: true };
 
@@ -75,7 +79,7 @@ internal sealed class SearchController : ISearchActions, IDisposable
         LogOpened(timer);
     }
 
-    public void Hide() => _window?.Hide();
+    public void Hide() => _window?.Dismiss();
 
     public void Dispose()
     {
@@ -91,12 +95,25 @@ internal sealed class SearchController : ISearchActions, IDisposable
     {
         if (_window is not null) return;
         _viewModel = new SearchViewModel(this);
-        _window = new SearchWindow(_viewModel);
+        _window = new SearchWindow(_viewModel) { Offscreen = Offscreen };
     }
 
+    /// <summary>Test seam: the window shows far off screen and never takes the focus. Set before <see cref="Warm"/>.</summary>
+    internal bool Offscreen { get; set; }
+
     // The clipboard is only read when some prompt uses {clipboard}: faster, and no clipboard access nobody needs.
+    // The scan of every prompt's text is cached: it runs again only after a library save (LibraryChanged) or when
+    // the team library is a different object (a team update replaces it).
     private bool NeedsClipboard()
-        => Library.Prompts.Concat(TeamLibrary?.Prompts ?? []).Any(p => p.Text.Contains("{clipboard", StringComparison.OrdinalIgnoreCase));
+    {
+        var team = TeamLibrary;
+        if (_needsClipboard is { } cached && ReferenceEquals(team, _needsClipboardTeam)) return cached;
+        var needs = Library.Prompts.Concat(team?.Prompts ?? [])
+            .Any(p => p.Text.Contains("{clipboard", StringComparison.OrdinalIgnoreCase));
+        _needsClipboard = needs;
+        _needsClipboardTeam = team;
+        return needs;
+    }
 
     [Conditional("DEBUG")]
     private void LogOpened(Stopwatch timer)
@@ -126,7 +143,7 @@ internal sealed class SearchController : ISearchActions, IDisposable
 
             if (!_host.TryCopy(text))
             {
-                _host.Tray.ShowMessage("Prompt Library", "Couldn't copy — clipboard busy. Try again.", isError: true);
+                _toast.Show("Couldn't copy — clipboard busy. Try again.", ToastKind.Error);
                 return;
             }
             RecordUse(prompt);
@@ -137,22 +154,19 @@ internal sealed class SearchController : ISearchActions, IDisposable
                 ? await AutoPaster.PasteAsync(returnTo)
                 : PasteOutcome.NotAttempted;
 
-            if (outcome == PasteOutcome.Pasted)
+            if (!_disposed)
             {
-                if (caretBackSteps is { } steps)
-                {
-                    await Task.Delay(CaretDelay); // let the app take the pasted text first
-                    AutoPaster.PressLeft(steps);
-                }
-                if (previous is not null)
-                {
-                    await Task.Delay(RestoreDelay);
-                    if (!_disposed) ClipboardSnapshot.RestoreIfUnchanged(_host, previous, text);
-                }
+                var (toastText, kind) = PasteDecision.ToastFor(prompt.Title, outcome);
+                _toast.Show(toastText, kind, outcome == PasteOutcome.Pasted ? returnTo : IntPtr.Zero);
             }
 
-            if (!_disposed && PasteDecision.CopiedMessage(prompt.Title, outcome) is { } message)
-                _host.Tray.ShowMessage("Prompt Library", message);
+            if (outcome == PasteOutcome.Pasted && (caretBackSteps is not null || previous is not null))
+            {
+                // Not a fixed delay: until the app has read the clipboard and gone idle (400 ms at least, 1.5 s at most).
+                await AutoPaster.WaitForTargetToReadClipboardAsync(returnTo);
+                if (caretBackSteps is { } steps) AutoPaster.PressLeft(steps);
+                if (previous is not null && !_disposed) ClipboardSnapshot.RestoreIfUnchanged(_host, previous, text);
+            }
         }
         catch (Exception ex)
         {
@@ -163,8 +177,12 @@ internal sealed class SearchController : ISearchActions, IDisposable
     public void CopyOnly(Prompt prompt, string text)
     {
         Hide();
-        if (_host.CopyText(text, prompt.Title))
+        if (_host.CopyText(text, prompt.Title, notifyInTray: false))
+        {
             RecordUse(prompt);
+            var (toastText, kind) = PasteDecision.ToastFor(prompt.Title, PasteOutcome.NotAttempted);
+            _toast.Show(toastText, kind);
+        }
     }
 
     public void Send(Prompt prompt, string text, string targetId)
@@ -178,9 +196,8 @@ internal sealed class SearchController : ISearchActions, IDisposable
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            _host.Tray.ShowMessage("Prompt Library",
-                copied ? $"Couldn't open {target.Name}. The prompt is on your clipboard." : $"Couldn't open {target.Name}.",
-                isError: true);
+            _toast.Show(copied ? $"Couldn't open {target.Name}. The prompt is on your clipboard." : $"Couldn't open {target.Name}.",
+                ToastKind.Error);
             return;
         }
 
@@ -188,7 +205,7 @@ internal sealed class SearchController : ISearchActions, IDisposable
         var message = !copied ? $"Opened {target.Name}. Couldn't copy the prompt — clipboard busy."
             : target.IsTooLong(text) ? $"Opened {target.Name}. The prompt is on your clipboard — paste it there."
             : $"Opened {target.Name}. The prompt is also on your clipboard.";
-        _host.Tray.ShowMessage("Prompt Library", message, isError: !copied);
+        _toast.Show(message, copied ? ToastKind.Success : ToastKind.Error);
     }
 
     public void OpenInMainWindow(Prompt prompt, bool isTeam)

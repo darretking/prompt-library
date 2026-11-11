@@ -14,7 +14,15 @@ public sealed record SearchResult(
     bool IsHidden,
     double Score,
     IReadOnlyList<(int Start, int Length)> TitleMatches,
-    IReadOnlyList<(int Start, int Length)> DescriptionMatches);
+    IReadOnlyList<(int Start, int Length)> DescriptionMatches,
+    IReadOnlyList<int>? TagMatches = null,
+    MatchSnippet? TextSnippet = null);
+
+/// <summary>
+/// About 60 characters of a prompt's text around the first match (line breaks shown as spaces; "…" where cut).
+/// <see cref="Start"/> and <see cref="Length"/> mark the match inside <see cref="Text"/>.
+/// </summary>
+public sealed record MatchSnippet(string Text, int Start, int Length);
 
 /// <summary>A parsed search box: <c>cat:name</c> (or <c>cat:"two words"</c>), <c>#tag</c> and free words, all lower-case.</summary>
 public sealed record SearchQuery(IReadOnlyList<string> Words, IReadOnlyList<string> Categories, IReadOnlyList<string> Tags)
@@ -88,43 +96,97 @@ public static partial class FuzzySearch
                 if (!q.Categories.All(c => name.StartsWith(c, StringComparison.CurrentCultureIgnoreCase))) continue;
                 if (!q.Tags.All(t => p.Tags.Any(pt => pt.StartsWith(t, StringComparison.OrdinalIgnoreCase)))) continue;
 
-                var match = Match(p, q.Words);
+                var match = Match(p, q.Words, q.Tags);
                 if (match is null) continue;
 
                 var bonus = Math.Min(MaxFrecencyBonus, UsageTracker.Frecency(settings, p.Id, now) * 0.5);
                 results.Add(new SearchResult(p, isTeam, isTeam && settings.HiddenTeamPromptIds.Contains(p.Id),
-                    match.Value.Score + bonus, match.Value.Title, match.Value.Description));
+                    match.Value.Score + bonus, match.Value.Title, match.Value.Description,
+                    match.Value.Tags, match.Value.Snippet));
             }
         }
     }
 
-    private static (double Score, IReadOnlyList<(int, int)> Title, IReadOnlyList<(int, int)> Description)? Match(
-        Prompt p, IReadOnlyList<string> words)
+
+    private enum Field { None, Title, Tags, Description, Text }
+
+    private static (double Score, IReadOnlyList<(int, int)> Title, IReadOnlyList<(int, int)> Description,
+        IReadOnlyList<int>? Tags, MatchSnippet? Snippet)? Match(Prompt p, IReadOnlyList<string> words, IReadOnlyList<string> tagFilters)
     {
         var tags = string.Join(' ', p.Tags);
         var titleRanges = new List<(int, int)>();
         var descRanges = new List<(int, int)>();
+        var tagHits = new SortedSet<int>();
+        MatchSnippet? snippet = null;
         var score = 0.0;
+
+        // A #tag filter matched these tags: they are what the row shows.
+        for (var i = 0; i < p.Tags.Count; i++)
+            if (tagFilters.Any(t => p.Tags[i].StartsWith(t, StringComparison.OrdinalIgnoreCase))) tagHits.Add(i);
 
         foreach (var word in words)
         {
             var best = 0.0;
-            Consider(p.Title, TitleWeight, true, titleRanges);
-            Consider(tags, TagWeight, true, null);
-            Consider(p.Description, DescriptionWeight, true, descRanges);
-            Consider(p.Text, TextWeight, false, null);
+            var source = Field.None;
+            Consider(Field.Title, p.Title, TitleWeight, true, titleRanges);
+            Consider(Field.Tags, tags, TagWeight, true, null);
+            Consider(Field.Description, p.Description, DescriptionWeight, true, descRanges);
+            Consider(Field.Text, p.Text, TextWeight, false, null);
             if (best == 0) return null;
             score += best;
 
-            void Consider(string field, double weight, bool allowSubsequence, List<(int, int)>? ranges)
+            // Only a word whose best hit is in the tags or the text adds something the row doesn't already show.
+            if (source == Field.Tags)
+                for (var i = 0; i < p.Tags.Count; i++)
+                    if (MatchWord(p.Tags[i], word, true) is not null) tagHits.Add(i);
+            if (source == Field.Text && snippet is null && MatchWord(p.Text, word, false) is { } textMatch)
+                snippet = MakeSnippet(p.Text, textMatch.Ranges[0].Start, textMatch.Ranges[0].Length);
+
+            void Consider(Field field, string text, double weight, bool allowSubsequence, List<(int, int)>? ranges)
             {
-                var m = MatchWord(field, word, allowSubsequence);
+                var m = MatchWord(text, word, allowSubsequence);
                 if (m is null) return;
                 ranges?.AddRange(m.Value.Ranges);
-                best = Math.Max(best, m.Value.Quality * weight);
+                if (m.Value.Quality * weight > best)
+                {
+                    best = m.Value.Quality * weight;
+                    source = field;
+                }
             }
         }
-        return (score, Merge(titleRanges), Merge(descRanges));
+        return (score, Merge(titleRanges), Merge(descRanges), tagHits.Count > 0 ? tagHits.ToList() : null, snippet);
+    }
+
+    private const int SnippetBefore = 22, SnippetTotal = 60;
+
+    /// <summary>About <see cref="SnippetTotal"/> characters of <paramref name="text"/> around the match, on one line.</summary>
+    private static MatchSnippet MakeSnippet(string text, int start, int length)
+    {
+        var from = Math.Max(0, start - SnippetBefore);
+        var to = Math.Min(text.Length, Math.Max(start + length, from + SnippetTotal));
+        from = Math.Max(0, Math.Min(from, to - SnippetTotal));
+
+        var sb = new System.Text.StringBuilder();
+        if (from > 0) sb.Append('…');
+        int? matchFrom = null, matchTo = null;
+        for (var i = from; i < to; i++)
+        {
+            var c = text[i];
+            if (char.IsWhiteSpace(c))
+            {
+                if (sb.Length == 0 || sb[^1] == ' ' || (from > 0 && sb.Length == 1)) continue; // one space, none at the start
+                c = ' ';
+            }
+            if (i >= start && i < start + length)
+            {
+                matchFrom ??= sb.Length;
+                matchTo = sb.Length + 1;
+            }
+            sb.Append(c);
+        }
+        if (to < text.Length) sb.Append('…');
+        var s = matchFrom ?? 0;
+        return new MatchSnippet(sb.ToString(), s, (matchTo ?? s) - s);
     }
 
     private readonly record struct WordMatch(double Quality, List<(int Start, int Length)> Ranges);

@@ -102,11 +102,14 @@ public sealed class ScreenshotGallery
         yield return ("15-search-budg", n => Search(n, vm => vm.Query = "budg"));
         yield return ("16-search-actions", n => Search(n, vm => { vm.Query = "budg"; vm.Move(0); vm.OpenActions(); }));
         yield return ("17-search-fill-in", n => Search(n, vm => { vm.Query = "plan a trip"; vm.Move(0); vm.UseSelected(); }));
+        yield return ("17b-search-tags", n => Search(n, vm => { vm.Query = "kids"; vm.Move(0); }));
         yield return ("18-settings", n => Window(n, new SettingsWindow(NewHost(populated: true)), null, null));
         yield return ("19-onboarding-step1", n => Onboarding(n, last: false));
         yield return ("20-onboarding-last-step", n => Onboarding(n, last: true));
         yield return ("21-main-minimum-size", n => Main(n, w => { }, width: 860, height: 520));
-        // 22 (team side) is skipped: it needs a joined TeamLibraryService (file-backed team source and cache), which can't be
+        yield return ("22-toast", n => Toast(n, "Pasted: Plan a trip itinerary", Core.Clipboard.ToastKind.Success));
+        yield return ("23-toast-error", n => Toast(n, Core.Clipboard.PasteDecision.CouldntPasteText, Core.Clipboard.ToastKind.Error));
+        // The team side is skipped: it needs a joined TeamLibraryService (file-backed team source and cache), which can't be
         // built from the sandbox without product changes.
     }
 
@@ -209,6 +212,13 @@ public sealed class ScreenshotGallery
         vm.Reset();
         setup(vm);
         Window(name, window, 640, 420);
+    }
+
+    private void Toast(string name, string text, Core.Clipboard.ToastKind kind)
+    {
+        var toast = new ToastWindow();
+        toast.SetContent(text, kind);
+        Window(name, toast, null, null);
     }
 
     // ---- Rendering -----------------------------------------------------------------------------

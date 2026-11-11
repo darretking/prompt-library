@@ -4,9 +4,12 @@
              AutomationProperties.Name="Fill in the blanks"
              Focusable="False">
     <!-- The placeholder form. Bind DataContext to a FillInViewModel. Tab moves between fields, Enter on the last
-         field (or Ctrl+Enter anywhere) completes, Esc (or Backspace in an empty first field) cancels. -->
+         field (or Ctrl+Enter anywhere) completes, Esc (or Backspace in an empty first field) cancels.
+         Layout: the fields stack in a scrolling column that gets all the spare height (each row at least 56 px: a 12 px
+         label and a 32 px control); the preview is a collapsible expander under them (max 120 px, its own scroll;
+         collapsed when there are more than 3 fields); the buttons and the Esc hint stay at the bottom. -->
     <UserControl.Resources>
-        <!-- Editable drop-down in the same field look as the text boxes. -->
+        <!-- Editable drop-down in the same field look as the text boxes, with a muted hint while empty. -->
         <ControlTemplate x:Key="FillComboToggle" TargetType="ToggleButton">
             <Border Background="Transparent" Width="28">
                 <TextBlock Text="&#xE70D;" FontFamily="{StaticResource Font.Icons}" FontSize="12"
@@ -26,6 +29,9 @@
                         <Grid>
                             <TextBox x:Name="PART_EditableTextBox" Padding="6,0,28,0"
                                      Background="{DynamicResource Brush.Surface}" />
+                            <TextBlock x:Name="Hint" Text="{TemplateBinding Tag}" Foreground="{DynamicResource Brush.Muted}"
+                                       Margin="8,0,28,0" VerticalAlignment="Center" IsHitTestVisible="False"
+                                       TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
                             <ToggleButton Template="{StaticResource FillComboToggle}" Focusable="False" ClickMode="Press"
                                           HorizontalAlignment="Right"
                                           IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" />
@@ -42,6 +48,51 @@
                                 </Border>
                             </Popup>
                         </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Text" Value="">
+                                <Setter TargetName="Hint" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- "Preview" header: a chevron and the word, no box. -->
+        <Style x:Key="PreviewExpander" TargetType="Expander">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Expander">
+                        <DockPanel>
+                            <ToggleButton x:Name="Header" DockPanel.Dock="Top" Cursor="Hand" Focusable="True"
+                                          IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                          AutomationProperties.Name="Preview">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <StackPanel Orientation="Horizontal" Background="Transparent" Height="28">
+                                            <TextBlock x:Name="Chevron" Text="&#xE76C;" FontFamily="{StaticResource Font.Icons}"
+                                                       FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0"
+                                                       Foreground="{DynamicResource Brush.Muted}" />
+                                            <TextBlock Text="Preview" Style="{StaticResource FieldLabel}" Margin="0"
+                                                       Foreground="{DynamicResource Brush.Ink}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="Chevron" Property="Text" Value="&#xE70D;" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <ContentPresenter x:Name="Body" Visibility="Collapsed" />
+                        </DockPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsExpanded" Value="True">
+                                <Setter TargetName="Body" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -51,8 +102,8 @@
     <Grid Margin="16,12,16,12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
@@ -69,18 +120,22 @@
             </TextBlock.Style>
         </TextBlock>
 
-        <ScrollViewer Grid.Row="1" MaxHeight="190" VerticalScrollBarVisibility="Auto" Focusable="False">
-            <ItemsControl ItemsSource="{Binding Fields}" Focusable="False" IsTabStop="False">
+        <!-- The fields: one scrolling column with all the spare height. -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      Focusable="False">
+            <ItemsControl ItemsSource="{Binding Fields}" Focusable="False" IsTabStop="False" Margin="0,0,0,4">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <StackPanel Margin="0,0,0,8">
+                        <StackPanel MinHeight="56" Margin="0,0,0,4">
                             <TextBlock Text="{Binding Name}" Style="{StaticResource FieldLabel}"
                                        TextTrimming="CharacterEllipsis" />
-                            <TextBox Style="{StaticResource PlaceholderBox}" Tag="{Binding Hint}"
+                            <TextBox Style="{StaticResource PlaceholderBox}" Tag="{Binding Hint}" Height="32"
                                      Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
                                      AutomationProperties.Name="{Binding Name}"
                                      Visibility="{Binding IsText, Converter={StaticResource BoolToVisibility}}" />
-                            <ComboBox Style="{StaticResource FillCombo}" ItemsSource="{Binding Options}"
+                            <ComboBox Style="{StaticResource FillCombo}" ItemsSource="{Binding Options}" Height="32"
+                                      Tag="{Binding ChoiceHint}"
+                                      SelectedItem="{Binding SelectedOption, Mode=TwoWay}"
                                       Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
                                       AutomationProperties.Name="{Binding Name}"
                                       Visibility="{Binding IsChoice, Converter={StaticResource BoolToVisibility}}" />
@@ -90,29 +145,34 @@
             </ItemsControl>
         </ScrollViewer>
 
-        <!-- Live preview of the text as it will be pasted. -->
-        <Grid Grid.Row="2" Margin="0,4,0,12">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
-            <TextBlock Text="Preview" Style="{StaticResource FieldLabel}" />
-            <Border Grid.Row="1" Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Line}"
-                    BorderThickness="1" CornerRadius="{StaticResource Radius}">
+        <!-- Live preview of the text as it will be pasted: collapsible, at most 120 px, its own scroll. -->
+        <Expander x:Name="PreviewExpander" Grid.Row="2" Style="{StaticResource PreviewExpander}" Margin="0,4,0,8">
+            <Border Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Line}"
+                    BorderThickness="1" CornerRadius="{StaticResource Radius}" MaxHeight="120">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                              Focusable="False">
+                              Focusable="False" MaxHeight="118">
                     <TextBlock Text="{Binding PreviewText}" TextWrapping="Wrap" Padding="8"
                                FontFamily="{StaticResource Font.Prompt}" FontSize="13"
                                Foreground="{DynamicResource Brush.Ink}"
                                AutomationProperties.Name="Preview of the filled prompt" />
                 </ScrollViewer>
             </Border>
-        </Grid>
+        </Expander>
 
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="{Binding CancelLabel}" Click="Cancel_Click" AutomationProperties.Name="{Binding CancelLabel}" />
-            <Button Content="{Binding PrimaryLabel}" Style="{StaticResource PrimaryButton}" Margin="8,0,0,0"
-                    Click="Complete_Click" AutomationProperties.Name="{Binding PrimaryLabel}" />
-        </StackPanel>
+        <!-- Pinned at the bottom: the Esc hint (dialog only; the search window's footer has it) and the buttons. -->
+        <Grid Grid.Row="3">
+            <StackPanel x:Name="EscHint" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+                <Border BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1" CornerRadius="4"
+                        Background="{DynamicResource Brush.Surface}" Padding="5,0" Margin="0,0,6,0">
+                    <TextBlock Text="Esc" Style="{StaticResource MutedText}" FontSize="11" FontWeight="SemiBold" />
+                </Border>
+                <TextBlock Text="{Binding CancelLabel}" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="{Binding CancelLabel}" Click="Cancel_Click" AutomationProperties.Name="{Binding CancelLabel}" />
+                <Button Content="{Binding PrimaryLabel}" Style="{StaticResource PrimaryButton}" Margin="8,0,0,0"
+                        Click="Complete_Click" AutomationProperties.Name="{Binding PrimaryLabel}" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </UserControl>
