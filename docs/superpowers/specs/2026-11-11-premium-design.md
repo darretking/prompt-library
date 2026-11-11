@@ -192,3 +192,16 @@ guidance, PowerToys Command Palette). Sources are listed in `docs/design/premium
 - **Start with Windows** (owner request): setup's last step asks it as a clear question ("Start Prompt Library when
   Windows starts?" with a "Recommended" explanation, ticked by default). Settings keeps the `Start Prompt Library when
   Windows starts` checkbox. Any Settings reorganisation must keep it near the top, under a "General" group.
+
+### Prompts with no fields (owner request, 2026-11-11)
+
+- A prompt with no placeholders never shows a form. Enter pastes straight away, and dynamic tokens still fill. Copy, Send,
+  Alt+N and Ctrl+K actions behave the same way.
+- **False positives must not happen.** `{…}` is only a placeholder when its contents look like a label: they start with
+  a letter, contain no `; = ( ) [ ] < > " ' \` : #` or newline, and are ≤ 60 chars (choice `a / b` and `label, e.g. hint`
+  forms are still allowed). Braces inside fenced code blocks (```), inline code (`…`) or JSON-looking text are never
+  placeholders. `{{`/`}}` always mean literal braces, whether or not the text has fields.
+- Preview: the caption "Preview with your last-used values" is shown only when the prompt has fields. A prompt with no
+  fields and no markdown hides the Edit | Preview toggle.
+- Tests: coding prompts (C#/JS/JSON/regex samples) give `HasFields == false`; the no-field paste path is covered in
+  SearchViewModel and MainViewModel tests; the live test includes a no-field prompt.
