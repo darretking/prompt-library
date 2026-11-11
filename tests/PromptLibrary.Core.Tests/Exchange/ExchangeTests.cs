@@ -52,7 +52,7 @@ public sealed class ExchangeTests : IDisposable
         var target = Empty();
         var result = PromptImport.FromJsonFile(target, path, () => T);
 
-        Assert.Equal(new ImportResult(2, 0, 0), result);
+        AssertCounts(2, 0, 0, result);
         Assert.Equal(2, target.Categories.Count);
         Assert.Equal("\U0001F4BB", target.Categories.Single(c => c.Name == "Coding").Emoji);
         var explain = target.Prompts.Single(p => p.Title == "Explain this code");
@@ -133,7 +133,7 @@ public sealed class ExchangeTests : IDisposable
         var target = Empty();
         var result = PromptImport.FromFolder(target, folder, () => T);
 
-        Assert.Equal(new ImportResult(2, 0, 0), result);
+        AssertCounts(2, 0, 0, result);
         var explain = target.Prompts.Single(p => p.Title == "Explain this code");
         Assert.Equal(source.Prompts[0].Text, explain.Text);
         Assert.Equal("Plain \"English\"", explain.Description);
@@ -155,7 +155,7 @@ public sealed class ExchangeTests : IDisposable
         var target = Empty();
         var result = PromptImport.FromFolder(target, dir, () => T);
 
-        Assert.Equal(new ImportResult(2, 0, 0), result);
+        AssertCounts(2, 0, 0, result);
         var writing = Assert.Single(target.Categories);
         Assert.Equal("Writing", writing.Name);
         Assert.Equal("Make it shorter:\n{text}", target.Prompts.Single(p => p.Title == "Tighten this").Text);
@@ -208,7 +208,7 @@ public sealed class ExchangeTests : IDisposable
         PromptImport.FromJsonFile(target, path, () => T);
         var again = PromptImport.FromJsonFile(target, path, () => T);
 
-        Assert.Equal(new ImportResult(0, 2, 0), again);
+        AssertCounts(0, 2, 0, again);
         Assert.Equal(2, target.Prompts.Count);
         Assert.Equal(2, target.Categories.Count);
     }
@@ -254,22 +254,74 @@ public sealed class ExchangeTests : IDisposable
 
         var result = PromptImport.FromFolder(Empty(), Path.Combine(_dir, "in"), () => T);
 
-        Assert.Equal(new ImportResult(1, 0, 1), result);
+        AssertCounts(1, 0, 1, result);
     }
 
     [Theory]
-    [InlineData("not json")]
-    [InlineData("[1,2]")]
-    [InlineData("{\"hello\": 1}")]
-    [InlineData("{\"format\": \"prompt-library-export/9\", \"categories\": [], \"prompts\": []}")]
-    public void Import_AFileThatIsNotAnExport_Throws_AndChangesNothing(string content)
+    [InlineData("not json", "not valid JSON")]
+    [InlineData("[1,2]", "not a Prompt Library export")]
+    [InlineData("{\"hello\": 1}", "not a Prompt Library export")]
+    [InlineData("{\"format\": \"prompt-library-export/9\", \"categories\": [], \"prompts\": []}", "made by a newer Prompt Library")]
+    [InlineData("{\"categories\": [], \"prompts\": [{\"title\": \"x\"}]}", "not a Prompt Library export")]
+    [InlineData("   \n", "empty")]
+    public void Import_AFileThatIsNotAnExport_IsAFailedOutcome_NeverAnException_AndChangesNothing(string content, string reason)
     {
         var path = Path.Combine(_dir, "bad.json");
         File.WriteAllText(path, content);
         var target = Sample();
 
-        Assert.Throws<InvalidDataException>(() => PromptImport.FromJsonFile(target, path, () => T));
+        var result = PromptImport.FromJsonFile(target, path, () => T);
+
+        var file = Assert.Single(result.Files);
+        Assert.Equal("bad.json", file.File);
+        Assert.Equal(reason, file.FailureReason);
+        Assert.Equal(1, result.Unusable);
+        Assert.Equal(0, result.Imported);
         Assert.Equal(2, target.Prompts.Count);
+    }
+
+    [Fact]
+    public void Import_AMissingJsonFile_IsAFailedOutcome()
+    {
+        var result = PromptImport.FromJsonFile(Empty(), Path.Combine(_dir, "nope.json"), () => T);
+
+        Assert.Equal("couldn't be read", Assert.Single(result.Files).FailureReason);
+    }
+
+    [Fact]
+    public void Import_Folder_ReportsEachFile_WithItsReason()
+    {
+        var dir = Path.Combine(_dir, "in", "A");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "empty.txt"), "  \n");
+        File.WriteAllText(Path.Combine(dir, "big.md"), new string('x', 1024 * 1024 + 1));
+        File.WriteAllText(Path.Combine(dir, "ok.txt"), "text");
+        var target = Empty();
+        PromptImport.FromFolder(target, Path.Combine(_dir, "in"), () => T);
+
+        var again = PromptImport.FromFolder(target, Path.Combine(_dir, "in"), () => T);
+
+        Assert.Equal(3, again.Files.Count);
+        Assert.Equal(1, again.Duplicates);
+        Assert.Equal(0, again.Imported);
+        Assert.Equal(
+            [(Path.Combine("A", "big.md"), "larger than 1 MB"), (Path.Combine("A", "empty.txt"), "empty")],
+            again.Failures.Select(f => (f.File, f.Reason)).OrderBy(f => f.File).ToArray());
+    }
+
+    [Fact]
+    public void Import_Json_PromptsWithNoTitleOrText_AreOneFailureForTheFile()
+    {
+        var path = Path.Combine(_dir, "partial.json");
+        var export = PromptExport.ToJson(Sample()).Replace("\"title\": \"Follow-up\"", "\"title\": \" \"");
+        File.WriteAllText(path, export);
+
+        var result = PromptImport.FromJsonFile(Empty(), path, () => T);
+
+        Assert.Equal(1, result.Imported);
+        var failure = Assert.Single(result.Failures);
+        Assert.Equal("partial.json", failure.File);
+        Assert.Equal("1 prompt with no title or text", failure.Reason);
     }
 
     [Fact]
@@ -287,7 +339,17 @@ public sealed class ExchangeTests : IDisposable
     [InlineData(1, 0, 0, "Imported 1 prompt.")]
     [InlineData(0, 1, 1, "Imported 0 prompts. Skipped 1 duplicate. Skipped 1 file that couldn't be used.")]
     public void Summary_UsesPlainWords(int imported, int dupes, int unusable, string expected)
-        => Assert.Equal(expected, new ImportResult(imported, dupes, unusable).Summary);
+        => Assert.Equal(expected, Make(imported, dupes, unusable).Summary);
+
+    private static ImportResult Make(int imported, int dupes, int unusable) => new(
+        [new ImportFileOutcome("a", imported, dupes, 0, null), .. Enumerable.Range(0, unusable).Select(i => new ImportFileOutcome("f" + i, 0, 0, 0, "empty"))]);
+
+    private static void AssertCounts(int imported, int dupes, int unusable, ImportResult result)
+    {
+        Assert.Equal(imported, result.Imported);
+        Assert.Equal(dupes, result.Duplicates);
+        Assert.Equal(unusable, result.Unusable);
+    }
 
     // ---- Dialog start folder -----------------------------------------------------------------------
 
