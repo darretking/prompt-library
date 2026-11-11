@@ -33,5 +33,10 @@ public partial class HistoryWindow : Window
         if (_model.Restore()) DialogResult = true;
     }
 
+    private void RestoreNew_Click(object sender, RoutedEventArgs e)
+    {
+        if (_model.RestoreAsNew()) DialogResult = true;
+    }
+
     private void Close_Click(object sender, RoutedEventArgs e) => DialogResult = false;
 }

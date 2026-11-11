@@ -55,10 +55,10 @@ No gradients. No drop shadows inside the window (Windows draws the window shadow
 │   category │                  │ ┃                                     │
 │            │                  │ [Delete]          [Save] [■ Copy  ]   │
 └────────────┴──────────────────┴──────────────────────────────────────┘
-  180 px        260 px              * (min 420 px)
+  200 px        260 px              * (min 420 px)
 ```
 
-- Window default 1100×700, minimum 860×520. Remember size/position is out of scope.
+- Window default 1100×700, minimum 860×520. Remember size/position is out of scope. The rail is 200 px wide: long category names end in an ellipsis (the tooltip has the full name), and the rename/delete icons appear only on the selected, hovered or focused row.
 - 16 px outer padding in the editor; 8 px grid for all spacing.
 - Left-aligned text throughout. Counts right-aligned in the rail.
 - **Selection:** selected category/prompt = `BrandSoft` background + 3 px `Brand` left edge. Hover = `Brush.Hover`, no animation. Rows are at least 40 px; the rail shows `emoji name` (20 px emoji column) and a Recent row under All prompts.
@@ -93,3 +93,14 @@ Plain verbs, sentence case, the same name for an action everywhere: `Copy prompt
 ## Secondary windows
 
 Settings, Restore and Move-category dialogs use the same tokens, 16 px padding, labels above fields, primary action bottom-right (filled `Brand` only if it's the dialog's main action), Cancel next to it. Fixed size, centred on owner.
+
+## Round 2 additions (premium review)
+
+- **Menu bar (File, Help):** flat and transparent over the window, 13 px Ink, headers 28 px with a 4 px radius and `Brush.Hover`; drop-downs are flyouts (Surface, 1 px Line, 8 px radius, 4 px padding, 32 px items, Line separators, muted shortcut text). The rail and prompt context menus use the same flyout.
+- **Colour emoji:** category emoji are drawn in colour with Emoji.Wpf (`emoji:TextBlock`) in the rail, the category combo box, menus and the picker. Data stays plain emoji strings. The picker is a Surface flyout with 32 px cells (hover `Brush.Hover`) and a quiet "No emoji" text button.
+- **Title and description:** a hairline Line underline at rest, a 1 px Line frame on hover, a 2 px Brand ring on focus; tooltip "Click to edit"; placeholders "Untitled prompt" and "Add a description".
+- **Prompt slip:** Surface page, 1 px Line frame, 8 px corners, 4 px Brand left edge; an empty box shows a muted hint.
+- **Preview:** the result, not the source: remembered values as filled chips (Brand on BrandSoft), empty fields as muted outline chips with the field name, `{date}` / `{time}` today's values, `{clipboard}` a muted chip, `{cursor}` a thin Brand caret; headings 15 px semibold, **bold** semibold, bullets with a hanging indent, fenced code in a `CodeBlock` box. A muted caption above says "Preview with your last-used values".
+- **Version history:** the diff is the chosen version against the one saved just after it (the editor's text for the newest), titled "Changes made in this version"; "Compare with current" switches to the editor's text. "Restore as a new prompt" keeps the version as "<title> (restored)" in the same category and opens it.
+- **Import results:** after an import a dialog shows imported / skipped duplicates / failed and, for failures, a scrollable `file — reason` list.
+- **Delete category:** ticking "Also delete the N prompts" removes the "Move prompts to" label and box and shows "These prompts will be deleted. This can't be undone." in Danger text; unticked, the first other category is chosen and the helper says "Prompts move to the category you pick."

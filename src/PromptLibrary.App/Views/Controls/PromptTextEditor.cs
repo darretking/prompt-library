@@ -13,7 +13,7 @@ namespace PromptLibrary.App.Views.Controls;
 
 /// <summary>
 /// The prompt text box of the main window: an AvalonEdit editor (placeholders, headings, fenced code and bold are
-/// coloured) with a two-way bindable <see cref="Text"/>, or, in preview mode, a read-only rendering with placeholders
+/// coloured) with a two-way bindable <see cref="Text"/>, or, in preview mode, a read-only rendering of the result (see <see cref="PromptPreviewView"/>), placeholders
 /// shown as chips. The text goes in and out exactly as stored (tabs, CRLF, emoji).
 /// </summary>
 public sealed class PromptTextEditor : UserControl
@@ -24,7 +24,12 @@ public sealed class PromptTextEditor : UserControl
 
     public static readonly DependencyProperty IsReadOnlyProperty = DependencyProperty.Register(
         nameof(IsReadOnly), typeof(bool), typeof(PromptTextEditor),
-        new PropertyMetadata(false, (d, e) => ((PromptTextEditor)d)._editor.IsReadOnly = (bool)e.NewValue));
+        new PropertyMetadata(false, (d, e) =>
+        {
+            var control = (PromptTextEditor)d;
+            control._editor.IsReadOnly = (bool)e.NewValue;
+            control.UpdateHint();
+        }));
 
     public static readonly DependencyProperty IsPreviewProperty = DependencyProperty.Register(
         nameof(IsPreview), typeof(bool), typeof(PromptTextEditor),
@@ -36,8 +41,16 @@ public sealed class PromptTextEditor : UserControl
         new PropertyMetadata(null, (d, _) => ((PromptTextEditor)d).RebuildPreview()));
 
     private readonly TextEditor _editor = new();
-    private readonly ScrollViewer _previewScroll = new();
-    private readonly TextBlock _preview = new();
+    private readonly PromptPreviewView _preview = new();
+    private readonly TextBlock _hint = new()
+    {
+        Text = "Type or paste your prompt. Use {name} where something changes each time.",
+        IsHitTestVisible = false,
+        TextWrapping = TextWrapping.Wrap,
+        FontSize = 13,
+        Margin = new Thickness(9, 8, 9, 0),
+        VerticalAlignment = VerticalAlignment.Top,
+    };
     private readonly PromptColorizer _colorizer;
     private bool _syncing;
 
@@ -71,19 +84,15 @@ public sealed class PromptTextEditor : UserControl
         _colorizer = new PromptColorizer();
         _editor.TextArea.TextView.LineTransformers.Add(_colorizer);
 
-        _preview.TextWrapping = TextWrapping.Wrap;
-        _preview.Padding = new Thickness(8);
-        _preview.FontSize = 13;
-        _preview.SetResourceReference(TextBlock.FontFamilyProperty, "Font.Prompt");
-        _preview.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Ink");
-        _previewScroll.Content = _preview;
-        _previewScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-        _previewScroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
-        _previewScroll.Visibility = Visibility.Collapsed;
+        _preview.Visibility = Visibility.Collapsed;
 
         var grid = new Grid();
+        _hint.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Muted");
+        _hint.SetResourceReference(TextBlock.FontFamilyProperty, "Font.Prompt");
         grid.Children.Add(_editor);
-        grid.Children.Add(_previewScroll);
+        grid.Children.Add(_hint);
+        grid.Children.Add(_preview);
+        _editor.TextChanged += (_, _) => UpdateHint();
         Content = grid;
 
         Loaded += (_, _) =>
@@ -124,7 +133,7 @@ public sealed class PromptTextEditor : UserControl
     internal TextEditor Editor => _editor;
 
 
-    public new bool Focus() => IsPreview ? _previewScroll.Focus() : _editor.TextArea.Focus();
+    public new bool Focus() => IsPreview ? _preview.Focus() : _editor.TextArea.Focus();
 
     private static void OnTextChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -178,9 +187,16 @@ public sealed class PromptTextEditor : UserControl
     private void UpdateMode()
     {
         _editor.Visibility = IsPreview ? Visibility.Collapsed : Visibility.Visible;
-        _previewScroll.Visibility = IsPreview ? Visibility.Visible : Visibility.Collapsed;
+        _preview.Visibility = IsPreview ? Visibility.Visible : Visibility.Collapsed;
+        UpdateHint();
         if (IsPreview) RebuildPreview();
     }
+
+    /// <summary>The faint line in an empty prompt box, so a new prompt's page isn't a blank void.</summary>
+    private void UpdateHint()
+        => _hint.Visibility = !IsPreview && !IsReadOnly && string.IsNullOrEmpty(_editor.Document.Text)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
     private void OnThemeChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(ApplyTheme);
 
@@ -197,96 +213,7 @@ public sealed class PromptTextEditor : UserControl
     private void RebuildPreview()
     {
         if (!IsPreview) return;
-        _preview.Inlines.Clear();
-        var text = Text ?? "";
-        var spans = PromptHighlighting.Compute(text);
-        var values = PlaceholderValues;
-        var chipBackground = Resource("Brush.BrandSoft");
-        var chipForeground = Resource("Brush.Brand");
-        var codeBackground = Resource("Brush.CodeBlock");
-
-        var lines = SplitLines(text);
-        for (var i = 0; i < lines.Count; i++)
-        {
-            var (start, length) = lines[i];
-            var inCode = spans.Any(s => s.Kind == HighlightKind.CodeBlock && start >= s.Start && start < s.End + 1);
-            var heading = spans.Any(s => s.Kind == HighlightKind.Heading && s.Start == start);
-            AppendLine(text, start, length, spans, values, chipBackground, chipForeground, codeBackground, inCode, heading);
-            if (i < lines.Count - 1) _preview.Inlines.Add(new LineBreak());
-        }
-    }
-
-    private void AppendLine(string text, int start, int length, IReadOnlyList<HighlightSpan> spans,
-        IDictionary<string, string>? values, Brush? chipBackground, Brush? chipForeground, Brush? codeBackground,
-        bool inCode, bool heading)
-    {
-        var end = start + length;
-        var inline = spans
-            .Where(s => s.Kind is HighlightKind.Placeholder or HighlightKind.Bold && s.Start >= start && s.End <= end)
-            .OrderBy(s => s.Start).ThenByDescending(s => s.Length).ToList();
-
-        void Plain(string s, bool bold)
-        {
-            if (s.Length == 0) return;
-            var run = new Run(s);
-            if (bold || heading) run.FontWeight = FontWeights.SemiBold;
-            if (inCode && codeBackground is not null) run.Background = codeBackground;
-            _preview.Inlines.Add(run);
-        }
-
-        var cursor = start;
-        foreach (var span in inline)
-        {
-            if (span.Start < cursor) continue; // inside one already written
-            Plain(text[cursor..span.Start], false);
-            var token = text.Substring(span.Start, span.Length);
-            if (span.Kind == HighlightKind.Bold)
-                Plain(token[2..^2], true);
-            else
-                _preview.Inlines.Add(Chip(token, values, chipBackground, chipForeground));
-            cursor = span.End;
-        }
-        Plain(text[cursor..end], false);
-    }
-
-    private static InlineUIContainer Chip(string token, IDictionary<string, string>? values, Brush? background, Brush? foreground)
-    {
-        var name = token.Trim('{', '}').Trim();
-        var shown = values is not null && values.TryGetValue(name, out var v) && !string.IsNullOrWhiteSpace(v)
-            ? v
-            : token;
-        var label = new TextBlock
-        {
-            Text = shown,
-            Foreground = foreground,
-            Margin = new Thickness(4, 0, 4, 0),
-            FontFamily = new FontFamily("Cascadia Mono, Consolas"),
-        };
-        return new InlineUIContainer(new Border
-        {
-            Background = background,
-            CornerRadius = new CornerRadius(4),
-            Child = label,
-        })
-        { BaselineAlignment = BaselineAlignment.Center };
-    }
-
-    private static List<(int Start, int Length)> SplitLines(string text)
-    {
-        var lines = new List<(int, int)>();
-        var pos = 0;
-        while (true)
-        {
-            var end = pos;
-            while (end < text.Length && text[end] is not ('\r' or '\n')) end++;
-            lines.Add((pos, end - pos));
-            if (end >= text.Length) break;
-            pos = end;
-            if (text[pos] == '\r') pos++;
-            if (pos < text.Length && text[pos] == '\n') pos++;
-            if (pos >= text.Length) { lines.Add((pos, 0)); break; }
-        }
-        return lines;
+        _preview.Show(PromptPreview.Build(Text, PlaceholderValues, DateTime.Now));
     }
 
     private static Brush? Resource(string key) => Application.Current?.TryFindResource(key) as Brush;

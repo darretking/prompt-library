@@ -1,0 +1,68 @@
+<Window x:Class="PromptLibrary.App.Views.ImportResultsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Style="{StaticResource AppDialog}"
+        Title="Import results"
+        AutomationProperties.Name="Import results"
+        Icon="/Assets/app.ico"
+        Width="480" SizeToContent="Height" MaxHeight="520"
+        ResizeMode="NoResize" ShowInTaskbar="False">
+    <!-- What an import did: three counts, and, when some files failed, a scrollable "file — reason" list. -->
+    <StackPanel Margin="16">
+        <TextBlock Text="Import finished" FontSize="18" FontWeight="SemiBold" />
+
+        <UniformGrid Columns="3" Margin="0,16,0,0">
+            <StackPanel>
+                <TextBlock x:Name="ImportedCount" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Brand}" />
+                <TextBlock Text="Imported" Style="{StaticResource MutedText}" />
+            </StackPanel>
+            <StackPanel>
+                <TextBlock x:Name="DuplicateCount" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock Text="Skipped duplicates" Style="{StaticResource MutedText}" />
+            </StackPanel>
+            <StackPanel>
+                <TextBlock x:Name="FailedCount" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock Text="Failed" Style="{StaticResource MutedText}" />
+            </StackPanel>
+        </UniformGrid>
+
+        <StackPanel x:Name="FailurePanel" Margin="0,16,0,0">
+            <TextBlock Text="These files couldn't be imported" Style="{StaticResource FieldLabel}" />
+            <Border Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Line}"
+                    BorderThickness="1" CornerRadius="{StaticResource Radius}">
+                <ListBox x:Name="FailureList" Style="{StaticResource PlainList}" MaxHeight="200"
+                         Focusable="True" AutomationProperties.Name="Files that failed">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="8,6" />
+                            <Setter Property="Focusable" Value="False" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter />
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock TextWrapping="Wrap" AutomationProperties.Name="{Binding Line}">
+                                <Run Text="{Binding File, Mode=OneWay}" FontWeight="SemiBold" />
+                                <Run Text=" — " Foreground="{DynamicResource Brush.Muted}" />
+                                <Run Text="{Binding Reason, Mode=OneWay}" Foreground="{DynamicResource Brush.Danger}" />
+                            </TextBlock>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
+            <Button x:Name="OkButton" Style="{StaticResource PrimaryButton}" Content="OK" IsDefault="True" IsCancel="True"
+                    AutomationProperties.Name="OK" />
+        </StackPanel>
+    </StackPanel>
+</Window>

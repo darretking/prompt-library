@@ -1038,7 +1038,7 @@ public sealed class MainViewModel : ObservableObject
             RefreshPrompts();
             OpenFirstPromptIfNone();
         }
-        _dialogs.ShowMessage(result.Summary);
+        _dialogs.ShowImportResults(result);
     }
 
     /// <summary>Export prompts…: one .json file, or a folder of .md files (one per prompt, a subfolder per category).</summary>
@@ -1247,7 +1247,39 @@ public sealed class MainViewModel : ObservableObject
     {
         if (!CanShowHistory || _editor is not { PromptId: { } id } editor || HistoryDialog is not { } show) return;
         var versions = _history!.List(id);
-        show(new HistoryViewModel(versions, editor.Text, DateTimeOffset.Now, editor.ApplyVersion));
+        var model = new HistoryViewModel(versions, editor.Text, DateTimeOffset.Now, editor.ApplyVersion);
+        if (show(model) && model.CopyRequested is { } version)
+            RestoreAsNewPrompt(version);
+    }
+
+    /// <summary>
+    /// History's "Restore as a new prompt": a copy of the version, titled "&lt;title&gt; (restored)", goes into the same
+    /// category as the open prompt and opens in the editor. The open prompt stays as it is (unsaved edits are asked about first).
+    /// </summary>
+    internal void RestoreAsNewPrompt(PromptVersion version)
+    {
+        if (_editor is not { PromptId: { } id } || IsTeamSide) return;
+        if (_personal.Library.Prompts.FirstOrDefault(p => p.Id == id) is not { } source) return;
+        if (!ProceedOrDefer(() => RestoreAsNewPrompt(version))) return;
+
+        Prompt copy;
+        try
+        {
+            var title = $"{(string.IsNullOrWhiteSpace(version.Title) ? source.Title : version.Title).Trim()} (restored)";
+            copy = new LibraryEditor(_personal.Library, () => DateTimeOffset.Now)
+                .AddPrompt(source.CategoryId, title, version.Description ?? "", version.Text, TagRules.Normalize(version.Tags), null);
+        }
+        catch (ArgumentException ex)
+        {
+            _dialogs.ShowMessage(ex.Message);
+            return;
+        }
+
+        _personal.SaveLibraryChange(); // on failure the copy stays and is written later (the host says so)
+        RebuildCategories(_selectedCategory?.Id);
+        RefreshPrompts();
+        OpenPrompt(copy, byUser: true);
+        ShowStatus("Restored as a new prompt", FeedbackDuration);
     }
 
     /// <summary>Deletes the prompt in the editor after asking (a new, unsaved prompt is just dropped).</summary>

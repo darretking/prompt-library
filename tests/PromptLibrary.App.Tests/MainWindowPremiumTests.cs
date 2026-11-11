@@ -356,7 +356,9 @@ public sealed class MainWindowPremiumTests : IDisposable
 
         w.Vm.ImportCommand.Execute(null);
 
-        Assert.StartsWith("Couldn't import:", w.Dialogs.Messages.Single());
+        var failure = Assert.Single(w.Dialogs.LastImport!.Failures);
+        Assert.Equal(("bad.json", "not valid JSON"), (failure.File, failure.Reason));
+        Assert.Equal("Imported 0 prompts. Skipped 1 file that couldn't be used.", w.Dialogs.Messages.Single());
         Assert.Single(w.Host.Library.Prompts);
         Assert.Equal(0, w.Host.LibrarySaves);
     });
@@ -513,6 +515,8 @@ public sealed class MainWindowPremiumTests : IDisposable
         public ExchangePick? ChooseImportSource() => Pick;
         public ExchangePick? ChooseExportTarget() => Pick;
         public void ShowMessage(string message) => Messages.Add(message);
+        public ImportResult? LastImport { get; private set; }
+        public void ShowImportResults(ImportResult result) { LastImport = result; Messages.Add(result.Summary); }
         public bool ShowTeamHistory(TeamLibraryService service, bool review) => false;
     }
 }

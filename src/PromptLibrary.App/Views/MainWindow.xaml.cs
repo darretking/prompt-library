@@ -208,6 +208,12 @@ public partial class MainWindow : Window, IDialogs
             ConfirmDialog.Inform(this, message);
     }
 
+    public void ShowImportResults(ImportResult result)
+    {
+        if (!_host.AsksNothing)
+            new ImportResultsDialog(result) { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog();
+    }
+
     public bool ShowTeamHistory(TeamLibraryService service, bool review)
     {
         var window = new TeamHistoryWindow(_host, service, review) { Owner = this };

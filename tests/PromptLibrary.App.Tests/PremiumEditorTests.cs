@@ -63,6 +63,44 @@ public sealed class PremiumEditorTests : IDisposable
         Assert.False(control.Editor.CanUndo);
     });
 
+    [Fact]
+    public void PromptTextEditor_Preview_DrawsTheResult_HeadingBulletsCodeAndChips() => Sta.Run(() =>
+    {
+        var values = new Dictionary<string, string> { ["who"] = "Ann" };
+        var control = new PromptTextEditor
+        {
+            Text = "# Hello {who}\nSee {topic}\n- one\n- two\n```\ncode {who}\n```",
+            PlaceholderValues = values,
+            IsPreview = true,
+        };
+
+        var preview = (PromptPreviewView)((System.Windows.Controls.Grid)control.Content).Children
+            .OfType<PromptPreviewView>().Single();
+        var grid = (System.Windows.Controls.Grid)preview.Content;
+        var viewer = grid.Children.OfType<System.Windows.Controls.FlowDocumentScrollViewer>().Single();
+
+        var kinds = viewer.Document.Blocks.Select(b => b.GetType().Name).ToList();
+        Assert.Equal(["Paragraph", "Paragraph", "List", "List", "BlockUIContainer"], kinds);
+        Assert.Equal(15, ((System.Windows.Documents.Paragraph)viewer.Document.Blocks.First()).FontSize); // the heading
+        Assert.Equal(PromptPreviewView.CaptionText, grid.Children.OfType<System.Windows.Controls.TextBlock>().Single().Text);
+        Assert.Equal("Preview with your last-used values", PromptPreviewView.CaptionText);
+    });
+
+    [Fact]
+    public void PromptTextEditor_EmptyEditable_ShowsAHint_ReadOnlyAndFilledDoNot() => Sta.Run(() =>
+    {
+        var control = new PromptTextEditor();
+        var hint = ((System.Windows.Controls.Grid)control.Content).Children.OfType<System.Windows.Controls.TextBlock>().Single();
+        Assert.Equal(System.Windows.Visibility.Visible, hint.Visibility);
+
+        control.Text = "something";
+        Assert.Equal(System.Windows.Visibility.Collapsed, hint.Visibility);
+
+        control.Text = "";
+        control.IsReadOnly = true;
+        Assert.Equal(System.Windows.Visibility.Collapsed, hint.Visibility);
+    });
+
     // ---- Highlighting --------------------------------------------------------------------------
 
     [Fact]
@@ -302,6 +340,66 @@ public sealed class PremiumEditorTests : IDisposable
         Assert.True(model.Restore());
         Assert.Same(versions[0], applied.Single());
     }
+
+    [Fact]
+    public void HistoryViewModel_Diff_IsTheChosenVersionAgainstTheOneSavedJustAfterIt()
+    {
+        var now = new DateTimeOffset(2026, 11, 11, 12, 0, 0, TimeSpan.Zero);
+        // Newest first: "B" was replaced by "C", "A" by "B"; the editor holds "D".
+        var versions = new[]
+        {
+            new PromptVersion { SavedAt = now.AddHours(-1), Text = "C", Title = "T" },
+            new PromptVersion { SavedAt = now.AddHours(-2), Text = "B", Title = "T" },
+            new PromptVersion { SavedAt = now.AddHours(-3), Text = "A", Title = "T" },
+        };
+        var model = new HistoryViewModel(versions, "D", now, _ => { });
+
+        // Newest: against the current text.
+        Assert.Equal("Changes made in this version", model.DiffTitle);
+        Assert.Equal([(DiffKind.Removed, "C"), (DiffKind.Added, "D")], model.Diff.Select(d => (d.Kind, d.Text)));
+
+        model.Selected = model.Items[2]; // "A" -> the version saved just after it is "B"
+        Assert.Equal([(DiffKind.Removed, "A"), (DiffKind.Added, "B")], model.Diff.Select(d => (d.Kind, d.Text)));
+
+        model.CompareWithCurrent = true; // "A" against what the editor holds now
+        Assert.Equal("This version compared with the current text", model.DiffTitle);
+        Assert.Equal([(DiffKind.Removed, "A"), (DiffKind.Added, "D")], model.Diff.Select(d => (d.Kind, d.Text)));
+    }
+
+    [Fact]
+    public void HistoryViewModel_RestoreAsNew_RemembersTheChosenVersion_AndOnlyThen()
+    {
+        var versions = new[] { new PromptVersion { SavedAt = DateTimeOffset.Now, Text = "old", Title = "T" } };
+        var applied = new List<PromptVersion>();
+        var model = new HistoryViewModel(versions, "now", DateTimeOffset.Now, applied.Add);
+        Assert.Null(model.CopyRequested);
+
+        Assert.True(model.RestoreAsNew());
+
+        Assert.Same(versions[0], model.CopyRequested);
+        Assert.Empty(applied); // the open prompt is not touched
+        Assert.False(new HistoryViewModel([], "now", DateTimeOffset.Now, _ => { }).RestoreAsNew());
+    }
+
+    [Fact]
+    public void RestoreAsNewPrompt_CreatesACopyInTheSameCategory_AndOpensIt() => Sta.Run(() =>
+    {
+        var (vm, host, history, prompt) = Open();
+        vm.Editor!.Title = "Review v2";
+        vm.Editor.Text = "Newer text";
+        vm.Save();
+        vm.HistoryDialog = m => { m.RestoreAsNew(); return true; }; // newest version = "Review" / "Original text"
+
+        vm.ShowHistoryCommand.Execute(null);
+
+        var copy = host.Library.Prompts.Single(p => p.Title == "Review (restored)");
+        Assert.Equal(prompt.CategoryId, copy.CategoryId);
+        Assert.Equal("Original text", copy.Text);
+        Assert.NotEqual(prompt.Id, copy.Id);
+        Assert.Equal(copy.Id, vm.Editor!.PromptId); // opened
+        Assert.Equal("Newer text", prompt.Text);     // the first prompt is as it was
+        Assert.Equal(2, host.Library.Prompts.Count);
+    });
 
     [Fact]
     public void HistoryViewModel_NoVersions_IsEmptyAndCannotRestore()

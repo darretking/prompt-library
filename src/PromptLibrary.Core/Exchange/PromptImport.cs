@@ -6,9 +6,36 @@ using PromptLibrary.Core.Storage;
 
 namespace PromptLibrary.Core.Exchange;
 
-/// <summary>What an import did: prompts added, duplicates (same title in the same category) left out, files that held nothing usable.</summary>
-public sealed record ImportResult(int Imported, int Duplicates, int Unusable)
+/// <summary>
+/// What happened to one file of an import: prompts added, duplicates (same title in the same category) left out,
+/// prompts in it that had no title or text, and, when the whole file couldn't be used, <see cref="FailureReason"/>
+/// (plain words: <c>couldn't be read</c>, <c>empty</c>, <c>larger than 1 MB</c>, <c>not valid JSON</c>, <c>not a Prompt Library export</c>).
+/// </summary>
+public sealed record ImportFileOutcome(string File, int Imported, int Duplicates, int UnusablePrompts, string? FailureReason)
 {
+    public bool Failed => FailureReason is not null || UnusablePrompts > 0;
+
+    /// <summary>The reason shown beside the file name, or null when nothing went wrong.</summary>
+    public string? Problem => FailureReason
+        ?? (UnusablePrompts > 0 ? $"{UnusablePrompts} prompt{(UnusablePrompts == 1 ? "" : "s")} with no title or text" : null);
+}
+
+/// <summary>A file that couldn't be (fully) used and why, for the import results list.</summary>
+public sealed record ImportFailure(string File, string Reason);
+
+/// <summary>What an import did, in total and file by file. Never thrown: a bad file is a failed outcome.</summary>
+public sealed record ImportResult(IReadOnlyList<ImportFileOutcome> Files)
+{
+    public int Imported => Files.Sum(f => f.Imported);
+
+    public int Duplicates => Files.Sum(f => f.Duplicates);
+
+    /// <summary>Files that couldn't be used (or held prompts that couldn't).</summary>
+    public int Unusable => Files.Count(f => f.Failed);
+
+    public IReadOnlyList<ImportFailure> Failures
+        => Files.Where(f => f.Failed).Select(f => new ImportFailure(f.File, f.Problem!)).ToList();
+
     /// <summary><c>Imported 12 prompts. Skipped 3 duplicates.</c></summary>
     public string Summary
     {
@@ -20,6 +47,8 @@ public sealed record ImportResult(int Imported, int Duplicates, int Unusable)
             return text;
         }
     }
+
+    internal static ImportResult Of(params ImportFileOutcome[] files) => new(files);
 }
 
 /// <summary>
@@ -30,28 +59,46 @@ public sealed record ImportResult(int Imported, int Duplicates, int Unusable)
 public static class PromptImport
 {
     private const long MaxFileBytes = 1024 * 1024;
+    private const long MaxJsonBytes = 64L * 1024 * 1024;
 
-    /// <summary>Reads an export (or library) JSON file. Throws <see cref="InvalidDataException"/> when it isn't one.</summary>
+    /// <summary>
+    /// Reads an export (or library) JSON file. A file that can't be used (unreadable, empty, too large, invalid JSON, not
+    /// an export, made by a newer app) comes back as a failed outcome, never as an exception.
+    /// </summary>
     public static ImportResult FromJsonFile(Library target, string path, Func<DateTimeOffset> now)
     {
+        var name = Path.GetFileName(path);
         Library source;
         try
         {
-            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            var size = new FileInfo(path).Length;
+            if (size == 0) return Fail(name, "empty");
+            if (size > MaxJsonBytes) return Fail(name, "larger than 64 MB");
+            var content = File.ReadAllText(path);
+            if (string.IsNullOrWhiteSpace(content)) return Fail(name, "empty");
+
+            using var doc = JsonDocument.Parse(content);
             var root = doc.RootElement;
-            if (root.ValueKind != JsonValueKind.Object)
-                throw new InvalidDataException("This isn't a Prompt Library export.");
+            if (root.ValueKind != JsonValueKind.Object) return Fail(name, "not a Prompt Library export");
             if (root.TryGetProperty("format", out var format)
                 && format.ValueKind == JsonValueKind.String
                 && format.GetString() is { } marker && marker != PromptExport.Format)
-                throw new InvalidDataException("This export was made by a newer Prompt Library. Update to import it.");
+                return Fail(name, "made by a newer Prompt Library");
             if (!root.TryGetProperty("prompts", out _) || !root.TryGetProperty("categories", out _))
-                throw new InvalidDataException("This isn't a Prompt Library export.");
+                return Fail(name, "not a Prompt Library export");
             source = JsonStore.ValidateLibrary(root);
         }
-        catch (JsonException ex)
+        catch (JsonException)
         {
-            throw new InvalidDataException("This isn't a Prompt Library export: " + ex.Message, ex);
+            return Fail(name, "not valid JSON");
+        }
+        catch (InvalidDataException)
+        {
+            return Fail(name, "not a Prompt Library export");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
+        {
+            return Fail(name, "couldn't be read");
         }
 
         var editor = new LibraryEditor(target, now);
@@ -67,8 +114,11 @@ public static class PromptImport
                 default: unusable++; break;
             }
         }
-        return new ImportResult(imported, duplicates, unusable);
+        return ImportResult.Of(new ImportFileOutcome(name, imported, duplicates, unusable, null));
     }
+
+    private static ImportResult Fail(string file, string reason)
+        => ImportResult.Of(new ImportFileOutcome(file, 0, 0, 0, reason));
 
     /// <summary>
     /// Reads every <c>.md</c> and <c>.txt</c> file under <paramref name="folder"/>. The file name is the title and the
@@ -77,24 +127,44 @@ public static class PromptImport
     public static ImportResult FromFolder(Library target, string folder, Func<DateTimeOffset> now)
     {
         var editor = new LibraryEditor(target, now);
-        var (imported, duplicates, unusable) = (0, 0, 0);
+        var outcomes = new List<ImportFileOutcome>();
 
-        var files = Directory.EnumerateFiles(folder, "*.*", SearchOption.AllDirectories)
-            .Where(f => f.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
-                        || f.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(f => f, StringComparer.CurrentCultureIgnoreCase);
+        List<string> files;
+        try
+        {
+            files = Directory.EnumerateFiles(folder, "*.*", SearchOption.AllDirectories)
+                .Where(f => f.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
+                            || f.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(f => f, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Fail(Path.GetFileName(folder.TrimEnd('\\', '/')), "couldn't be read");
+        }
 
         foreach (var file in files)
         {
+            var name = Path.GetRelativePath(folder, file);
             string content;
             try
             {
-                if (new FileInfo(file).Length > MaxFileBytes) { unusable++; continue; }
+                if (new FileInfo(file).Length > MaxFileBytes)
+                {
+                    outcomes.Add(new ImportFileOutcome(name, 0, 0, 0, "larger than 1 MB"));
+                    continue;
+                }
                 content = File.ReadAllText(file);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                unusable++;
+                outcomes.Add(new ImportFileOutcome(name, 0, 0, 0, "couldn't be read"));
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                outcomes.Add(new ImportFileOutcome(name, 0, 0, 0, "empty"));
                 continue;
             }
 
@@ -103,14 +173,14 @@ public static class PromptImport
             var title = parsed.Title ?? Path.GetFileNameWithoutExtension(file);
             var category = string.IsNullOrWhiteSpace(parsed.Category) ? parent : parsed.Category!;
 
-            switch (Add(editor, target, category, null, title, parsed.Description ?? "", parsed.Body, parsed.Tags, null))
+            outcomes.Add(Add(editor, target, category, null, title, parsed.Description ?? "", parsed.Body, parsed.Tags, null) switch
             {
-                case Outcome.Added: imported++; break;
-                case Outcome.Duplicate: duplicates++; break;
-                default: unusable++; break;
-            }
+                Outcome.Added => new ImportFileOutcome(name, 1, 0, 0, null),
+                Outcome.Duplicate => new ImportFileOutcome(name, 0, 1, 0, null),
+                _ => new ImportFileOutcome(name, 0, 0, 0, "empty"),
+            });
         }
-        return new ImportResult(imported, duplicates, unusable);
+        return new ImportResult(outcomes);
     }
 
     private enum Outcome { Added, Duplicate, Unusable }
