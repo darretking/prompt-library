@@ -9,22 +9,49 @@ public enum TemplateFieldKind { Text, Choice }
 /// </summary>
 public sealed record TemplateField(string Name, TemplateFieldKind Kind, IReadOnlyList<string> Options, string? Hint);
 
+/// <summary>Where the dynamic tokens (<c>{clipboard}</c>, <c>{date}</c>, <c>{time}</c>) get their values; tests control it.</summary>
+public interface ITokenValues
+{
+    /// <summary>The clipboard's text, or null when it holds none.</summary>
+    string? Clipboard { get; }
+
+    DateTime Now { get; }
+
+    /// <summary>The user's culture, for the short date and time formats.</summary>
+    System.Globalization.CultureInfo Culture { get; }
+}
+
+/// <summary>
+/// The filled text. <see cref="CaretBackSteps"/> is how many characters (a line break counts as one) follow the
+/// <c>{cursor}</c> marker, i.e. how many times Left must be pressed after pasting; null when there is no marker.
+/// </summary>
+public sealed record FillResult(string Text, int? CaretBackSteps);
+
 /// <summary>
 /// Finds and fills <c>{placeholders}</c> in prompt text. <c>{name}</c> is a text field, <c>{a / b}</c> a choice,
 /// <c>{label, e.g. hint}</c> a text field with a hint. <c>{{</c> and <c>}}</c> are literal braces. A <c>{</c> with no
-/// closing <c>}</c> on the same line (or more than 60 characters on) is literal text.
+/// closing <c>}</c> on the same line (or more than 60 characters on) is literal text. The names <c>clipboard</c>,
+/// <c>date</c>, <c>time</c> and <c>cursor</c> are reserved dynamic tokens: never form fields (see <see cref="IsToken"/>).
 /// </summary>
 public static class PromptTemplate
 {
     private const int MaxInner = 60;
 
-    private sealed record Token(int Start, int Length, TemplateField Field);
+    private static readonly string[] TokenNames = ["clipboard", "date", "time", "cursor"];
+
+    private sealed record Token(int Start, int Length, TemplateField Field)
+    {
+        public bool IsToken => PromptTemplate.IsToken(Field.Name);
+    }
+
+    /// <summary>True for the reserved dynamic token names (any case): clipboard, date, time, cursor.</summary>
+    public static bool IsToken(string name) => TokenNames.Contains(name, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The distinct fields in order of first appearance (same name in any case = one field).</summary>
     public static IReadOnlyList<TemplateField> Parse(string? text)
     {
         var fields = new List<TemplateField>();
-        foreach (var token in Scan(text))
+        foreach (var token in Scan(text).Where(t => !t.IsToken))
         {
             var i = fields.FindIndex(f => Same(f.Name, token.Field.Name));
             if (i < 0) fields.Add(token.Field);
@@ -35,9 +62,9 @@ public static class PromptTemplate
     }
 
     /// <summary>True when the text has at least one placeholder.</summary>
-    public static bool HasFields(string? text) => Scan(text).Count > 0;
+    public static bool HasFields(string? text) => Scan(text).Any(t => !t.IsToken);
 
-    /// <summary>Where each placeholder (braces included) is in the text, for highlighting. Escaped braces are not included.</summary>
+    /// <summary>Where each placeholder and dynamic token (braces included) is in the text, for highlighting. Escaped braces are not included.</summary>
     public static IReadOnlyList<(int Start, int Length, string Name)> Spans(string? text)
         => Scan(text).Select(t => (t.Start, t.Length, t.Field.Name)).ToList();
 
@@ -45,27 +72,57 @@ public static class PromptTemplate
     /// Replaces every placeholder with its value (looked up by name, ignoring case) and turns <c>{{</c>/<c>}}</c> into
     /// <c>{</c>/<c>}</c>. A missing or empty value leaves the original <c>{…}</c>. Text with no placeholders is returned unchanged.
     /// </summary>
-    public static string Fill(string? text, IDictionary<string, string> values)
+    public static string Fill(string? text, IDictionary<string, string> values) => Fill(text, values, null).Text;
+
+    /// <summary>
+    /// As <see cref="Fill(string?, IDictionary{string, string})"/>, and the dynamic tokens are filled from
+    /// <paramref name="tokens"/>: <c>{clipboard}</c> (left as is when the clipboard has no text), <c>{date}</c>,
+    /// <c>{time}</c>; <c>{cursor}</c> is removed and its place reported as <see cref="FillResult.CaretBackSteps"/>.
+    /// With <paramref name="tokens"/> null the tokens are left as written. Filled values are never scanned again.
+    /// </summary>
+    public static FillResult Fill(string? text, IDictionary<string, string> values, ITokenValues? tokens)
     {
         text ??= "";
-        var tokens = Scan(text);
-        if (tokens.Count == 0) return text;
+        var found = Scan(text);
+        if (found.Count == 0) return new FillResult(text, null);
 
         var lookup = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (k, v) in values) lookup[k] = v;
 
         var sb = new System.Text.StringBuilder();
         var pos = 0;
-        foreach (var t in tokens)
+        int? cursorAt = null;
+        foreach (var t in found)
         {
             sb.Append(Unescape(text.AsSpan(pos, t.Start - pos)));
             var original = text.Substring(t.Start, t.Length);
-            sb.Append(lookup.TryGetValue(t.Field.Name, out var v) && !string.IsNullOrWhiteSpace(v) ? v : original);
+            if (t.IsToken)
+            {
+                if (tokens is null) sb.Append(original);
+                else if (string.Equals(t.Field.Name, "cursor", StringComparison.OrdinalIgnoreCase))
+                    cursorAt ??= sb.Length; // a second {cursor} is just removed
+                else sb.Append(TokenText(t.Field.Name, tokens) ?? original);
+            }
+            else
+                sb.Append(lookup.TryGetValue(t.Field.Name, out var v) && !string.IsNullOrWhiteSpace(v) ? v : original);
             pos = t.Start + t.Length;
         }
         sb.Append(Unescape(text.AsSpan(pos)));
-        return sb.ToString();
+
+        var result = sb.ToString();
+        int? back = null;
+        if (cursorAt is { } at)
+            back = new System.Globalization.StringInfo(result[at..].Replace("\r\n", "\n")).LengthInTextElements;
+        return new FillResult(result, back);
     }
+
+    private static string? TokenText(string name, ITokenValues tokens) => name.ToLowerInvariant() switch
+    {
+        "clipboard" => string.IsNullOrEmpty(tokens.Clipboard) ? null : tokens.Clipboard,
+        "date" => tokens.Now.ToString("d", tokens.Culture),
+        "time" => tokens.Now.ToString("t", tokens.Culture),
+        _ => null,
+    };
 
     private static string Unescape(ReadOnlySpan<char> s) => s.ToString().Replace("{{", "{").Replace("}}", "}");
 

@@ -38,6 +38,12 @@ public sealed class TrayIcon : IDisposable
     public event EventHandler? ExitRequested;
     public event EventHandler? DoubleClicked;
 
+    /// <summary>With <see cref="LeftClickOpensSearch"/>: the icon was clicked with the left button.</summary>
+    public event EventHandler? SearchRequested;
+
+    /// <summary>True when a left click opens the search window instead of the menu (the right click always shows the menu).</summary>
+    public bool LeftClickOpensSearch { get; set; }
+
     /// <summary>The "Update to X…" item at the top of the menu was clicked.</summary>
     public event EventHandler? UpdateRequested;
 
@@ -51,6 +57,7 @@ public sealed class TrayIcon : IDisposable
     // _pendingMenu: replacing the items under the pointer would make a click pick a different prompt than the one shown.
     private bool _menuOpen;
     private QuickMenu? _pendingMenu;
+    private bool _pendingReduced;
     private bool _disposed;
 
     public TrayIcon(string tooltip) : this(tooltip, headless: false) { }
@@ -78,7 +85,9 @@ public sealed class TrayIcon : IDisposable
         ToolTipText = tooltip;
         _notifyIcon.MouseClick += (_, e) =>
         {
-            if (e.Button is Forms.MouseButtons.Left or Forms.MouseButtons.Right)
+            if (e.Button == Forms.MouseButtons.Left && LeftClickOpensSearch)
+                SearchRequested?.Invoke(this, EventArgs.Empty);
+            else if (e.Button is Forms.MouseButtons.Left or Forms.MouseButtons.Right)
                 ShowMenuAtCursor();
         };
         _notifyIcon.MouseDoubleClick += (_, e) =>
@@ -101,15 +110,17 @@ public sealed class TrayIcon : IDisposable
     /// <summary>Rebuilds the menu: Pinned, then the team block (when a team library is connected), then your
     /// own categories, then Settings, Open and Exit. While the menu is open the newest menu waits and is applied once
     /// it has closed.</summary>
-    public void Rebuild(QuickMenu menu)
+    public void Rebuild(QuickMenu menu, bool reduced = false)
     {
         if (_disposed) return;
         if (_menuOpen)
         {
             _pendingMenu = menu;
+            _pendingReduced = reduced;
             return;
         }
         _pendingMenu = null;
+        if (reduced) menu = new QuickMenu([], [], [], false); // search mode: only Open, Settings and Exit
 
         // Dispose the old items so their handles do not pile up on every save, then the icons they used.
         var old = _menu.Items.Cast<Forms.ToolStripItem>().ToList();
@@ -148,7 +159,7 @@ public sealed class TrayIcon : IDisposable
         var yours = new List<Forms.ToolStripItem>();
         if (hasTeam) yours.Add(Heading("Your prompts"));
         yours.AddRange(menu.Yours.Select(CategoryItem));
-        if (menu.Yours.Count == 0 && (hasTeam || menu.Pinned.Count == 0))
+        if (!reduced && menu.Yours.Count == 0 && (hasTeam || menu.Pinned.Count == 0))
             yours.Add(new Forms.ToolStripMenuItem("No prompts yet") { Enabled = false });
         sections.Add(yours);
 
@@ -174,7 +185,7 @@ public sealed class TrayIcon : IDisposable
             System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
                 () => ExitRequested?.Invoke(this, EventArgs.Empty));
         };
-        sections.Add([settings, open, exit]);
+        sections.Add(reduced ? [open, settings, exit] : [settings, open, exit]);
 
         // One separator between non-empty sections: never doubled, leading or trailing.
         var first = true;
@@ -202,7 +213,7 @@ public sealed class TrayIcon : IDisposable
         System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(() =>
         {
             if (_menuOpen || _pendingMenu is not { } waiting) return;
-            Rebuild(waiting);
+            Rebuild(waiting, _pendingReduced);
         });
     }
 

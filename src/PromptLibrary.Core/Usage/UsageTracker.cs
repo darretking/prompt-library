@@ -11,7 +11,7 @@ public static class UsageTracker
     /// <summary>Counts one use of the prompt at <paramref name="now"/>.</summary>
     public static void Record(AppSettings settings, Guid promptId, DateTimeOffset now)
     {
-        if (!settings.Usage.TryGetValue(promptId, out var usage))
+        if (!settings.Usage.TryGetValue(promptId, out var usage) || usage is null)
             settings.Usage[promptId] = usage = new PromptUsage();
         usage.Count++;
         usage.LastUsedAt = now;

@@ -12,7 +12,6 @@ namespace PromptLibrary.App.Views;
 /// </summary>
 public partial class SettingsWindow : Window
 {
-    private const string ShortcutIdle = "Opens your prompt menu from any app.";
     private static readonly int[] KeepChoices = [10, 30, 90, 365];
 
     private readonly AppHost _host;
@@ -31,7 +30,7 @@ public partial class SettingsWindow : Window
 
         ShortcutField.Shortcut = host.Settings.Hotkey;
         if (host.HotkeyRegistered)
-            SetShortcutStatus(ShortcutIdle, isError: false);
+            SetShortcutStatus(ShortcutIdleText(), isError: false);
         else
             SetShortcutStatus(ShortcutInUseText(), isError: true);
 
@@ -53,6 +52,19 @@ public partial class SettingsWindow : Window
         PasteBox.IsChecked = host.Settings.PasteAfterCopy;
         PasteBox.Checked += (_, _) => ApplyPasteAfterCopy(true);
         PasteBox.Unchecked += (_, _) => ApplyPasteAfterCopy(false);
+
+        RestoreBox.IsChecked = host.Settings.RestoreClipboard;
+        RestoreBox.Checked += (_, _) => ApplyRestoreClipboard(true);
+        RestoreBox.Unchecked += (_, _) => ApplyRestoreClipboard(false);
+
+        (host.Settings.ShortcutOpens == "menu" ? OpensMenuRadio : OpensSearchRadio).IsChecked = true;
+        OpensSearchRadio.Checked += (_, _) => ApplyShortcutOpens("search");
+        OpensMenuRadio.Checked += (_, _) => ApplyShortcutOpens("menu");
+
+        (host.Settings.Theme switch { "light" => ThemeLightRadio, "dark" => ThemeDarkRadio, _ => ThemeSystemRadio }).IsChecked = true;
+        ThemeSystemRadio.Checked += (_, _) => ApplyTheme("system");
+        ThemeLightRadio.Checked += (_, _) => ApplyTheme("light");
+        ThemeDarkRadio.Checked += (_, _) => ApplyTheme("dark");
 
         StartupBox.IsChecked = host.Settings.StartWithWindows;
         StartupBox.Checked += (_, _) => ApplyStartWithWindows(true);
@@ -91,6 +103,9 @@ public partial class SettingsWindow : Window
         SetShortcutStatus($"Saved. Press {_host.Settings.Hotkey} in any app to try it.", isError: false);
     }
 
+    private string ShortcutIdleText()
+        => _host.Settings.ShortcutOpens == "menu" ? "Opens your prompt menu from any app." : "Opens the search window from any app.";
+
     /// <summary><c>That shortcut is in use by another app. Try another, like Ctrl+Alt+L.</c> (a shortcut that is free now).</summary>
     private string ShortcutInUseText() => ShortcutSuggestion.InUseText(_host.IsShortcutFree);
 
@@ -113,6 +128,28 @@ public partial class SettingsWindow : Window
     private void ApplyPasteAfterCopy(bool enabled)
     {
         _host.Settings.PasteAfterCopy = enabled;
+        _host.SaveSettings();
+    }
+
+    private void ApplyRestoreClipboard(bool enabled)
+    {
+        _host.Settings.RestoreClipboard = enabled;
+        _host.SaveSettings();
+    }
+
+    private void ApplyShortcutOpens(string mode)
+    {
+        _host.Settings.ShortcutOpens = mode;
+        _host.ApplyShortcutMode(); // the tray's click and menu change at once
+        _host.SaveSettings();
+        if (_host.HotkeyRegistered)
+            SetShortcutStatus(ShortcutIdleText(), isError: false);
+    }
+
+    private void ApplyTheme(string theme)
+    {
+        _host.Settings.Theme = theme;
+        Theming.ThemeManager.Current.Apply(theme); // every open window repaints at once
         _host.SaveSettings();
     }
 

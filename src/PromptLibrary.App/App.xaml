@@ -36,6 +36,11 @@
             <Setter Property="theming:WindowBackdrop.Kind" Value="Dialog" />
         </Style>
 
+        <!-- The search window: Acrylic (transient-window backdrop) instead of Mica. -->
+        <Style x:Key="SearchWindow" TargetType="Window" BasedOn="{StaticResource AppWindow}">
+            <Setter Property="theming:WindowBackdrop.Kind" Value="Transient" />
+        </Style>
+
         <!-- Focus rings: 2 px Brand, replacing the default dotted rectangle. -->
         <Style x:Key="FocusRing">
             <Setter Property="Control.Template">
@@ -517,6 +522,43 @@
                                 <Setter TargetName="Box" Property="Background" Value="{DynamicResource Brush.BrandFill}" />
                                 <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Brush.BrandFill}" />
                                 <Setter TargetName="Tick" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Radio button: the check box look, round; a Brand dot when selected. -->
+        <Style TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Grid Background="Transparent">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border x:Name="Ring" Width="16" Height="16" VerticalAlignment="Center" CornerRadius="8"
+                                    Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Muted}"
+                                    BorderThickness="1" SnapsToDevicePixels="True">
+                                <Ellipse x:Name="Dot" Width="8" Height="8" Fill="{DynamicResource Brush.OnBrand}"
+                                         Visibility="Collapsed" />
+                            </Border>
+                            <ContentPresenter Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center"
+                                              RecognizesAccessKey="True" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Ring" Property="Background" Value="{DynamicResource Brush.BrandFill}" />
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="{DynamicResource Brush.BrandFill}" />
+                                <Setter TargetName="Dot" Property="Visibility" Value="Visible" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.5" />

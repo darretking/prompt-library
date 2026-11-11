@@ -77,6 +77,33 @@ public static class AutoPaster
         return PasteDecision.OutcomeOfSend(keys.Length, (int)accepted);
     }
 
+    /// <summary>The window that has the keyboard focus right now (zero if none).</summary>
+    public static IntPtr ForegroundWindow() => GetForegroundWindow();
+
+    /// <summary>Largest caret move sent after a paste; a longer one is skipped (the key presses would take too long).</summary>
+    public const int MaxCaretSteps = 2000;
+
+    private const ushort VK_LEFT = 0x25;
+    private const int KeysPerBatch = 200;
+
+    /// <summary>Presses Left <paramref name="count"/> times (1 to <see cref="MaxCaretSteps"/>) in the window that is in front.</summary>
+    public static bool PressLeft(int count)
+    {
+        if (count is < 1 or > MaxCaretSteps) return false;
+        for (var left = count; left > 0; left -= KeysPerBatch)
+        {
+            var n = Math.Min(left, KeysPerBatch);
+            var keys = new INPUT[n * 2];
+            for (var i = 0; i < n; i++)
+            {
+                keys[i * 2] = Key(VK_LEFT, up: false);
+                keys[i * 2 + 1] = Key(VK_LEFT, up: true);
+            }
+            if (SendInput((uint)keys.Length, keys, Marshal.SizeOf<INPUT>()) != keys.Length) return false;
+        }
+        return true;
+    }
+
     private static bool AnyModifierDown()
         => IsDown(VK_CONTROL) || IsDown(VK_MENU) || IsDown(VK_SHIFT) || IsDown(VK_LWIN) || IsDown(VK_RWIN);
 
