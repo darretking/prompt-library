@@ -11,7 +11,7 @@ public static class SeedLibrary
 {
     public static Library Create(DateTimeOffset now)
     {
-        Category C(string name) => new() { Id = Guid.NewGuid(), Name = name };
+        Category C(string name) => new() { Id = Guid.NewGuid(), Name = name, Emoji = SeedDecor.Emoji(name) };
 
         var marketing = C("Marketing");
         var website = C("Website design");
@@ -34,6 +34,7 @@ public static class SeedLibrary
             Description = description,
             CategoryId = category.Id,
             Text = text,
+            Tags = SeedDecor.Tags(title),
             CreatedAt = now,
             UpdatedAt = now,
         };

@@ -95,6 +95,7 @@ public static class JsonStore
         foreach (var prompt in library.Prompts)
         {
             prompt.Description ??= "";
+            prompt.Tags ??= [];
             if (!categoryIds.Contains(prompt.CategoryId))
                 throw new InvalidDataException($"Prompt '{prompt.Title}' references a missing category.");
         }

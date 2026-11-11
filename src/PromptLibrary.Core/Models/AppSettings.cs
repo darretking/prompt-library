@@ -46,4 +46,16 @@ public class AppSettings
 
     /// <summary>True once the first copy of the team library has been recorded as already seen.</summary>
     public bool TeamBaselineTaken { get; set; }
+
+    /// <summary>How often and when each prompt (personal or team) was last used.</summary>
+    public Dictionary<Guid, PromptUsage> Usage { get; set; } = [];
+
+    /// <summary>The last value typed for each placeholder name (key lower-cased).</summary>
+    public Dictionary<string, string> PlaceholderValues { get; set; } = [];
+
+    /// <summary><c>search</c> (default) or <c>menu</c>: what the shortcut opens.</summary>
+    public string ShortcutOpens { get; set; } = "search";
+
+    /// <summary><c>system</c> (default), <c>light</c> or <c>dark</c>.</summary>
+    public string Theme { get; set; } = "system";
 }

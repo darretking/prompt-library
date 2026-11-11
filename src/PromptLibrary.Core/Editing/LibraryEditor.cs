@@ -23,9 +23,20 @@ public class LibraryEditor(Library library, Func<DateTimeOffset> now)
     /// Deletes a category. If it holds prompts they are moved to <paramref name="movePromptsTo"/>,
     /// which must then be a different, existing category. Nothing changes if validation fails.
     /// </summary>
-    public void DeleteCategory(Guid id, Guid? movePromptsTo)
+    /// <remarks>With <paramref name="deletePrompts"/> the prompts are removed instead of moved (<paramref name="movePromptsTo"/>
+    /// is ignored). Returns the removed prompt ids (empty otherwise) so the caller can clear their pins, usage and history
+    /// (see <see cref="PromptReferences"/>).</remarks>
+    public IReadOnlyList<Guid> DeleteCategory(Guid id, Guid? movePromptsTo, bool deletePrompts = false)
     {
         var category = FindCategory(id) ?? throw new ArgumentException("Category not found.", nameof(id));
+
+        if (deletePrompts)
+        {
+            var removed = library.Prompts.Where(p => p.CategoryId == id).Select(p => p.Id).ToList();
+            library.Prompts.RemoveAll(p => p.CategoryId == id);
+            library.Categories.Remove(category);
+            return removed;
+        }
 
         if (PromptCount(id) > 0)
         {
@@ -38,6 +49,7 @@ public class LibraryEditor(Library library, Func<DateTimeOffset> now)
         }
 
         library.Categories.Remove(category);
+        return [];
     }
 
     public int PromptCount(Guid categoryId) => library.Prompts.Count(p => p.CategoryId == categoryId);
@@ -60,6 +72,17 @@ public class LibraryEditor(Library library, Func<DateTimeOffset> now)
         return prompt;
     }
 
+    /// <summary>Adds a prompt with tags (normalised, see <see cref="TagRules"/>) and a default send target.</summary>
+    public Prompt AddPrompt(Guid categoryId, string title, string description, string text,
+        IEnumerable<string>? tags, string? sendTo)
+    {
+        var prompt = AddPrompt(categoryId, title, description, text);
+        prompt.Tags = TagRules.Normalize(tags);
+        prompt.SendTo = string.IsNullOrWhiteSpace(sendTo) ? null : sendTo;
+        return prompt;
+    }
+
+    /// <summary>Updates a prompt's fields; its tags and send target stay as they are.</summary>
     public void UpdatePrompt(Guid id, string title, string description, Guid categoryId, string text)
     {
         var prompt = FindPrompt(id) ?? throw new ArgumentException("Prompt not found.", nameof(id));
@@ -69,6 +92,23 @@ public class LibraryEditor(Library library, Func<DateTimeOffset> now)
         prompt.CategoryId = categoryId;
         prompt.Text = text;
         prompt.UpdatedAt = now();
+    }
+
+    /// <summary>Updates a prompt's fields including tags (normalised) and default send target.</summary>
+    public void UpdatePrompt(Guid id, string title, string description, Guid categoryId, string text,
+        IEnumerable<string>? tags, string? sendTo)
+    {
+        UpdatePrompt(id, title, description, categoryId, text);
+        var prompt = FindPrompt(id)!;
+        prompt.Tags = TagRules.Normalize(tags);
+        prompt.SendTo = string.IsNullOrWhiteSpace(sendTo) ? null : sendTo;
+    }
+
+    /// <summary>Sets or clears a category's emoji (null or blank clears).</summary>
+    public void SetCategoryEmoji(Guid id, string? emoji)
+    {
+        var category = FindCategory(id) ?? throw new ArgumentException("Category not found.", nameof(id));
+        category.Emoji = string.IsNullOrWhiteSpace(emoji) ? null : emoji.Trim();
     }
 
     public void DeletePrompt(Guid id)
