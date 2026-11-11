@@ -5,7 +5,8 @@ using PromptLibrary.Core.Text;
 namespace PromptLibrary.Core.Editing;
 
 /// <summary>What is in the prompt editor but not saved yet.</summary>
-public sealed record UnsavedEdit(string Title, string Description, Guid? CategoryId, string? CategoryName, string Text);
+public sealed record UnsavedEdit(string Title, string Description, Guid? CategoryId, string? CategoryName, string Text,
+    IReadOnlyList<string>? Tags = null);
 
 public enum ExitEditAction
 {
@@ -43,6 +44,7 @@ public static class ExitEdits
             $"Title: {OrNone(edit.Title)}\n" +
             $"Description: {OrNone(edit.Description)}\n" +
             $"Category: {OrNone(edit.CategoryName)}\n" +
+            (edit.Tags is { Count: > 0 } tags ? $"Tags: {string.Join(", ", tags)}\n" : "") +
             "\n" +
             "Text:\n";
         return LineEndings.ToCrlf(header + edit.Text + "\n");

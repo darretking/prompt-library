@@ -14,7 +14,7 @@
     <!-- Brand: text, edges, links, focus ring. BrandFill: fills that carry white text (Copy button, ticked box). -->
     <SolidColorBrush x:Key="Brush.Brand" Color="#8B85F0" />
     <SolidColorBrush x:Key="Brush.BrandFill" Color="#4338CA" />
-    <SolidColorBrush x:Key="Brush.BrandSoft" Color="#2E2D52" />
+    <SolidColorBrush x:Key="Brush.BrandSoft" Color="#27264A" />
     <SolidColorBrush x:Key="Brush.BrandHover" Color="#3730A3" />
     <!-- Danger: text. DangerFill: the filled delete button with white text. -->
     <SolidColorBrush x:Key="Brush.Danger" Color="#F97066" />
@@ -26,4 +26,10 @@
     <SolidColorBrush x:Key="Brush.WarnText" Color="#F5D48A" />
     <!-- Text on a BrandFill or DangerFill. -->
     <SolidColorBrush x:Key="Brush.OnBrand" Color="#FFFFFF" />
+    <!-- Fenced code blocks in the prompt editor; version-history diff rows (text colours checked at 4.5:1 on their fill). -->
+    <SolidColorBrush x:Key="Brush.CodeBlock" Color="#2D323F" />
+    <SolidColorBrush x:Key="Brush.DiffAdded" Color="#1D3A29" />
+    <SolidColorBrush x:Key="Brush.DiffAddedText" Color="#A8E6BC" />
+    <SolidColorBrush x:Key="Brush.DiffRemoved" Color="#4A2226" />
+    <SolidColorBrush x:Key="Brush.DiffRemovedText" Color="#FBB8B2" />
 </ResourceDictionary>

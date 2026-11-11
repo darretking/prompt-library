@@ -1,14 +1,19 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PromptLibrary.App.Team;
 using PromptLibrary.Core.Backup;
 using PromptLibrary.Core.Editing;
+using PromptLibrary.Core.History;
 using PromptLibrary.Core.Models;
 using PromptLibrary.Core.Search;
+using PromptLibrary.Core.Send;
 using PromptLibrary.Core.Team;
+using PromptLibrary.Core.Templates;
+using PromptLibrary.Core.Usage;
 
 namespace PromptLibrary.App.ViewModels;
 
@@ -89,10 +94,17 @@ public sealed class MainViewModel : ObservableObject
     private bool _searchingBoth;
     private Guid? _categoryBeforeSearch;
 
-    public MainViewModel(IMainHost host, IDialogs dialogs)
+    // Earlier versions of personal prompts (null: none are kept, e.g. in tests) and how a Send opens its page.
+    private readonly PromptHistoryStore? _history;
+    private readonly Action<string> _openUrl;
+
+    public MainViewModel(IMainHost host, IDialogs dialogs, PromptHistoryStore? history = null,
+        Action<string>? openUrl = null)
     {
         _host = host;
         _dialogs = dialogs;
+        _history = history;
+        _openUrl = openUrl ?? OpenInBrowser;
         _personal = new PersonalDocument(host);
         if (host.Team is { } team)
         {
@@ -119,6 +131,10 @@ public sealed class MainViewModel : ObservableObject
         CheckForUpdatesCommand = new AsyncRelayCommand(CheckForUpdatesAsync, () => _host.Updates is not null);
         ShowYoursCommand = new RelayCommand(() => SwitchSide(LibrarySide.Yours));
         ShowTeamCommand = new RelayCommand(() => SwitchSide(LibrarySide.Team));
+        SendCommand = new RelayCommand<string?>(Send);
+        SetDefaultSendCommand = new RelayCommand<string?>(SetDefaultSend);
+        ShowHistoryCommand = new RelayCommand(ShowHistory);
+        MoveToCategoryCommand = new RelayCommand<Category?>(MoveToCategory);
         CopyToYoursCommand = new RelayCommand(CopyToYours);
         PinCommand = new RelayCommand<PromptRow?>(TogglePin);
         HideCommand = new RelayCommand<PromptRow?>(ToggleHide);
@@ -250,6 +266,61 @@ public sealed class MainViewModel : ObservableObject
     /// opens the copy on Your prompts.
     /// </summary>
     public IRelayCommand CopyToYoursCommand { get; }
+
+    /// <summary>Copies the prompt and opens an AI app with it; the parameter is a <c>SendTargets</c> id, null = the prompt's default.</summary>
+    public IRelayCommand<string?> SendCommand { get; }
+
+    /// <summary>Makes a Send target this prompt's default (an unsaved change; Save keeps it).</summary>
+    public IRelayCommand<string?> SetDefaultSendCommand { get; }
+
+    /// <summary>Opens the version history of the open personal prompt.</summary>
+    public IRelayCommand ShowHistoryCommand { get; }
+
+    /// <summary>Puts the open prompt in another category (an unsaved change).</summary>
+    public IRelayCommand<Category?> MoveToCategoryCommand { get; }
+
+    /// <summary>
+    /// Set by the window: shows version history for the given view model and returns when it closes. A Restore goes
+    /// through <see cref="HistoryViewModel.Restore"/> into the editor.
+    /// </summary>
+    public Func<HistoryViewModel, bool>? HistoryDialog { get; set; }
+
+    /// <summary>
+    /// Later task: set this to show the fill-in dialog. Given a prompt's text with placeholders, it returns the text
+    /// to use, or null when the user cancelled. Until then (and for prompts without placeholders) the raw text is used.
+    /// </summary>
+    public Func<string, string?>? FillInResolver { get; set; }
+
+    /// <summary>
+    /// The one place Copy and Send get their text: the editor's text, passed through <see cref="FillInResolver"/> when
+    /// it has placeholders. Null means the user cancelled the fill-in.
+    /// </summary>
+    public string? ResolveTextForUse(string text)
+        => FillInResolver is null || !PromptTemplate.HasFields(text) ? text : FillInResolver(text);
+
+    /// <summary>A short pill over the editor ("Copied", "Sent to ChatGPT", "Saved"); the window animates it.</summary>
+    public event EventHandler<string>? ToastRequested;
+
+    private void ShowToast(string text) => ToastRequested?.Invoke(this, text);
+
+    /// <summary>The remembered placeholder values, shown in the preview's chips.</summary>
+    public IDictionary<string, string> PlaceholderValues => _host.Settings.PlaceholderValues;
+
+    /// <summary>Version history is for saved personal prompts (team libraries keep their own history).</summary>
+    public bool CanShowHistory => _history is not null && !CurrentDocument.IsTeam && EditorPromptId is not null;
+
+    /// <summary>The Send menu's targets, with a check on the open prompt's default (ChatGPT unless it set another).</summary>
+    public IReadOnlyList<SendChoice> SendChoices
+    {
+        get
+        {
+            var current = SendTargets.Resolve(_editor?.SendTo).Id;
+            return SendTargets.All.Select(t => new SendChoice(t.Id, t.Name, t.Id == current)).ToList();
+        }
+    }
+
+    /// <summary>The default target's name, for tooltips.</summary>
+    public string SendDefaultName => SendTargets.Resolve(_editor?.SendTo).Name;
 
     /// <summary>Pin / Unpin the given row's prompt, or the editor's when null.</summary>
     public IRelayCommand<PromptRow?> PinCommand { get; }
@@ -668,7 +739,8 @@ public sealed class MainViewModel : ObservableObject
         if (_editor is not { IsDirty: true } editor) return null;
 
         var categoryName = CurrentDocument.Library.Categories.FirstOrDefault(c => c.Id == editor.CategoryId)?.Name;
-        return new UnsavedEdit(editor.Title, editor.Description, editor.CategoryId, categoryName, editor.Text);
+        return new UnsavedEdit(editor.Title, editor.Description, editor.CategoryId, categoryName, editor.Text,
+            [.. editor.Tags]);
     }
 
     /// <summary>Rebuilds rail, list and choices from the library, keeping selections where they still exist.</summary>
@@ -902,6 +974,7 @@ public sealed class MainViewModel : ObservableObject
 
         Guid promptId;
         PromptSnapshot onDisk;
+        Prompt? before = null; // for the history of a personal prompt
         try
         {
             var library = NewLibraryEditor();
@@ -909,12 +982,16 @@ public sealed class MainViewModel : ObservableObject
             {
                 // After an earlier failed write, the earlier snapshot is still what's on disk.
                 onDisk = _unwritten ?? PromptSnapshot.Capture(CurrentDocument.Library, existingId);
-                library.UpdatePrompt(existingId, editor.Title, editor.Description, editor.CategoryId!.Value, editor.Text);
+                if (!isTeam && CurrentDocument.Library.Prompts.FirstOrDefault(p => p.Id == existingId) is { } existing)
+                    before = ClonePrompt(existing);
+                library.UpdatePrompt(existingId, editor.Title, editor.Description, editor.CategoryId!.Value, editor.Text,
+                    editor.Tags, editor.SendTo);
                 promptId = existingId;
             }
             else
             {
-                promptId = library.AddPrompt(editor.CategoryId!.Value, editor.Title, editor.Description, editor.Text).Id;
+                promptId = library.AddPrompt(editor.CategoryId!.Value, editor.Title, editor.Description, editor.Text,
+                    editor.Tags, editor.SendTo).Id;
                 onDisk = PromptSnapshot.ForNewPrompt(promptId);
                 // A retry after a failed write must update, not add again. A team prompt counts as created only once
                 // the save has gone through: a refused save reloads the library without it, and the editor stays new.
@@ -940,13 +1017,25 @@ public sealed class MainViewModel : ObservableObject
         _unwritten = written ? null : onDisk;
         if (written)
         {
-            editor.LoadSaved(CurrentDocument.Library.Prompts.First(p => p.Id == promptId));
+            var saved = CurrentDocument.Library.Prompts.First(p => p.Id == promptId);
+            if (before is not null) _history?.Append(promptId, before, saved); // never blocks or fails the save
+            editor.LoadSaved(saved);
             editor.ShowSavedFeedback();
+            ShowToast("Saved");
         }
 
         FollowEditorCategory(editor);
         return written;
     }
+
+    private static Prompt ClonePrompt(Prompt p) => new()
+    {
+        Id = p.Id, Title = p.Title, Description = p.Description, CategoryId = p.CategoryId, Text = p.Text,
+        Tags = [.. p.Tags ?? []], SendTo = p.SendTo, CreatedAt = p.CreatedAt, UpdatedAt = p.UpdatedAt,
+    };
+
+    private static void OpenInBrowser(string url)
+        => Process.Start(new ProcessStartInfo(url) { UseShellExecute = true })?.Dispose();
 
     /// <summary>Rebuilds the lists after a prompt's Save; if the prompt moved out of the category shown, follows it.</summary>
     private void FollowEditorCategory(PromptEditorViewModel editor)
@@ -963,8 +1052,69 @@ public sealed class MainViewModel : ObservableObject
     {
         var editor = _editor;
         if (editor is null || !editor.CanCopy) return;
-        if (_host.CopyText(editor.Text, editor.DisplayTitle))
+        if (ResolveTextForUse(editor.Text) is not { } text) return;
+        if (_host.CopyText(text, editor.DisplayTitle))
+        {
             editor.ShowCopiedFeedback();
+            ShowToast("Copied");
+            RecordUsage(editor);
+        }
+    }
+
+    /// <summary>Counts a copy or send for the ranking of the search window and quick menu.</summary>
+    private void RecordUsage(PromptEditorViewModel editor)
+    {
+        if (editor.PromptId is not { } id) return;
+        UsageTracker.Record(_host.Settings, id, DateTimeOffset.Now);
+        _host.SaveSettings();
+    }
+
+    /// <summary>
+    /// Copies the prompt, opens the chosen AI app with it in the browser (a long prompt opens the app's home page
+    /// instead) and says so. The prompt is always on the clipboard.
+    /// </summary>
+    public void Send(string? targetId = null)
+    {
+        var editor = _editor;
+        if (editor is null || !editor.CanCopy) return;
+        if (ResolveTextForUse(editor.Text) is not { } text) return;
+
+        var target = SendTargets.Resolve(targetId ?? editor.SendTo);
+        if (!_host.CopyText(text, editor.DisplayTitle)) return;
+        try
+        {
+            _openUrl(target.BuildUrl(text));
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException
+                                       or UriFormatException or PlatformNotSupportedException)
+        {
+            ShowStatus($"Couldn't open {target.Name}. The prompt is on your clipboard.", FeedbackDuration);
+            return;
+        }
+
+        RecordUsage(editor);
+        ShowToast($"Sent to {target.Name}");
+        ShowStatus(target.IsTooLong(text)
+            ? $"Opened {target.Name}. The prompt is also on your clipboard: it was too long for the link, so paste it there."
+            : $"Opened {target.Name}. The prompt is also on your clipboard.", FeedbackDuration);
+    }
+
+    private void SetDefaultSend(string? targetId)
+    {
+        if (_editor is not { IsEditable: true } editor || SendTargets.Find(targetId) is not { } target) return;
+        editor.SendTo = target.Id;
+    }
+
+    private void MoveToCategory(Category? category)
+    {
+        if (_editor is { IsEditable: true } editor && category is not null) editor.CategoryId = category.Id;
+    }
+
+    private void ShowHistory()
+    {
+        if (!CanShowHistory || _editor is not { PromptId: { } id } editor || HistoryDialog is not { } show) return;
+        var versions = _history!.List(id);
+        show(new HistoryViewModel(versions, editor.Text, DateTimeOffset.Now, editor.ApplyVersion));
     }
 
     /// <summary>Deletes the prompt in the editor after asking (a new, unsaved prompt is just dropped).</summary>
@@ -998,10 +1148,13 @@ public sealed class MainViewModel : ObservableObject
         Editor = null;
         SaveChange(); // on failure the deletion stays and is written later (the host says so)
         // A deleted prompt is unpinned. A team delete is pruned once it has been saved (a refused one comes back pinned).
-        if (!CurrentDocument.IsTeam && _host.Settings.PinnedPromptIds.Contains(id))
+        if (!CurrentDocument.IsTeam)
         {
-            TeamUserState.Unpin(_host.Settings, id);
-            SaveTeamState();
+            _history?.Delete(id);
+            var settings = _host.Settings;
+            var referenced = settings.PinnedPromptIds.Contains(id) || settings.Usage.ContainsKey(id);
+            PromptReferences.Remove(settings, [id]);
+            if (referenced) SaveTeamState();
         }
         RebuildCategories(_selectedCategory?.Id);
         RefreshPrompts();
@@ -1296,6 +1449,11 @@ public sealed class MainViewModel : ObservableObject
     {
         if (e.PropertyName == nameof(PromptEditorViewModel.IsDirty))
             OnPropertyChanged(nameof(WindowTitle));
+        else if (e.PropertyName == nameof(PromptEditorViewModel.SendTo))
+        {
+            OnPropertyChanged(nameof(SendChoices));
+            OnPropertyChanged(nameof(SendDefaultName));
+        }
     }
 
     // ---- Team side -----------------------------------------------------------------------------
@@ -1377,7 +1535,7 @@ public sealed class MainViewModel : ObservableObject
             category = personal.Categories.FirstOrDefault(c =>
                            string.Equals(c.Name.Trim(), categoryName, StringComparison.OrdinalIgnoreCase))
                        ?? editor.AddCategory(categoryName);
-            copy = editor.AddPrompt(category.Id, source.Title, source.Description, source.Text);
+            copy = editor.AddPrompt(category.Id, source.Title, source.Description, source.Text, source.Tags, null);
         }
         catch (ArgumentException ex)
         {
@@ -1738,6 +1896,9 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(CanPin));
         OnPropertyChanged(nameof(HideLabel));
         OnPropertyChanged(nameof(EditorCategoryName));
+        OnPropertyChanged(nameof(CanShowHistory));
+        OnPropertyChanged(nameof(SendChoices));
+        OnPropertyChanged(nameof(SendDefaultName));
     }
 
     private void RaiseMarkerState()

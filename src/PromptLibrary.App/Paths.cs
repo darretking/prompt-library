@@ -32,6 +32,9 @@ public static class Paths
     public static string RecoveredFolder { get; } = Path.Combine(DataFolder, "Recovered");
 
     /// <summary>Unexpected errors, appended by the crash handler.</summary>
+    /// <summary>Earlier versions of each personal prompt, one file per prompt.</summary>
+    public static string HistoryFolder { get; } = Path.Combine(DataFolder, "History");
+
     public static string CrashLogFile { get; } = Path.Combine(DataFolder, "crash.log");
 
     /// <summary>Safety copies made before a restore when no backup folder is set or it isn't available.</summary>

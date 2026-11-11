@@ -1,5 +1,8 @@
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using PromptLibrary.Core.History;
 using PromptLibrary.Core.Models;
 
 namespace PromptLibrary.App.ViewModels;
@@ -19,7 +22,10 @@ public sealed class PromptEditorViewModel : ObservableObject
     private string _description = "";
     private Guid? _categoryId;
     private string _text = "";
+    private string? _sendTo;
 
+    private List<string> _savedTags = [];
+    private string? _savedSendTo;
     private string _savedTitle = "";
     private string _savedDescription = "";
     private Guid? _savedCategoryId;
@@ -31,10 +37,12 @@ public sealed class PromptEditorViewModel : ObservableObject
     private bool _showCopied;
     private bool _showSaved;
     private bool _isReadOnly;
+    private bool _isPreview;
 
     private PromptEditorViewModel(Guid? promptId)
     {
         PromptId = promptId;
+        Tags.CollectionChanged += OnTagsChanged;
         _copiedTimer = new DispatcherTimer { Interval = FeedbackDuration };
         _copiedTimer.Tick += (_, _) =>
         {
@@ -122,6 +130,57 @@ public sealed class PromptEditorViewModel : ObservableObject
         }
     }
 
+    /// <summary>True while the prompt box shows the read-only preview (placeholders as chips) instead of the editor.</summary>
+    public bool IsPreview
+    {
+        get => _isPreview;
+        set
+        {
+            if (!SetProperty(ref _isPreview, value)) return;
+            OnPropertyChanged(nameof(IsEditMode));
+        }
+    }
+
+    /// <summary>The opposite of <see cref="IsPreview"/> (for the Edit side of the Edit | Preview switch).</summary>
+    public bool IsEditMode
+    {
+        get => !_isPreview;
+        set => IsPreview = !value;
+    }
+
+    /// <summary>The prompt's tags, in order (kept normalised by the tag box; <see cref="TagRules"/> on save).</summary>
+    public ObservableCollection<string> Tags { get; } = [];
+
+    /// <summary>The prompt's own default Send to target (an id from <c>SendTargets</c>), or null for the app default.</summary>
+    public string? SendTo
+    {
+        get => _sendTo;
+        set
+        {
+            value = string.IsNullOrWhiteSpace(value) ? null : value;
+            if (!SetProperty(ref _sendTo, value)) return;
+            OnPropertyChanged(nameof(IsDirty));
+        }
+    }
+
+    private void OnTagsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (!_loadingTags) OnPropertyChanged(nameof(IsDirty));
+    }
+
+    private bool _loadingTags;
+
+    private void SetTags(IEnumerable<string> tags)
+    {
+        _loadingTags = true;
+        try
+        {
+            Tags.Clear();
+            foreach (var tag in tags) Tags.Add(tag);
+        }
+        finally { _loadingTags = false; }
+    }
+
     public string Text
     {
         get => _text;
@@ -140,7 +199,9 @@ public sealed class PromptEditorViewModel : ObservableObject
         _title != _savedTitle
         || _description != _savedDescription
         || _categoryId != _savedCategoryId
-        || _text != _savedText;
+        || _text != _savedText
+        || _sendTo != _savedSendTo
+        || !Tags.SequenceEqual(_savedTags);
 
     /// <summary>Live count above the prompt slip, e.g. <c>412 characters · 9 lines</c>.</summary>
     public string TextStats
@@ -253,6 +314,8 @@ public sealed class PromptEditorViewModel : ObservableObject
     {
         PromptId = null;
         _savedTitle = _savedDescription = _savedText = "";
+        _savedTags = [];
+        _savedSendTo = null;
         _savedCategoryId = categoryId;
         _categoryId = categoryId;
         OnPropertyChanged(nameof(PromptId));
@@ -268,6 +331,8 @@ public sealed class PromptEditorViewModel : ObservableObject
         _savedDescription = prompt.Description;
         _savedCategoryId = prompt.CategoryId;
         _savedText = prompt.Text;
+        _savedTags = [.. prompt.Tags ?? []];
+        _savedSendTo = prompt.SendTo;
         Revert();
     }
 
@@ -279,7 +344,23 @@ public sealed class PromptEditorViewModel : ObservableObject
         _categoryId = _savedCategoryId;
         OnPropertyChanged(nameof(CategoryId));
         Text = _savedText;
+        SetTags(_savedTags);
+        SendTo = _savedSendTo;
         TitleError = TextError = CategoryError = null;
+        OnPropertyChanged(nameof(IsDirty));
+    }
+
+    /// <summary>
+    /// Version history's "Restore this version": the fields take the old version's values as unsaved changes
+    /// (the category and default send target stay as they are).
+    /// </summary>
+    public void ApplyVersion(PromptVersion version)
+    {
+        Title = version.Title;
+        Description = version.Description;
+        Text = version.Text;
+        SetTags(TagRules.Normalize(version.Tags));
+        TitleError = TextError = null;
         OnPropertyChanged(nameof(IsDirty));
     }
 

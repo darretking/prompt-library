@@ -26,4 +26,10 @@
     <SolidColorBrush x:Key="Brush.WarnText" Color="#6B4A00" />
     <!-- Text on a BrandFill or DangerFill. -->
     <SolidColorBrush x:Key="Brush.OnBrand" Color="#FFFFFF" />
+    <!-- Fenced code blocks in the prompt editor; version-history diff rows (text colours checked at 4.5:1 on their fill). -->
+    <SolidColorBrush x:Key="Brush.CodeBlock" Color="#F0F2F6" />
+    <SolidColorBrush x:Key="Brush.DiffAdded" Color="#E3F4E8" />
+    <SolidColorBrush x:Key="Brush.DiffAddedText" Color="#14532D" />
+    <SolidColorBrush x:Key="Brush.DiffRemoved" Color="#FCE8E6" />
+    <SolidColorBrush x:Key="Brush.DiffRemovedText" Color="#8A1C14" />
 </ResourceDictionary>

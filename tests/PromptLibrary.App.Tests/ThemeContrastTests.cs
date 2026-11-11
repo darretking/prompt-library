@@ -38,6 +38,11 @@ public class ThemeContrastTests
         Check("Brush.OnBrand", "Brush.DangerFill");
         Check("Brush.OnBrand", "Brush.DangerHover");
         Check("Brush.WarnText", "Brush.Warn");
+        Check("Brush.Brand", "Brush.BrandSoft");
+        Check("Brush.Ink", "Brush.CodeBlock");
+        Check("Brush.Muted", "Brush.CodeBlock");
+        Check("Brush.DiffAddedText", "Brush.DiffAdded");
+        Check("Brush.DiffRemovedText", "Brush.DiffRemoved");
 
         Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
     }

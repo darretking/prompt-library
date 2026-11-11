@@ -20,7 +20,7 @@ Define once as `SolidColorBrush` resources in `Themes/Light.xaml` and `Themes/Da
 | `Brush.Line` | `#D6DBE3` | `#353B48` | Field borders, column dividers |
 | `Brush.Brand` | `#4338CA` | `#8B85F0` | Selection edge, focus ring, links, brand text. Matches the app icon (indigo bubble). |
 | `Brush.BrandFill` | `#4338CA` | `#4338CA` | Copy button and ticked checkbox fill, with white text |
-| `Brush.BrandSoft` | `#E8E7FB` | `#2E2D52` | Selected list item background |
+| `Brush.BrandSoft` | `#E8E7FB` | `#27264A` | Selected list item background |
 | `Brush.Accent` | `#F5A524` | `#F5A524` | Bookmark amber from the icon. Use sparingly: onboarding illustration only, never for text. |
 | `Brush.Danger` | `#B42318` | `#F97066` | Delete confirmation text, error text |
 | `Brush.DangerFill` | `#B42318` | `#B42318` | Filled delete button, with white text |

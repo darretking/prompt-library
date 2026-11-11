@@ -49,6 +49,14 @@ public class ExitEditsTests
     }
 
     [Fact]
+    public void RecoveryText_WithTags_HasATagsLine()
+    {
+        var text = ExitEdits.RecoveryText(Edit() with { Tags = ["review", "code"] }, Now);
+
+        Assert.Contains("Category: Coding\r\nTags: review, code\r\n\r\nText:", text);
+    }
+
+    [Fact]
     public void RecoveryText_EmptyFieldsAndNoCategory_SayNone()
     {
         var text = ExitEdits.RecoveryText(Edit(title: "", text: "", description: "", categoryName: null), Now);
