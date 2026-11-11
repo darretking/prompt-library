@@ -6,7 +6,7 @@ namespace PromptLibrary.App.Tests;
 /// <summary>Runs a test body on its own STA thread (WPF windows need one) and rethrows what it threw.</summary>
 internal static class Sta
 {
-    public static void Run(Action body)
+    public static void Run(Action body, int timeoutSeconds = 30)
     {
         ExceptionDispatchInfo? failure = null;
         var thread = new Thread(() =>
@@ -17,8 +17,8 @@ internal static class Sta
         });
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
-        if (!thread.Join(TimeSpan.FromSeconds(30)))
-            throw new TimeoutException("The STA test body didn't finish within 30 s.");
+        if (!thread.Join(TimeSpan.FromSeconds(timeoutSeconds)))
+            throw new TimeoutException("The STA test body didn't finish within the time limit.");
         failure?.Throw();
     }
 
