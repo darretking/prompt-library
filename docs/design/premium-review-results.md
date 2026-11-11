@@ -46,3 +46,11 @@ Main gaps:
 Ruling R15: the rubric's U4 limit of "≤ 150 ms" contradicted the spec and Microsoft's Fluent motion ramp (83/167 ms). It now follows the Fluent ramp.
 Ruling R14: category emoji are drawn in colour with Emoji.Wpf (WTFPL licence), because single-colour glyphs look cheap.
 Ruling R16: the File/Help menu bar stays, since it's a familiar Windows pattern, but it's restyled flat with theme tokens.
+
+## Round 2 (2026-11-11), new independent reviewer: 77.2 %, FAIL
+
+F1 8 · F2 8 · F3 8 · F4 9 · F5 9 · F6 8 · F7 7 · F8 8 · U1 7 · U2 8 · U3 7 · U4 6 · U5 8 · U6 8 · U7 7 · U8 7.
+This reviewer was new and viewed only about 16 of 28 screens, so its calibration differs from round 1. From now on the same
+reviewer is reused every round so scores are comparable. Its verdict: the search window meets launcher expectations; the
+main window "looks like a good internal tool": flat, no depth, a huge empty editor, Save and "…" drifting along the bottom,
+dim muted text, plain rail rows, generic empty states. Idle memory (~190 MB) is too high.
