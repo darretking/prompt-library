@@ -30,10 +30,10 @@ category is mostly speed, reach, reliability and trust; visual polish matters le
 | U1 | Visual craft | 7 | Mica/rounded corners, consistent radii and spacing, balanced density, crisp icons, no default-WPF look anywhere. |
 | U2 | Dark mode | 5 | Follows Windows live; every window/state readable; no white flashes or stray light controls. |
 | U3 | Hierarchy & calm | 7 | Prompt text and the primary action dominate; secondary actions tucked in overflow; no clutter. |
-| U4 | Motion & feedback | 4 | Subtle (≤ 150 ms) fades, toast on copy/send/save, nothing jumps or flickers. |
+| U4 | Motion & feedback | 4 | Subtle fades on the Fluent ramp (83/167 ms, Fluent easing), toast on copy/send/save, nothing jumps or flickers. |
 | U5 | Search window | 10 | Feels like a launcher: instant focus, keyboard-only, clear selection, preview, footer hints, closes cleanly. |
 | U6 | Editor | 4 | Highlighted placeholders/markdown, preview toggle, chip tags, in-place title; text round-trips exactly. |
 | U7 | Accessibility | 4 | Contrast ≥ 4.5:1 both themes, focus visible, automation names, works at 150 %/200 %. |
-| U8 | Footprint | 4 | Search window opens < 150 ms after the shortcut (pre-created, hidden); low idle memory; no lag typing. |
+| U8 | Footprint | 4 | Search window opens < 150 ms after the shortcut (measured by a test) (pre-created, hidden); low idle memory; no lag typing. |
 
 Record each round's per-criterion scores, evidence and fixes in `docs/design/premium-review-results.md`.

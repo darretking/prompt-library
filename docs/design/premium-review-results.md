@@ -17,3 +17,32 @@ titlebar-design, iconography, timing-and-easing, page-transitions and keyboard-a
 PowerToys Command Palette overview and settings; WPF what's new in .NET 9 and .NET 10; github lepoco/wpfui,
 Kinnara/ModernWpf, iNKORE-NET/UI.WPF.Modern, Flow-Launcher. Recommendation: hand-rolled styles on our own tokens plus
 DWM calls, because the built-in WPF Fluent ThemeMode is still incomplete or experimental in .NET 10.
+
+## Round 1 (2026-11-11), independent reviewer: 78.7 %, FAIL
+
+| ID | wt | pts | | ID | wt | pts |
+|---|---|---|---|---|---|---|
+| F1 | 11 | 9 | | U1 | 7 | 7 |
+| F2 | 10 | 8 | | U2 | 5 | 8 |
+| F3 | 7 | 8 | | U3 | 7 | 7 |
+| F4 | 5 | 8 | | U4 | 4 | 6 |
+| F5 | 5 | 8 | | U5 | 10 | 9 |
+| F6 | 3 | 8 | | U6 | 4 | 7 |
+| F7 | 8 | 7.5 | | U7 | 4 | 7 |
+| F8 | 6 | 8 | | U8 | 4 | 8 |
+
+Main gaps:
+- Preview only restyles the text.
+- Pasting relies on fixed delays, and nothing visible appears in the app after a paste.
+- Speed isn't measured.
+- The menu bar looks native.
+- Emoji draw in one colour.
+- The fill-in form is cramped.
+- The title and description don't look editable.
+- Rail labels get cut off.
+- The delete-category dialog contradicts itself.
+- Search-window placement uses the wrong monitor's DPI.
+
+Ruling R15: the rubric's U4 limit of "≤ 150 ms" contradicted the spec and Microsoft's Fluent motion ramp (83/167 ms). It now follows the Fluent ramp.
+Ruling R14: category emoji are drawn in colour with Emoji.Wpf (WTFPL licence), because single-colour glyphs look cheap.
+Ruling R16: the File/Help menu bar stays, since it's a familiar Windows pattern, but it's restyled flat with theme tokens.
