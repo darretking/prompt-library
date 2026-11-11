@@ -37,6 +37,10 @@ public partial class App : Application
         // Lets the WinForms tray menu get keyboard and mouse handling inside the WPF message loop.
         WindowsFormsHost.EnableWindowsFormsInterop();
 
+        // Light/dark palette and Windows 11 window chrome; the Theme setting overrides "system" later.
+        Theming.WindowBackdrop.Register();
+        Theming.ThemeManager.Current.Apply("system");
+
         _host = new AppHost();
         HandleCrashes(_host);
         if (!_host.Start())

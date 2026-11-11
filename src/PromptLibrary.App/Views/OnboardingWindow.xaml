@@ -63,7 +63,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Border MinWidth="56" Height="48" Margin="0,0,8,0" Padding="16,0"
-                                        Background="{StaticResource Brush.Surface}" BorderBrush="{StaticResource Brush.Line}"
+                                        Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Line}"
                                         BorderThickness="1,1,1,3" CornerRadius="{StaticResource Radius}">
                                     <TextBlock Text="{Binding}" FontSize="18" FontWeight="SemiBold"
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -78,7 +78,7 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Path Width="16" Height="16" Margin="0,2,8,0" VerticalAlignment="Top" Data="M1.5,8.5 L6,13 L14.5,3.5"
-                              Stroke="{StaticResource Brush.Brand}" StrokeThickness="2" />
+                              Stroke="{DynamicResource Brush.Brand}" StrokeThickness="2" />
                         <TextBlock Grid.Column="1" Style="{StaticResource Body}" AutomationProperties.LiveSetting="Polite"
                                    Text="That's it. In any other app, this opens your prompt menu — pick a prompt and it's pasted where you were typing." />
                     </Grid>
@@ -97,7 +97,7 @@
                                 <Style TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding ShortcutStatusIsError}" Value="True">
-                                            <Setter Property="Foreground" Value="{StaticResource Brush.Danger}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Danger}" />
                                         </DataTrigger>
                                         <Trigger Property="Text" Value="{x:Null}">
                                             <Setter Property="Visibility" Value="Collapsed" />
@@ -130,7 +130,7 @@
                                 Visibility="{Binding Team.IsConnected, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel Orientation="Horizontal">
                             <Path Width="16" Height="16" Margin="0,2,8,0" VerticalAlignment="Top" Data="M1.5,8.5 L6,13 L14.5,3.5"
-                                  Stroke="{StaticResource Brush.Brand}" StrokeThickness="2" />
+                                  Stroke="{DynamicResource Brush.Brand}" StrokeThickness="2" />
                             <TextBlock Text="{Binding Team.ConnectedLine}" Style="{StaticResource Body}"
                                        AutomationProperties.LiveSetting="Polite" />
                         </StackPanel>
@@ -156,8 +156,8 @@
                     <TextBlock Text="You're all set" Style="{StaticResource Heading}" />
                     <TextBlock Text="{Binding ReadyText}" Style="{StaticResource Body}" />
 
-                    <Border Margin="0,16,0,0" Padding="16,12" Background="{StaticResource Brush.Surface}"
-                            BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
+                    <Border Margin="0,16,0,0" Padding="16,12" Background="{DynamicResource Brush.Surface}"
+                            BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1"
                             CornerRadius="{StaticResource Radius}">
                         <StackPanel>
                             <TextBlock Text="{Binding ShortcutSummary}" TextWrapping="Wrap" />
@@ -179,7 +179,7 @@
         </ScrollViewer>
 
         <!-- Footer: one quiet link on the left (steps 1 and 4 only), then the step count, Back and Next/Finish. -->
-        <Border Grid.Row="1" BorderBrush="{StaticResource Brush.Line}" BorderThickness="0,1,0,0" Padding="32,16">
+        <Border Grid.Row="1" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,1,0,0" Padding="32,16">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />

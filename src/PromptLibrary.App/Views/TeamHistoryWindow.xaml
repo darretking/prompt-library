@@ -20,8 +20,8 @@
         <TextBlock Text="Versions of the team library" Style="{StaticResource FieldLabel}" />
         <TextBlock x:Name="NameText" Style="{StaticResource MutedText}" TextTrimming="CharacterEllipsis" />
 
-        <Border Margin="0,8,0,0" Height="240" Background="{StaticResource Brush.Surface}"
-                BorderBrush="{StaticResource Brush.Line}" BorderThickness="1" CornerRadius="{StaticResource Radius}">
+        <Border Margin="0,8,0,0" Height="240" Background="{DynamicResource Brush.Surface}"
+                BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1" CornerRadius="{StaticResource Radius}">
             <Grid>
                 <ListBox x:Name="VersionList" Style="{StaticResource PlainList}" Margin="0,4"
                          ItemContainerStyle="{StaticResource VersionRow}"

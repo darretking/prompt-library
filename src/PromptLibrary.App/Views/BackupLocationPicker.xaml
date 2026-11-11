@@ -6,9 +6,9 @@
         <!-- A folder card is a button: provider name over the folder backups go to. The card in use has the
              list-selection look (BrandSoft fill, 3 px Brand left edge) plus "✓ In use". -->
         <Style x:Key="CardButton" TargetType="Button">
-            <Setter Property="Foreground" Value="{StaticResource Brush.Ink}" />
-            <Setter Property="Background" Value="{StaticResource Brush.Surface}" />
-            <Setter Property="BorderBrush" Value="{StaticResource Brush.Line}" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Line}" />
             <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
             <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
             <Setter Property="Template">
@@ -18,7 +18,7 @@
                             <Border x:Name="Frame" Background="{TemplateBinding Background}"
                                     BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
                                     CornerRadius="{StaticResource Radius}" />
-                            <Border x:Name="Edge" Width="3" HorizontalAlignment="Left" Background="{StaticResource Brush.Brand}"
+                            <Border x:Name="Edge" Width="3" HorizontalAlignment="Left" Background="{DynamicResource Brush.Brand}"
                                     CornerRadius="4,0,0,4" Visibility="Collapsed" />
                             <Grid Margin="16,8,12,8">
                                 <Grid.ColumnDefinitions>
@@ -32,9 +32,9 @@
                                 <StackPanel x:Name="InUse" Grid.Column="1" Orientation="Horizontal" Margin="8,0,0,0"
                                             VerticalAlignment="Center" Visibility="Collapsed">
                                     <Path Width="14" Height="14" Data="M1.5,7.5 L5.5,11.5 L12.5,3" VerticalAlignment="Center"
-                                          Stroke="{StaticResource Brush.Brand}" StrokeThickness="2" />
+                                          Stroke="{DynamicResource Brush.Brand}" StrokeThickness="2" />
                                     <TextBlock Text="{Binding BadgeText}" FontSize="12" FontWeight="SemiBold" Margin="4,0,0,0"
-                                               Foreground="{StaticResource Brush.Brand}" VerticalAlignment="Center" />
+                                               Foreground="{DynamicResource Brush.Brand}" VerticalAlignment="Center" />
                                 </StackPanel>
                                 <TextBlock x:Name="Busy" Grid.Column="1" Text="Backing up…" Style="{StaticResource MutedText}"
                                            Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" />
@@ -42,12 +42,12 @@
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Frame" Property="Background" Value="{StaticResource Brush.Window}" />
+                                <Setter TargetName="Frame" Property="Background" Value="{DynamicResource Brush.Window}" />
                                 <Setter Property="Cursor" Value="Hand" />
                             </Trigger>
                             <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
-                                <Setter TargetName="Frame" Property="Background" Value="{StaticResource Brush.BrandSoft}" />
-                                <Setter TargetName="Frame" Property="BorderBrush" Value="{StaticResource Brush.Brand}" />
+                                <Setter TargetName="Frame" Property="Background" Value="{DynamicResource Brush.BrandSoft}" />
+                                <Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource Brush.Brand}" />
                                 <Setter TargetName="Edge" Property="Visibility" Value="Visible" />
                                 <Setter TargetName="InUse" Property="Visibility" Value="Visible" />
                             </DataTrigger>
@@ -56,7 +56,7 @@
                                 <Setter TargetName="Busy" Property="Visibility" Value="Visible" />
                             </DataTrigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Frame" Property="Background" Value="{StaticResource Brush.BrandSoft}" />
+                                <Setter TargetName="Frame" Property="Background" Value="{DynamicResource Brush.BrandSoft}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -133,7 +133,7 @@
             </Grid.ColumnDefinitions>
             <!-- ✓ before a success ("Backed up to OneDrive."), none before a failure. -->
             <Path Width="14" Height="14" Margin="0,2,6,0" VerticalAlignment="Top" Data="M1.5,7.5 L5.5,11.5 L12.5,3"
-                  Stroke="{StaticResource Brush.Brand}" StrokeThickness="2">
+                  Stroke="{DynamicResource Brush.Brand}" StrokeThickness="2">
                 <Path.Style>
                     <Style TargetType="Path">
                         <Style.Triggers>
@@ -148,10 +148,10 @@
                        AutomationProperties.LiveSetting="Polite">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
-                        <Setter Property="Foreground" Value="{StaticResource Brush.Ink}" />
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding ResultIsError}" Value="True">
-                                <Setter Property="Foreground" Value="{StaticResource Brush.Danger}" />
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Danger}" />
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>

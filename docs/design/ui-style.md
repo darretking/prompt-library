@@ -1,6 +1,6 @@
 # Prompt Library — UI style guide
 
-Applies to every WPF window (main window, Settings, Restore, Move-category dialog) and to tray messages. The quick menu stays a **native Windows menu** — it should look like every other context menu on the machine, so it gets no custom styling.
+Applies to every WPF window (main window, Settings, Restore, Move-category dialog) and to tray messages. The shortcut opens the search window by default; the classic native Windows menu remains an option.
 
 ## What the design is about
 
@@ -8,21 +8,28 @@ A prompt is a block of text you copy and paste into a terminal or chat box. The 
 
 ## Colour tokens
 
-Define once in `App.xaml` as `SolidColorBrush` resources; never hard-code hex in views.
+Define once as `SolidColorBrush` resources in `Themes/Light.xaml` and `Themes/Dark.xaml` (same keys; `ThemeManager` swaps the active one into `App.xaml`). Views use `{DynamicResource Brush.*}` and never hard-code hex. The theme follows Windows unless Settings overrides it.
 
-| Token | Hex | Use |
-|---|---|---|
-| `Brush.Window` | `#F6F7F9` | Window background, middle column |
-| `Brush.Rail` | `#ECEFF3` | Left category rail |
-| `Brush.Surface` | `#FFFFFF` | Editor fields, prompt slip |
-| `Brush.Ink` | `#1B2230` | Primary text |
-| `Brush.Muted` | `#5A6475` | Descriptions, helper text, counts (≥ 4.5:1 on all backgrounds above) |
-| `Brush.Line` | `#D6DBE3` | Field borders, column dividers |
-| `Brush.Brand` | `#4338CA` | Copy button, selection edge, focus ring, links. Matches the app icon (indigo bubble). |
-| `Brush.BrandSoft` | `#E8E7FB` | Selected list item background |
-| `Brush.Accent` | `#F5A524` | Bookmark amber from the icon. Use sparingly: onboarding illustration only, never for text. |
-| `Brush.Danger` | `#B42318` | Delete confirmation text, error text |
-| `Brush.Warn` | `#FFF4D6` / text `#6B4A00` | "Backups are off" bar |
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `Brush.Window` | `#F6F7F9` | `#1C1F26` | Window background, middle column |
+| `Brush.Rail` | `#ECEFF3` | `#161920` | Left category rail |
+| `Brush.Surface` | `#FFFFFF` | `#242833` | Editor fields, prompt slip |
+| `Brush.Ink` | `#1B2230` | `#E8EAF0` | Primary text |
+| `Brush.Muted` | `#5A6475` | `#A0A8B8` | Descriptions, helper text, counts (≥ 4.5:1 on Window, Rail and Surface) |
+| `Brush.Line` | `#D6DBE3` | `#353B48` | Field borders, column dividers |
+| `Brush.Brand` | `#4338CA` | `#8B85F0` | Selection edge, focus ring, links, brand text. Matches the app icon (indigo bubble). |
+| `Brush.BrandFill` | `#4338CA` | `#4338CA` | Copy button and ticked checkbox fill, with white text |
+| `Brush.BrandSoft` | `#E8E7FB` | `#2E2D52` | Selected list item background |
+| `Brush.Accent` | `#F5A524` | `#F5A524` | Bookmark amber from the icon. Use sparingly: onboarding illustration only, never for text. |
+| `Brush.Danger` | `#B42318` | `#F97066` | Delete confirmation text, error text |
+| `Brush.DangerFill` | `#B42318` | `#B42318` | Filled delete button, with white text |
+| `Brush.Warn` / text | `#FFF4D6` / `#6B4A00` | `#3A2F12` / `#F5D48A` | "Backups are off" bar |
+| `Brush.WindowBackdrop`, `Brush.RailBackdrop` | = Window, Rail | = Window, Rail | The window and rail areas that show Mica; translucent tints of Window/Rail while Mica is active |
+
+All text pairs are checked at ≥ 4.5:1 by `ThemeContrastTests`.
+
+On Windows 11 every window gets a dark title bar (dark theme), rounded corners and a Mica backdrop (`Theming/WindowBackdrop`; dialogs use the lighter transient backdrop). Mica shows only through the Window and Rail areas; editor fields and the prompt slip stay opaque for readability. On Windows 10 these are skipped and the solid tokens apply. Toasts may fade over 150 ms; nothing else animates.
 
 No gradients. No drop shadows inside the window (Windows draws the window shadow).
 

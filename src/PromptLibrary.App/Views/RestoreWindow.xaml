@@ -21,7 +21,7 @@
                         <Style TargetType="TextBlock">
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding IsReadable}" Value="False">
-                                    <Setter Property="Foreground" Value="{StaticResource Brush.Muted}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Muted}" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -44,7 +44,7 @@
 
         <!-- A quiet show/hide header: chevron (right when closed, down when open) and a semibold label. -->
         <Style x:Key="DisclosureToggle" TargetType="ToggleButton">
-            <Setter Property="Foreground" Value="{StaticResource Brush.Ink}" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
             <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
@@ -81,8 +81,8 @@
                     AutomationProperties.Name="Look in another folder" />
         </Grid>
 
-        <Border Margin="0,8,0,0" Height="240" Background="{StaticResource Brush.Surface}"
-                BorderBrush="{StaticResource Brush.Line}" BorderThickness="1" CornerRadius="{StaticResource Radius}">
+        <Border Margin="0,8,0,0" Height="240" Background="{DynamicResource Brush.Surface}"
+                BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1" CornerRadius="{StaticResource Radius}">
             <Grid>
                 <ListBox x:Name="BackupList" Style="{StaticResource PlainList}" Margin="0,4"
                          ItemContainerStyle="{StaticResource BackupRow}"
@@ -105,8 +105,8 @@
                       Content="Safety copies (made before a restore)"
                       ToolTip="Your library as it was just before each earlier restore"
                       AutomationProperties.Name="Safety copies (made before a restore)" />
-        <Border x:Name="SafetyFrame" Margin="0,8,0,0" Height="120" Background="{StaticResource Brush.Surface}"
-                BorderBrush="{StaticResource Brush.Line}" BorderThickness="1" CornerRadius="{StaticResource Radius}"
+        <Border x:Name="SafetyFrame" Margin="0,8,0,0" Height="120" Background="{DynamicResource Brush.Surface}"
+                BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1" CornerRadius="{StaticResource Radius}"
                 Visibility="{Binding IsChecked, ElementName=SafetyToggle, Converter={StaticResource BoolToVisibility}}">
             <ListBox x:Name="SafetyList" Style="{StaticResource PlainList}" Margin="0,4"
                      ItemContainerStyle="{StaticResource BackupRow}"

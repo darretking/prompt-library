@@ -62,7 +62,7 @@
         <!-- One half of the "Your prompts | Team prompts" switch; Tag is true on the side shown. -->
         <Style x:Key="SegmentButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Foreground" Value="{StaticResource Brush.Ink}" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
             <Setter Property="Padding" Value="16,0" />
             <Setter Property="MinHeight" Value="28" />
             <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
@@ -78,11 +78,11 @@
             </Setter>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{StaticResource Brush.Window}" />
+                    <Setter Property="Background" Value="{DynamicResource Brush.Window}" />
                 </Trigger>
                 <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="True">
-                    <Setter Property="Background" Value="{StaticResource Brush.BrandSoft}" />
-                    <Setter Property="Foreground" Value="{StaticResource Brush.Brand}" />
+                    <Setter Property="Background" Value="{DynamicResource Brush.BrandSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Brand}" />
                     <Setter Property="FontWeight" Value="SemiBold" />
                     <Setter Property="AutomationProperties.ItemStatus" Value="Shown" />
                 </DataTrigger>
@@ -145,7 +145,7 @@
     </Window.Resources>
 
     <DockPanel>
-        <Menu DockPanel.Dock="Top" BorderBrush="{StaticResource Brush.Line}" BorderThickness="0,0,0,1"
+        <Menu DockPanel.Dock="Top" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,0,1"
               AutomationProperties.Name="Menu">
             <MenuItem Header="_File" AutomationProperties.Name="File">
                 <MenuItem Header="_Back up now" Command="{Binding BackupNowCommand}" />
@@ -171,13 +171,13 @@
 
             <!-- Once a team library is connected: the "Your prompts | Team prompts" switch over the three columns
                  (Ctrl+1 / Ctrl+2). The Team half carries the team icon and a dot while something is new or updated. -->
-            <Border x:Name="SwitchBar" Grid.Row="1" Background="{StaticResource Brush.Rail}" Padding="16,8"
-                    BorderBrush="{StaticResource Brush.Line}" BorderThickness="0,0,0,1"
+            <Border x:Name="SwitchBar" Grid.Row="1" Background="{DynamicResource Brush.RailBackdrop}" Padding="16,8"
+                    BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,0,1"
                     SizeChanged="TeamBars_SizeChanged" IsVisibleChanged="TeamBars_IsVisibleChanged"
                     Visibility="{Binding ShowSwitch, Converter={StaticResource BoolToVisibility}}">
                 <DockPanel>
-                    <Border DockPanel.Dock="Left" VerticalAlignment="Top" Background="{StaticResource Brush.Surface}"
-                            BorderBrush="{StaticResource Brush.Line}" BorderThickness="1"
+                    <Border DockPanel.Dock="Left" VerticalAlignment="Top" Background="{DynamicResource Brush.Surface}"
+                            BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1"
                             CornerRadius="{StaticResource Radius}" Padding="2">
                         <StackPanel Orientation="Horizontal" AutomationProperties.Name="Library">
                             <Button Style="{StaticResource SegmentButton}" Content="Your prompts"
@@ -190,7 +190,7 @@
                                     <TextBlock Style="{StaticResource InlineGlyph}" Text="&#xE716;" Margin="0,0,6,0" />
                                     <TextBlock Text="Team prompts" />
                                     <Ellipse Width="6" Height="6" Margin="6,0,0,0" VerticalAlignment="Top"
-                                             Fill="{StaticResource Brush.Brand}"
+                                             Fill="{DynamicResource Brush.Brand}"
                                              Visibility="{Binding TeamHasUnseen, Converter={StaticResource BoolToVisibility}}" />
                                 </StackPanel>
                             </Button>
@@ -267,24 +267,24 @@
             <!-- Team side notices, one bar in the quiet warning-bar style (as the backup bar): "Editing team library:
                  changes go to everyone" + Done while editing, and for editors "Two versions of the team library
                  found" + Review while file sync has left a second version. Both share the line when both apply. -->
-            <Border x:Name="TeamBar" Grid.Row="2" Background="{StaticResource Brush.Warn}" Padding="16,6"
-                    BorderBrush="{StaticResource Brush.Line}" BorderThickness="0,0,0,1"
+            <Border x:Name="TeamBar" Grid.Row="2" Background="{DynamicResource Brush.Warn}" Padding="16,6"
+                    BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,0,1"
                     SizeChanged="TeamBars_SizeChanged" IsVisibleChanged="TeamBars_IsVisibleChanged"
                     Visibility="{Binding ShowTeamBar, Converter={StaticResource BoolToVisibility}}">
                 <WrapPanel TextElement.FontSize="12">
                     <StackPanel Orientation="Horizontal"
                                 Visibility="{Binding ShowTeamEditBar, Converter={StaticResource BoolToVisibility}}">
-                        <TextBlock Text="{Binding TeamEditBarText}" Foreground="{StaticResource Brush.WarnText}"
+                        <TextBlock Text="{Binding TeamEditBarText}" Foreground="{DynamicResource Brush.WarnText}"
                                    Margin="0,0,8,0" AutomationProperties.Name="{Binding TeamEditBarText}" />
                         <Button Style="{StaticResource LinkButton}" Content="Done" FontWeight="SemiBold"
                                 Command="{Binding DoneEditingTeamCommand}"
                                 ToolTip="Lock the team library again" AutomationProperties.Name="Done" />
                     </StackPanel>
-                    <TextBlock Text="·" Foreground="{StaticResource Brush.WarnText}" Margin="12,0"
+                    <TextBlock Text="·" Foreground="{DynamicResource Brush.WarnText}" Margin="12,0"
                                Visibility="{Binding ShowBothTeamNotices, Converter={StaticResource BoolToVisibility}}" />
                     <StackPanel Orientation="Horizontal"
                                 Visibility="{Binding ShowConflictBar, Converter={StaticResource BoolToVisibility}}">
-                        <TextBlock Text="{Binding ConflictBarText}" Foreground="{StaticResource Brush.WarnText}"
+                        <TextBlock Text="{Binding ConflictBarText}" Foreground="{DynamicResource Brush.WarnText}"
                                    Margin="0,0,8,0" AutomationProperties.Name="{Binding ConflictBarText}" />
                         <Button Style="{StaticResource LinkButton}" Content="Review" FontWeight="SemiBold"
                                 Command="{Binding ReviewConflictCommand}"
@@ -303,8 +303,8 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Left: category rail -->
-                <Border Grid.Column="0" Background="{StaticResource Brush.Rail}"
-                        BorderBrush="{StaticResource Brush.Line}" BorderThickness="0,0,1,0">
+                <Border Grid.Column="0" Background="{DynamicResource Brush.RailBackdrop}"
+                        BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,1,0">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -427,8 +427,8 @@
                 </Border>
 
                 <!-- Middle: (Team header line), search and prompt list -->
-                <Border Grid.Column="1" Background="{StaticResource Brush.Window}"
-                        BorderBrush="{StaticResource Brush.Line}" BorderThickness="0,0,1,0">
+                <Border Grid.Column="1" Background="{DynamicResource Brush.WindowBackdrop}"
+                        BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,1,0">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -487,12 +487,12 @@
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top"
                                                     Margin="8,0,0,0">
-                                            <Border x:Name="MarkerTag" Background="{StaticResource Brush.Surface}"
-                                                    BorderBrush="{StaticResource Brush.Brand}" BorderThickness="1"
+                                            <Border x:Name="MarkerTag" Background="{DynamicResource Brush.Surface}"
+                                                    BorderBrush="{DynamicResource Brush.Brand}" BorderThickness="1"
                                                     CornerRadius="{StaticResource Radius}" Padding="4,0"
                                                     VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding MarkerText}" FontSize="11" FontWeight="SemiBold"
-                                                           Foreground="{StaticResource Brush.Brand}" />
+                                                           Foreground="{DynamicResource Brush.Brand}" />
                                             </Border>
                                             <TextBlock Style="{StaticResource InlineGlyph}" Text="&#xE718;"
                                                        Margin="6,0,0,0" ToolTip="Pinned"
@@ -504,7 +504,7 @@
                                             <Setter TargetName="MarkerTag" Property="Visibility" Value="Collapsed" />
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding IsHidden}" Value="True">
-                                            <Setter TargetName="RowTitle" Property="Foreground" Value="{StaticResource Brush.Muted}" />
+                                            <Setter TargetName="RowTitle" Property="Foreground" Value="{DynamicResource Brush.Muted}" />
                                             <Setter TargetName="RowTitle" Property="FontWeight" Value="Normal" />
                                             <Setter TargetName="RowTitle" Property="ToolTip" Value="Hidden from the menu (right-click to unhide)" />
                                         </DataTrigger>
@@ -550,7 +550,7 @@
 
                 <!-- Right: editor -->
                 <Grid Grid.Column="2">
-                    <TextBlock Text="{Binding NoEditorText}" Foreground="{StaticResource Brush.Muted}"
+                    <TextBlock Text="{Binding NoEditorText}" Foreground="{DynamicResource Brush.Muted}"
                                HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap"
                                Margin="16"
                                Visibility="{Binding HasNoEditor, Converter={StaticResource BoolToVisibility}}" />
@@ -582,7 +582,7 @@
                                     </Style>
                                 </DockPanel.Style>
                                 <TextBlock DockPanel.Dock="Left" Style="{StaticResource InlineGlyph}" Text="&#xE716;"
-                                           Foreground="{StaticResource Brush.Muted}" Margin="0,0,6,0" />
+                                           Foreground="{DynamicResource Brush.Muted}" Margin="0,0,6,0" />
                                 <TextBlock Text="{Binding LockLineText}" Style="{StaticResource MutedText}"
                                            TextWrapping="Wrap" AutomationProperties.Name="{Binding LockLineText}" />
                             </DockPanel>
@@ -634,9 +634,9 @@
 
                         <!-- The prompt slip: white, 1 px Line frame, 4 px Brand left edge. -->
                         <Grid Grid.Row="4">
-                            <Border Background="{StaticResource Brush.Surface}" BorderBrush="{StaticResource Brush.Line}"
+                            <Border Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Line}"
                                     BorderThickness="1" CornerRadius="{StaticResource Radius}" />
-                            <Border Width="4" HorizontalAlignment="Left" Background="{StaticResource Brush.Brand}"
+                            <Border Width="4" HorizontalAlignment="Left" Background="{DynamicResource Brush.Brand}"
                                     CornerRadius="4,0,0,4" />
                             <TextBox x:Name="PromptBox" Style="{StaticResource SlipTextBox}" Margin="4,1,1,1"
                                      Text="{Binding Editor.Text, UpdateSourceTrigger=PropertyChanged}"
@@ -644,7 +644,7 @@
                                      PreviewKeyDown="PromptBox_PreviewKeyDown"
                                      AutomationProperties.Name="Prompt text"
                                      AutomationProperties.HelpText="Ctrl+Tab inserts a tab" />
-                            <Border BorderBrush="{StaticResource Brush.Brand}" BorderThickness="2"
+                            <Border BorderBrush="{DynamicResource Brush.Brand}" BorderThickness="2"
                                     CornerRadius="{StaticResource Radius}" IsHitTestVisible="False">
                                 <Border.Style>
                                     <Style TargetType="Border">
@@ -735,13 +735,13 @@
 
             <!-- Declared last so it comes last in Tab order; shown at the top. -->
             <!-- Backups off / paused: a quiet 12 px bar with the link right after the sentence. -->
-            <Border Grid.Row="0" Background="{StaticResource Brush.Warn}" Padding="16,6"
-                    BorderBrush="{StaticResource Brush.Line}" BorderThickness="0,0,0,1"
+            <Border Grid.Row="0" Background="{DynamicResource Brush.Warn}" Padding="16,6"
+                    BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,0,1"
                     ToolTip="{Binding BackupWarningDetail}"
                     Visibility="{Binding ShowBackupWarning, Converter={StaticResource BoolToVisibility}}">
                 <WrapPanel TextElement.FontSize="12">
                     <TextBlock Text="{Binding BackupWarning}" TextWrapping="Wrap"
-                               Foreground="{StaticResource Brush.WarnText}" Margin="0,0,8,0" />
+                               Foreground="{DynamicResource Brush.WarnText}" Margin="0,0,8,0" />
                     <!-- "Set up backups" when they're off; "Check backups" when a chosen folder can't be reached. -->
                     <Button Command="{Binding SetUpBackupsCommand}">
                         <Button.Style>
