@@ -165,9 +165,14 @@
                         </StackPanel>
                     </Border>
 
-                    <CheckBox Margin="0,24,0,0" IsChecked="{Binding StartWithWindows}"
-                              Content="Start Prompt Library when Windows starts"
-                              AutomationProperties.Name="Start Prompt Library when Windows starts" />
+                    <TextBlock Margin="0,24,0,0" FontWeight="SemiBold"
+                               Text="Start Prompt Library when Windows starts?" />
+                    <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,2,0,8"
+                               Text="Recommended. The shortcut only works while Prompt Library is running. You can change this later in Settings." />
+                    <CheckBox IsChecked="{Binding StartWithWindows}"
+                              Content="Yes, start it with Windows"
+                              AutomationProperties.Name="Start Prompt Library when Windows starts"
+                              AutomationProperties.HelpText="Recommended. The shortcut only works while Prompt Library is running." />
                     <CheckBox Margin="0,8,0,0" IsChecked="{Binding PasteAfterCopy}"
                               Content="Paste into the app I was using"
                               AutomationProperties.Name="Paste into the app I was using"

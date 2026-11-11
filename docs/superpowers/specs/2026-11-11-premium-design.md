@@ -189,3 +189,6 @@ guidance, PowerToys Command Palette). Sources are listed in `docs/design/premium
   closes. Backspace on an empty form goes back to the list. Ctrl+K opens the result's actions menu (Copy, Paste, Send to…,
   Open in main window, Pin).
 - Main window: F6 moves focus between the rail, list and editor panes.
+- **Start with Windows** (owner request): setup's last step asks it as a clear question ("Start Prompt Library when
+  Windows starts?" with a "Recommended" explanation, ticked by default). Settings keeps the `Start Prompt Library when
+  Windows starts` checkbox. Any Settings reorganisation must keep it near the top, under a "General" group.
