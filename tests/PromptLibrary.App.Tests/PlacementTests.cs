@@ -12,6 +12,33 @@ public class PlacementTests
     }
 
     [Fact]
+    public void Launcher_WithAForm_IsAsTallAsTheForm()
+    {
+        var work = new PixelRect(0, 0, 1920, 1040);
+        Assert.Equal(300, Placement.Launcher(work, 1.0, 300).Height);
+        Assert.Equal(700, Placement.Launcher(work, 1.0, 700).Height);
+    }
+
+    [Fact]
+    public void Launcher_WithAForm_NeverShrinksBelowTheMinimum_AndStopsAt80PercentOfTheWorkArea()
+    {
+        var work = new PixelRect(0, 0, 1920, 1040);
+        Assert.Equal(240, Placement.Launcher(work, 1.0, 100).Height);
+        var tall = Placement.Launcher(work, 1.0, 5000);
+        Assert.Equal(832, tall.Height);                  // 0.8 x 1040
+        Assert.True(tall.Bottom <= work.Bottom);          // moved up rather than cut off
+        Assert.Equal(work.Bottom - 832, tall.Y);
+    }
+
+    [Fact]
+    public void Launcher_WithAForm_At150Percent_UsesDipsForTheForm()
+    {
+        var spot = Placement.Launcher(new PixelRect(0, 0, 1920, 1040), 1.5, 500);
+        Assert.Equal(750, spot.Height);                   // 500 DIPs
+        Assert.Equal(960, spot.Width);
+    }
+
+    [Fact]
     public void Launcher_At150Percent_ScalesInPixels()
     {
         // A 1920x1080 panel at 150 %: work area 1920x1040 px = 1280x693 DIPs.

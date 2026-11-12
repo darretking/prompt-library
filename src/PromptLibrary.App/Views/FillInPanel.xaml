@@ -6,56 +6,13 @@
     <!-- The placeholder form. Bind DataContext to a FillInViewModel. Tab moves between fields, Enter on the last
          field (or Ctrl+Enter anywhere) completes, Esc (or Backspace in an empty first field) cancels.
          Layout: the fields stack in a scrolling column that gets all the spare height (each row at least 56 px: a 12 px
-         label and a 32 px control); the preview is a collapsible expander under them (max 120 px, its own scroll;
-         collapsed when there are more than 3 fields); the buttons and the Esc hint stay at the bottom. -->
+         label and a 32 px control); the preview is a collapsible expander under them (open by default, max 140 px, its own scroll); the buttons and the Esc hint stay at the bottom. -->
     <UserControl.Resources>
-        <!-- Editable drop-down in the same field look as the text boxes, with a muted hint while empty. -->
-        <ControlTemplate x:Key="FillComboToggle" TargetType="ToggleButton">
-            <Border Background="Transparent" Width="28">
-                <TextBlock Text="&#xE70D;" FontFamily="{StaticResource Font.Icons}" FontSize="12"
-                           Foreground="{DynamicResource Brush.Muted}"
-                           HorizontalAlignment="Center" VerticalAlignment="Center" />
-            </Border>
-        </ControlTemplate>
-
-        <Style x:Key="FillCombo" TargetType="ComboBox">
-            <Setter Property="IsEditable" Value="True" />
-            <Setter Property="MinHeight" Value="32" />
-            <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
-            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ComboBox">
-                        <Grid>
-                            <TextBox x:Name="PART_EditableTextBox" Padding="6,0,28,0"
-                                     Background="{DynamicResource Brush.Surface}" />
-                            <TextBlock x:Name="Hint" Text="{TemplateBinding Tag}" Foreground="{DynamicResource Brush.Muted}"
-                                       Margin="8,0,28,0" VerticalAlignment="Center" IsHitTestVisible="False"
-                                       TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
-                            <ToggleButton Template="{StaticResource FillComboToggle}" Focusable="False" ClickMode="Press"
-                                          HorizontalAlignment="Right"
-                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" />
-                            <Popup x:Name="PART_Popup" Placement="Bottom" AllowsTransparency="True" Focusable="False"
-                                   PopupAnimation="None" IsOpen="{TemplateBinding IsDropDownOpen}">
-                                <Border Margin="0,4,0,0" Background="{DynamicResource Brush.Surface}"
-                                        BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1"
-                                        CornerRadius="{StaticResource Radius}" Padding="0,4"
-                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
-                                        MaxHeight="{TemplateBinding MaxDropDownHeight}">
-                                    <ScrollViewer>
-                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
-                                    </ScrollViewer>
-                                </Border>
-                            </Popup>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="Text" Value="">
-                                <Setter TargetName="Hint" Property="Visibility" Value="Visible" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+        <!-- A choice field is a text box with the options as autocomplete: the chevron (or Down) opens the list. -->
+        <Style x:Key="ChoiceOptionRow" TargetType="ListBoxItem" BasedOn="{StaticResource RowItem}">
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Padding" Value="8,6,8,6" />
+            <EventSetter Event="PreviewMouseLeftButtonUp" Handler="Option_Click" />
         </Style>
 
         <!-- "Preview" header: a chevron and the word, no box. -->
@@ -133,24 +90,44 @@
                                      Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
                                      AutomationProperties.Name="{Binding Name}"
                                      Visibility="{Binding IsText, Converter={StaticResource BoolToVisibility}}" />
-                            <ComboBox Style="{StaticResource FillCombo}" ItemsSource="{Binding Options}" Height="32"
-                                      Tag="{Binding ChoiceHint}"
-                                      SelectedItem="{Binding SelectedOption, Mode=TwoWay}"
-                                      Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
-                                      AutomationProperties.Name="{Binding Name}"
-                                      Visibility="{Binding IsChoice, Converter={StaticResource BoolToVisibility}}" />
+                            <Grid x:Name="ChoiceGrid" Height="32"
+                                  Visibility="{Binding IsChoice, Converter={StaticResource BoolToVisibility}}">
+                                <TextBox x:Name="ChoiceBox" Style="{StaticResource PlaceholderBox}" Tag="{Binding ChoiceHint}"
+                                         Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
+                                         AutomationProperties.Name="{Binding Name}"
+                                         TextChanged="ChoiceBox_TextChanged" LostKeyboardFocus="ChoiceBox_LostFocus" />
+                                <Button HorizontalAlignment="Right" Width="28" Margin="2" Focusable="False" Click="Chevron_Click"
+                                        Background="Transparent" BorderThickness="0" ToolTip="Show options"
+                                        AutomationProperties.Name="Show options">
+                                    <TextBlock Text="&#xE70D;" FontFamily="{StaticResource Font.Icons}" FontSize="12"
+                                               Foreground="{DynamicResource Brush.Muted}" />
+                                </Button>
+                                <Popup PlacementTarget="{Binding ElementName=ChoiceBox}" Placement="Bottom" StaysOpen="True"
+                                       AllowsTransparency="True" Focusable="False" PopupAnimation="None"
+                                       IsOpen="{Binding IsListOpen, Mode=OneWay}">
+                                    <Border Margin="0,4,0,0" Background="{DynamicResource Brush.Surface}"
+                                            BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1"
+                                            CornerRadius="{StaticResource Radius}" Padding="0,4" MaxHeight="200"
+                                            MinWidth="{Binding ActualWidth, ElementName=ChoiceBox}">
+                                        <ListBox Style="{StaticResource PlainList}" ItemsSource="{Binding Options}"
+                                                 SelectedItem="{Binding Highlighted, Mode=TwoWay}" Focusable="False"
+                                                 ItemContainerStyle="{StaticResource ChoiceOptionRow}"
+                                                 AutomationProperties.Name="Options" />
+                                    </Border>
+                                </Popup>
+                            </Grid>
                         </StackPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </ScrollViewer>
 
-        <!-- Live preview of the text as it will be pasted: collapsible, at most 120 px, its own scroll. -->
-        <Expander x:Name="PreviewExpander" Grid.Row="2" Style="{StaticResource PreviewExpander}" Margin="0,4,0,8">
+        <!-- Live preview of the text as it will be pasted: open by default, collapsible, at most 140 px, its own scroll. -->
+        <Expander x:Name="PreviewExpander" Grid.Row="2" Style="{StaticResource PreviewExpander}" IsExpanded="True" Margin="0,4,0,12">
             <Border Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Line}"
-                    BorderThickness="1" CornerRadius="{StaticResource Radius}" MaxHeight="120">
+                    BorderThickness="1" CornerRadius="{StaticResource Radius}" MaxHeight="140">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                              Focusable="False" MaxHeight="118">
+                              Focusable="False" MaxHeight="138">
                     <TextBlock Text="{Binding PreviewText}" TextWrapping="Wrap" Padding="8"
                                FontFamily="{StaticResource Font.Prompt}" FontSize="13"
                                Foreground="{DynamicResource Brush.Ink}"

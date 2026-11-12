@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using PromptLibrary.App.Search;
 using PromptLibrary.App.Theming;
 using PromptLibrary.App.ViewModels;
 using PromptLibrary.App.Views;
@@ -25,6 +26,7 @@ namespace PromptLibrary.App.Tests.Gallery;
 /// menus are measured and drawn on their own. Mica is not shown: the window backdrop tokens are forced opaque.
 /// Sandbox data only: the app's data folder is a temp folder, the real library and settings are never read.
 /// </summary>
+[Collection("WpfApplication")]
 public sealed class ScreenshotGallery
 {
     private static readonly DateTimeOffset Fixed = new(2026, 11, 11, 12, 0, 0, TimeSpan.Zero);
@@ -120,7 +122,9 @@ public sealed class ScreenshotGallery
         yield return ("14-search-empty", n => Search(n, vm => { }));
         yield return ("15-search-budg", n => Search(n, vm => vm.Query = "budg"));
         yield return ("16-search-actions", n => Search(n, vm => { vm.Query = "budg"; vm.Move(0); vm.OpenActions(); }));
-        yield return ("17-search-fill-in", n => Search(n, vm => { vm.Query = "plan a trip"; vm.Move(0); vm.UseSelected(); }));
+        yield return ("17-search-fill-in", n => Search(n, vm => { vm.Query = "plan a trip"; vm.Move(0); vm.UseSelected(); }, fitForm: true));
+        yield return ("27-search-no-results", n => Search(n, vm => vm.Query = "zzzz"));
+        yield return ("28-search-over-backdrop", SearchOverBackdrop);
         yield return ("17b-search-tags", n => Search(n, vm => { vm.Query = "kids"; vm.Move(0); }));
         yield return ("18-settings", n => Window(n, new SettingsWindow(NewHost(populated: true)), null, null));
         yield return ("19-onboarding-step1", n => Onboarding(n, last: false));
@@ -255,15 +259,43 @@ public sealed class ScreenshotGallery
         Window(name, window, null, null);
     }
 
-    private void Search(string name, Action<SearchViewModel> setup)
+    private void Search(string name, Action<SearchViewModel> setup, bool fitForm = false)
     {
         var host = NewHost(true);
         var vm = new SearchViewModel(new SearchActions(host.Library, host.Settings), () => DateTimeOffset.Now);
         var window = new SearchWindow(vm);
         vm.Reset();
         setup(vm);
-        Window(name, window, 640, 420);
+        // The launcher is as tall as its fill-in form (up to 80 % of the work area), like the real window.
+        Window(name, window, 640, 420, beforeCapture: fitForm
+            ? w => w.Height = Placement.Launcher(new PixelRect(0, 0, 1920, 1040), 1.0, ((SearchWindow)w).FormHeightDips()).Height
+            : null);
     }
+
+    // Stands in for the Acrylic backdrop (a bitmap can't show it): the translucent tints are drawn over bright and dark
+    // stripes, so a layer that wrongly stays opaque, or text that loses contrast, shows up. Not a model of Acrylic's blur.
+    private void SearchOverBackdrop(string name)
+    {
+        var resources = Application.Current.Resources;
+        var opaque = resources["Brush.WindowBackdrop"];
+        var glass = new SolidColorBrush(Color.FromArgb(0xC8, 0x80, 0x80, 0x80));
+        resources["Brush.WindowBackdrop"] = glass; // BackdropActive reads a translucent brush as "backdrop on"
+        var stripes = new LinearGradientBrush(new GradientStopCollection
+        {
+            new(Colors.Black, 0.0), new(Colors.Black, 0.25), new(Colors.White, 0.25), new(Colors.White, 0.5),
+            new(Color.FromRgb(0x10, 0x20, 0xC0), 0.5), new(Color.FromRgb(0x10, 0x20, 0xC0), 0.75),
+            new(Color.FromRgb(0xF0, 0xB0, 0x20), 0.75), new(Color.FromRgb(0xF0, 0xB0, 0x20), 1.0),
+        }, new Point(0, 0), new Point(1, 0));
+        _backdrop = stripes;
+        try { Search(name, vm => vm.Query = "budg"); }
+        finally
+        {
+            _backdrop = null;
+            resources["Brush.WindowBackdrop"] = opaque;
+        }
+    }
+
+    private Brush? _backdrop;
 
     private void Toast(string name, string text, Core.Clipboard.ToastKind kind)
     {
@@ -274,13 +306,18 @@ public sealed class ScreenshotGallery
 
     // ---- Rendering -----------------------------------------------------------------------------
 
-    private void Window(string name, Window window, double? width, double? height)
+    private void Window(string name, Window window, double? width, double? height, Action<Window>? beforeCapture = null)
     {
         if (width is { } w) window.Width = w;
         if (height is { } h) window.Height = h;
         Place(window);
         window.Show();
         Pump();
+        if (beforeCapture is not null)
+        {
+            beforeCapture(window);
+            Pump();
+        }
         try { Capture(name, window); }
         finally
         {
@@ -346,7 +383,7 @@ public sealed class ScreenshotGallery
             var visual = new DrawingVisual();
             using (var dc = visual.RenderOpen())
             {
-                dc.DrawRectangle((Brush)Application.Current.Resources["Brush.Window"], null, new Rect(0, 0, w + 2 * margin, h + 2 * margin));
+                dc.DrawRectangle(_backdrop ?? (Brush)Application.Current.Resources["Brush.Window"], null, new Rect(0, 0, w + 2 * margin, h + 2 * margin));
                 dc.DrawRectangle(new VisualBrush(element) { Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top },
                     null, new Rect(margin, margin, w, h));
             }

@@ -87,14 +87,14 @@ public class PromptPreviewTests
     }
 
     [Fact]
-    public void FencedCode_IsOneBlock_WithPlaceholdersFilled_AndNoMarkdown()
+    public void FencedCode_IsOneBlock_BracesStayLiteral_AndNoMarkdown()
     {
         var blocks = Build("Run:\n```bash\nls **{dir}**\n# not a heading\n```\nDone", ("dir", "src"));
 
         Assert.Equal([PreviewBlockKind.Paragraph, PreviewBlockKind.Code, PreviewBlockKind.Paragraph], blocks.Select(b => b.Kind));
         var code = blocks[1];
         Assert.Equal(
-            [(PreviewPieceKind.Text, "ls **"), (PreviewPieceKind.Filled, "src"), (PreviewPieceKind.Text, "**"),
+            [(PreviewPieceKind.Text, "ls **{dir}**"),
              (PreviewPieceKind.Text, "\n"), (PreviewPieceKind.Text, "# not a heading")],
             Kinds(code));
         Assert.All(code.Pieces, p => Assert.False(p.Bold));

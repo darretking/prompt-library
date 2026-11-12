@@ -42,6 +42,10 @@ public partial class SearchWindow : Window
         _viewModel = viewModel;
         InitializeComponent();
         DataContext = viewModel;
+        ApplyBackground();
+        EventHandler onThemeChanged = (_, _) => ApplyBackground();
+        ThemeManager.Current.ThemeChanged += onThemeChanged;
+        Closed += (_, _) => ThemeManager.Current.ThemeChanged -= onThemeChanged;
 
         PreviewKeyDown += OnPreviewKeyDown;
         Deactivated += (_, _) =>
@@ -52,7 +56,12 @@ public partial class SearchWindow : Window
         viewModel.PropertyChanged += OnViewModelChanged;
         IsVisibleChanged += (_, e) =>
         {
-            if (e.NewValue is false) _viewModel.CloseActions();
+            if (e.NewValue is false)
+            {
+                _viewModel.CloseActions();
+                _placed = false;
+                Startup.MemoryTrimmer.Schedule(); // idle memory goes back to Windows a few seconds after closing
+            }
         };
     }
 
@@ -125,13 +134,57 @@ public partial class SearchWindow : Window
         Body.BeginAnimation(OpacityProperty, animation);
     }
 
-    // Solid when Windows' transparency effects are off; otherwise the translucent tint over Acrylic (Brush.WindowBackdrop).
+    /// <summary>
+    /// True when the Acrylic backdrop is showing: Windows 11 22H2 or later, "Transparency effects" on, and the theme's
+    /// backdrop brushes translucent (the screenshot gallery makes them opaque, as a bitmap can't show Acrylic).
+    /// </summary>
+    internal static bool BackdropActive()
+        => WindowBackdrop.MicaSupported && WindowBackdrop.TransparencyEnabled()
+            && Application.Current?.Resources["Brush.WindowBackdrop"] is SolidColorBrush { Color.A: < 255 };
+
+    // Over the backdrop: the window itself paints nothing, and the search bar, list, preview and footer are translucent
+    // tints with text colours checked against the worst backdrop (SearchTints). Without it everything is solid.
     private void ApplyBackground()
     {
-        if (WindowBackdrop.TransparencyEnabled())
-            SetResourceReference(BackgroundProperty, "Brush.WindowBackdrop");
+        var translucent = BackdropActive();
+        static Color Token(string key) => Application.Current.Resources[key] is SolidColorBrush b ? b.Color : Colors.Magenta;
+        var tints = SearchTints.For(ThemeManager.Current.IsDark, translucent, Token("Brush.Surface"), Token("Brush.Window"), Token("Brush.Muted"));
+        Brush Frozen(Color c) { var brush = new SolidColorBrush(c); brush.Freeze(); return brush; }
+        Resources["Brush.Search.Chrome"] = Frozen(tints.Chrome);
+        Resources["Brush.Search.List"] = Frozen(tints.List);
+        Resources["Brush.Search.Preview"] = Frozen(tints.Preview);
+        Resources["Brush.Muted"] = Frozen(tints.Muted); // this window's muted text, on the tints
+        if (translucent)
+            Background = Brushes.Transparent;
         else
             SetResourceReference(BackgroundProperty, "Brush.Window");
+    }
+
+    private PixelRect _work = new(0, 0, 1920, 1040);
+    private double _scale = 1.0;
+    private bool _placed; // true between ShowNearMouse and hiding: only then does the window move itself
+
+    /// <summary>The window height, in DIPs, the open fill-in form needs (its fields, preview and buttons, plus the footer and frame).</summary>
+    internal double FormHeightDips()
+    {
+        FormPanel.Measure(new Size(Placement.LauncherWidth - 2, double.PositiveInfinity));
+        return FormPanel.DesiredSize.Height + 32 + 2;
+    }
+
+    // The form sizes the window to itself (up to 80 % of the work area), the list goes back to the standard height.
+    private void RefitHeight()
+    {
+        if (!IsVisible || !_placed) return;
+        var spot = Placement.Launcher(_work, _scale, _viewModel.IsFormOpen ? FormHeightDips() : null);
+        SetPlacement(spot);
+    }
+
+    private void SetPlacement(PixelRect spot)
+    {
+        var handle = new WindowInteropHelper(this).EnsureHandle();
+        // Twice: the first move may make Windows change the window's DPI (and size); the second sets the exact pixels.
+        SetWindowPos(handle, IntPtr.Zero, spot.X, spot.Y, spot.Width, spot.Height, SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(handle, IntPtr.Zero, spot.X, spot.Y, spot.Width, spot.Height, SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
     // Placed in device pixels with the DPI of the monitor under the mouse (not the window's current DPI), so a
@@ -140,11 +193,9 @@ public partial class SearchWindow : Window
     {
         var mouse = System.Windows.Forms.Cursor.Position;
         var (work, scale) = Offscreen ? (new PixelRect(-20000, 0, 1920, 1040), 1.0) : Monitors.UnderPoint(mouse.X, mouse.Y);
-        var spot = Placement.Launcher(work, scale);
-        var handle = new WindowInteropHelper(this).EnsureHandle();
-        // Twice: the first move may make Windows change the window's DPI (and size); the second sets the exact pixels.
-        SetWindowPos(handle, IntPtr.Zero, spot.X, spot.Y, spot.Width, spot.Height, SWP_NOZORDER | SWP_NOACTIVATE);
-        SetWindowPos(handle, IntPtr.Zero, spot.X, spot.Y, spot.Width, spot.Height, SWP_NOZORDER | SWP_NOACTIVATE);
+        (_work, _scale) = (work, scale);
+        _placed = true;
+        SetPlacement(Placement.Launcher(work, scale));
     }
 
     private void FocusSearch()
@@ -196,6 +247,8 @@ public partial class SearchWindow : Window
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(SearchViewModel.IsFormOpen))
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, RefitHeight); // once the form has its fields
         if (e.PropertyName == nameof(SearchViewModel.Selected) && _viewModel.Selected is { } selected)
         {
             var index = _viewModel.Items.IndexOf(selected);
