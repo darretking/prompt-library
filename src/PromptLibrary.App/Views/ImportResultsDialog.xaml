@@ -53,6 +53,8 @@
                                 <Run Text="{Binding File, Mode=OneWay}" FontWeight="SemiBold" />
                                 <Run Text=" — " Foreground="{DynamicResource Brush.Muted}" />
                                 <Run Text="{Binding Reason, Mode=OneWay}" Foreground="{DynamicResource Brush.Danger}" />
+                                <LineBreak />
+                                <Run Text="{Binding Fix, Mode=OneWay}" Foreground="{DynamicResource Brush.Muted}" />
                             </TextBlock>
                         </DataTemplate>
                     </ListBox.ItemTemplate>

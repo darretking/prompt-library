@@ -57,7 +57,7 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <Grid x:Name="InputHost" MinWidth="88" VerticalAlignment="Center">
+            <Grid x:Name="InputHost" MinWidth="48" VerticalAlignment="Center">
                 <TextBlock x:Name="Placeholder" Text="Add tags" Margin="6,0,0,0" VerticalAlignment="Center"
                            Foreground="{DynamicResource Brush.Muted}" IsHitTestVisible="False" />
                 <TextBox x:Name="Input" Style="{x:Null}" BorderThickness="0" Foreground="{DynamicResource Brush.Ink}" CaretBrush="{DynamicResource Brush.Ink}" SelectionBrush="{DynamicResource Brush.BrandFill}" Background="Transparent" MinHeight="24" Padding="4,0"

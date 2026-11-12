@@ -10,7 +10,7 @@ namespace PromptLibrary.Core.Exchange;
 /// <summary>
 /// What happened to one file of an import: prompts added, duplicates (same title in the same category) left out,
 /// prompts in it that had no title or text, and, when the whole file couldn't be used, <see cref="FailureReason"/>
-/// (plain words: <c>couldn't be read</c>, <c>empty</c>, <c>larger than 1 MB</c>, <c>not valid JSON</c>, <c>not a Prompt Library export</c>).
+/// (plain words: <c>couldn't be read</c>, <c>empty</c>, <c>larger than 1 MB</c>, <c>damaged or not a prompt file</c>, <c>not a Prompt Library export</c>).
 /// </summary>
 public sealed record ImportFileOutcome(string File, int Imported, int Duplicates, int UnusablePrompts, string? FailureReason)
 {
@@ -91,7 +91,7 @@ public static class PromptImport
         }
         catch (JsonException)
         {
-            return Fail(name, "not valid JSON");
+            return Fail(name, "damaged or not a prompt file");
         }
         catch (InvalidDataException)
         {

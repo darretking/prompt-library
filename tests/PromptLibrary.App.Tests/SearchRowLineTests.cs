@@ -87,7 +87,7 @@ public class SearchRowLineTests
     public void Footer_FollowsTheState_ListActionsForm() => Sta.Run(() =>
     {
         var (vm, _) = Make("Greeting", "Hello {name}");
-        Assert.Equal("Enter paste · Ctrl+Enter send · Ctrl+K actions · Esc close", vm.FooterText);
+        Assert.Equal("Enter paste · Ctrl+Enter send to ChatGPT · Ctrl+K more options · Esc close", vm.FooterText);
         Assert.Equal(["Enter", "Ctrl+Enter", "Ctrl+K", "Esc"], vm.Footer.Select(h => h.Key));
 
         vm.OpenActions();
@@ -107,6 +107,6 @@ public class SearchRowLineTests
         Assert.False(vm.HasResults);
         Assert.Equal("Esc close", vm.FooterText);
         vm.Query = "";
-        Assert.Equal("Enter paste · Ctrl+Enter send · Ctrl+K actions · Esc close", vm.FooterText);
+        Assert.Equal("Enter paste · Ctrl+Enter send to ChatGPT · Ctrl+K more options · Esc close", vm.FooterText);
     });
 }

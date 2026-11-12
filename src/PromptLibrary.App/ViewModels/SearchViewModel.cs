@@ -170,6 +170,8 @@ public sealed class SearchViewModel : ObservableObject
         {
             if (value is { IsHeader: true } || !SetProperty(ref _selected, value)) return;
             Preview = BuildPreview(value?.Prompt);
+            OnPropertyChanged(nameof(Footer)); // "send to <the selected prompt's AI app>"
+            OnPropertyChanged(nameof(FooterText));
         }
     }
 
@@ -219,7 +221,7 @@ public sealed class SearchViewModel : ObservableObject
     public string EmptyText => string.IsNullOrWhiteSpace(_query) ? "No prompts yet." : $"No prompts match \"{_query.Trim()}\".";
 
     /// <summary>The line under <see cref="EmptyText"/>: how to widen the search (nothing while the library itself is empty).</summary>
-    public string EmptyHint => string.IsNullOrWhiteSpace(_query) ? "" : "Try fewer words, or #tag / cat:name";
+    public string EmptyHint => string.IsNullOrWhiteSpace(_query) ? "" : "Try fewer words, or a tag like #email";
 
     /// <summary>The keys that work right now, for the footer: the list, the actions popup or the fill-in form.</summary>
     public IReadOnlyList<FooterHint> Footer => IsFormOpen
@@ -227,7 +229,7 @@ public sealed class SearchViewModel : ObservableObject
         : IsActionsOpen
             ? [new("Enter", "choose"), new("Esc", "back")]
             : HasResults
-                ? [new("Enter", "paste"), new("Ctrl+Enter", "send"), new("Ctrl+K", "actions"), new("Esc", "close")]
+                ? [new("Enter", "paste"), new("Ctrl+Enter", "send to " + SendTargets.Resolve(_selected?.Prompt?.SendTo).Name), new("Ctrl+K", "more options"), new("Esc", "close")]
                 : [new("Esc", "close")]; // nothing to paste, send or act on
 
     /// <summary>The footer as plain text (for screen readers and tests).</summary>

@@ -36,7 +36,7 @@ public class OnboardingTextTests
 
     [Fact]
     public void BackupSummary_Off()
-        => Assert.Equal("Backups: off", OnboardingText.BackupSummary(null, null));
+        => Assert.Equal("Backups: off (you can turn them on any time in Settings)", OnboardingText.BackupSummary(null, null));
 
     [Fact]
     public void BackupSummary_NamesTheProvider()

@@ -126,7 +126,7 @@ public sealed class ScreenshotGallery
         yield return ("12-delete-category-dialog", n => DeleteCategory(n, deletePrompts: true));
         yield return ("24-delete-category-move", n => DeleteCategory(n, deletePrompts: false));
         yield return ("13-export-dialog", n => Window(n, new ChooseKindDialog("Export prompts",
-            "Export your prompts so you can keep a copy or use them elsewhere.", "One file (.json)", "A folder of Markdown files", "Choose…"), null, null));
+            "Export your prompts so you can keep a copy or use them elsewhere.", "One backup file, to import into Prompt Library later (.json)", "A folder of Markdown files, readable in any app", "Choose where to save…"), null, null));
         yield return ("14-search-empty", n => Search(n, vm => { }));
         yield return ("15-search-budg", n => Search(n, vm => vm.Query = "budg"));
         yield return ("16-search-actions", n => Search(n, vm => { vm.Query = "budg"; vm.Move(0); vm.OpenActions(); }));
@@ -250,7 +250,7 @@ public sealed class ScreenshotGallery
             new("Email/notes.txt", 0, 0, 0, "empty"),
             new("Travel/everything.md", 0, 0, 0, "larger than 1 MB"),
             new("old-export.json", 0, 0, 0, "not a Prompt Library export"),
-            new("broken.json", 0, 0, 0, "not valid JSON"),
+            new("broken.json", 0, 0, 0, "damaged or not a prompt file"),
         ]);
         Window(name, new ImportResultsDialog(result), null, null);
     }

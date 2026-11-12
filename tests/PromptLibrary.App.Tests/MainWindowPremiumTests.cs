@@ -357,7 +357,7 @@ public sealed class MainWindowPremiumTests : IDisposable
         w.Vm.ImportCommand.Execute(null);
 
         var failure = Assert.Single(w.Dialogs.LastImport!.Failures);
-        Assert.Equal(("bad.json", "not valid JSON"), (failure.File, failure.Reason));
+        Assert.Equal(("bad.json", "damaged or not a prompt file"), (failure.File, failure.Reason));
         Assert.Equal("Imported 0 prompts. Skipped 1 file that couldn't be used.", w.Dialogs.Messages.Single());
         Assert.Single(w.Host.Library.Prompts);
         Assert.Equal(0, w.Host.LibrarySaves);

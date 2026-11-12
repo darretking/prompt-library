@@ -34,12 +34,24 @@ public class FillInViewModelTests
         var vm = new FillInViewModel("A {x} B {y} {clipboard}", new AppSettings(), new Tokens());
         Assert.Equal("A {x} B {y} from clipboard", vm.PreviewText);
 
-        string? changed = null;
-        vm.PropertyChanged += (_, e) => changed = e.PropertyName;
+        var changed = new List<string?>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
         vm.Fields[0].Value = "1";
 
-        Assert.Equal(nameof(FillInViewModel.PreviewText), changed);
+        Assert.Contains(nameof(FillInViewModel.PreviewText), changed);
+        Assert.Contains(nameof(FillInViewModel.BlankNote), changed);
         Assert.Equal("A 1 B {y} from clipboard", vm.PreviewText);
+    }
+
+    [Fact]
+    public void BlankNote_SaysHowManyFieldsStayAsPlaceholders()
+    {
+        var vm = new FillInViewModel("A {x} B {y}", new AppSettings(), new Tokens());
+        Assert.Equal("2 fields are blank: they stay as {…} in the prompt.", vm.BlankNote);
+        vm.Fields[0].Value = "1";
+        Assert.Equal("1 field is blank: it stays as {…} in the prompt.", vm.BlankNote);
+        vm.Fields[1].Value = "2";
+        Assert.Equal("", vm.BlankNote);
     }
 
     [Fact]

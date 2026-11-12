@@ -9,14 +9,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Added
 - **Help → What's new** opens this changelog.
 - Markdown export and import keep each category's emoji (`emoji:`, or `icon:`, in the front matter) and the prompt's Send to target (`sendTo:`). An imported emoji is also given to an existing category that has none. JSON export already kept both, and tags were already kept in both formats.
+- **Turn off backups** in Settings, and a first line there that says whether backups are on and where they go.
+- **File → New prompt** and **New category**.
+- The fill-in form says how many fields are blank, and blank fields preview as `{Label}`, as they will be pasted.
+- Import results say what to do about each file that couldn't be imported.
+- A **Make my copy** link next to a read-only team prompt.
 - 18 emoji for business departments and functions in the category emoji picker: people and HR, finance, growth, operations, IT, security, compliance, projects, records, product, logistics, manufacturing, the company, customer support, communications, wins, strategy, and research and testing.
 
 ### Changed
+- Easier for new users (scored with the rubric in `docs/design/ui-review-rubric.md`, from 82 % to 92 %):
+  - The toolbar always says whether edits are kept: "● Unsaved changes" with a **Save** button, or "✓ Saved".
+  - **New** (prompt) and **+ New category** are labelled buttons instead of two bare "+".
+  - The selected category shows its Rename and Delete buttons.
+  - **Send to** names its app ("Send to ChatGPT") and is one framed split button; the search footer says "send to ChatGPT" and "more options".
+  - The view switch reads **Text | Preview**; tag boxes always show "Add a tag".
+  - Deleting a category asks a plain either/or: move the prompts to a category, or delete them too.
+  - Settings: backups come first, each shortcut choice is explained, and "Changes are saved as you make them."
+  - The setup guide asks "Paste the prompt for you?" as its own question, and the window is tall enough for it.
+  - The app name in the title bar is centred and muted so it never reads as a menu; team prompts get a "Team" badge in search and a "New" tag on the Team prompts switch.
+  - Clearer words for import/export choices and errors, and "press Ctrl+V to paste it" when an app couldn't be opened.
 - Every row in the category rail shows a colour emoji: All prompts has a house, Recent a clock, and a category without its own emoji a memo. The search window uses the same memo instead of a grey icon.
 
 ### Fixed
 - The title bar is one even strip: the menu, the title and the window buttons line up, with no lighter band underneath, restored or maximised.
 - The editor card has the same 12 px margin on its left, next to the prompt list, as on its top and right.
+- "Move to category" left the ⋯ menu (the category box on the card does it).
 - Menus, drop-downs and the emoji picker open from their left edge even when Windows is set to right-handed (they used to open to the left, past the window edge).
 
 ## [1.2.0] - 2026-11-12

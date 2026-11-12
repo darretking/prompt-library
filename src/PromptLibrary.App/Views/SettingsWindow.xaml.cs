@@ -104,7 +104,7 @@ public partial class SettingsWindow : Window
     }
 
     private string ShortcutIdleText()
-        => _host.Settings.ShortcutOpens == "menu" ? "Opens your prompt menu from any app." : "Opens the search window from any app.";
+        => "Press it in any app to open your prompts.";
 
     /// <summary><c>That shortcut is in use by another app. Try another, like Ctrl+Alt+L.</c> (a shortcut that is free now).</summary>
     private string ShortcutInUseText() => ShortcutSuggestion.InUseText(_host.IsShortcutFree);

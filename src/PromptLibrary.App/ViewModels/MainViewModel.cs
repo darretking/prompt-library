@@ -664,8 +664,14 @@ public sealed class MainViewModel : ObservableObject
     public bool IsAddingCategory
     {
         get => _isAddingCategory;
-        private set => SetProperty(ref _isAddingCategory, value);
+        private set
+        {
+            if (SetProperty(ref _isAddingCategory, value)) OnPropertyChanged(nameof(ShowNewCategoryButton));
+        }
     }
+
+    /// <summary>The rail's "New category" button: on an editable side, while no new category is being typed.</summary>
+    public bool ShowNewCategoryButton => ShowEditButtons && !IsAddingCategory;
 
     public string NewCategoryName
     {
@@ -1258,7 +1264,7 @@ public sealed class MainViewModel : ObservableObject
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException
                                        or UriFormatException or PlatformNotSupportedException)
         {
-            ShowStatus($"Couldn't open {target.Name}. The prompt is on your clipboard.", FeedbackDuration);
+            ShowStatus($"Couldn't open {target.Name}. The prompt is on your clipboard: press Ctrl+V to paste it.", FeedbackDuration);
             return;
         }
 
@@ -2203,6 +2209,7 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowTeamBar));
         OnPropertyChanged(nameof(ShowBothTeamNotices));
         OnPropertyChanged(nameof(ShowEditButtons));
+        OnPropertyChanged(nameof(ShowNewCategoryButton));
         OnPropertyChanged(nameof(ShowTeamButtons));
         OnPropertyChanged(nameof(ShowHiddenTeamPrompts));
         OnPropertyChanged(nameof(HiddenCount));

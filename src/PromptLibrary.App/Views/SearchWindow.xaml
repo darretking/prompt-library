@@ -122,8 +122,12 @@
                     <TextBlock Grid.Column="1" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
                                views:InlineText.Segments="{Binding TitleSegments}" />
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0">
-                        <TextBlock Text="Team" Style="{StaticResource MutedText}" Margin="0,0,8,0"
-                                   Visibility="{Binding IsTeam, Converter={StaticResource BoolToVisibility}}" />
+                        <!-- Team prompts carry a small outlined "Team" badge (like the main list's New / Updated tags). -->
+                        <Border Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Brand}" BorderThickness="1"
+                                CornerRadius="{StaticResource Radius}" Padding="4,0" Margin="0,0,8,0" VerticalAlignment="Center"
+                                Visibility="{Binding IsTeam, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="Team" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Brand}" />
+                        </Border>
                         <TextBlock Text="&#xE718;" FontFamily="{StaticResource Font.Icons}" FontSize="12"
                                    Foreground="{DynamicResource Brush.Muted}" VerticalAlignment="Center"
                                    Margin="0,0,8,0" ToolTip="Pinned"

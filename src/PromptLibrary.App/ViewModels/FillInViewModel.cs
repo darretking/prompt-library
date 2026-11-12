@@ -131,6 +131,7 @@ public sealed class FillInViewModel : ObservableObject
                 if (e.PropertyName != nameof(FillField.Value)) return;
                 OnPropertyChanged(nameof(PreviewSegments));
                 OnPropertyChanged(nameof(PreviewText));
+                OnPropertyChanged(nameof(BlankNote));
             };
             Fields.Add(item);
         }
@@ -146,6 +147,24 @@ public sealed class FillInViewModel : ObservableObject
 
     /// <summary>The label of the other button: <c>Back</c> in the search window, <c>Cancel</c> in a dialog.</summary>
     public string CancelLabel { get; }
+
+    /// <summary>
+    /// Under the preview, before Paste / Copy: <c>2 fields are blank: they stay as {…} in the prompt.</c> Empty when every
+    /// field is filled.
+    /// </summary>
+    public string BlankNote
+    {
+        get
+        {
+            var blank = Fields.Count(f => string.IsNullOrWhiteSpace(f.Value));
+            return blank switch
+            {
+                0 => "",
+                1 => "1 field is blank: it stays as {…} in the prompt.",
+                _ => $"{blank} fields are blank: they stay as {{…}} in the prompt.",
+            };
+        }
+    }
 
     /// <summary>The prompt as it will come out now (unfilled blanks keep their <c>{…}</c>).</summary>
     public string PreviewText => Fill().Text;

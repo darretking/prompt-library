@@ -323,7 +323,7 @@ public sealed class ExchangeTests : IDisposable
     }
 
     [Theory]
-    [InlineData("not json", "not valid JSON")]
+    [InlineData("not json", "damaged or not a prompt file")]
     [InlineData("[1,2]", "not a Prompt Library export")]
     [InlineData("{\"hello\": 1}", "not a Prompt Library export")]
     [InlineData("{\"format\": \"prompt-library-export/9\", \"categories\": [], \"prompts\": []}", "made by a newer Prompt Library")]

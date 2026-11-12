@@ -25,7 +25,7 @@ public static class OnboardingText
 
     public static string BackupSummary(string? folder, string? providerName)
         => folder is null
-            ? "Backups: off"
+            ? "Backups: off (you can turn them on any time in Settings)"
             : $"Backups: {providerName ?? BackupLocation.ShortenMiddle(folder, SummaryPathLength)}";
 
     /// <summary>Step 4's "how you'll use it" line: the first copy after setup.</summary>

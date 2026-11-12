@@ -84,7 +84,7 @@ public static class PasteDecision
     public static bool CanSendKeysTo(bool targetElevated, bool weAreElevated) => !targetElevated || weAreElevated;
 
     /// <summary>Shown when the prompt is only on the clipboard because pasting wasn't possible.</summary>
-    public const string CouldntPasteText = "Couldn't paste into that app. The prompt is on your clipboard.";
+    public const string CouldntPasteText = "Couldn't paste into that app. The prompt is on your clipboard: press Ctrl+V to paste it.";
 
     /// <summary>What the toast says after a pick from the search window, and its kind.</summary>
     public static (string Text, ToastKind Kind) ToastFor(string title, PasteOutcome outcome) => outcome switch

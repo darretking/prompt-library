@@ -6,9 +6,9 @@ using PromptLibrary.Core.Models;
 namespace PromptLibrary.App.Views;
 
 /// <summary>
-/// Asked before deleting a category that still has prompts: move them to another category, or tick
-/// <c>Also delete the N prompts in this category</c> and delete them with it (then the move-to choice is off and the
-/// button says <c>Delete category and N prompts</c> in Danger style). Cancel leaves everything as it was.
+/// Asked before deleting a category that still has prompts (titled <c>Delete "Travel"?</c>): two choices, <c>Move the
+/// N prompts to</c> a category (picked right under it) or <c>Delete the N prompts too</c> (then the category box is greyed and
+/// the button says <c>Delete category and N prompts</c> in Danger style). Cancel leaves everything as it was.
 /// </summary>
 public partial class MoveCategoryDialog : Window
 {
@@ -26,9 +26,20 @@ public partial class MoveCategoryDialog : Window
         TargetBox.ItemsSource = targets;
         TargetBox.SelectedIndex = _canMove ? 0 : -1; // never empty: the first other category is the default
 
-        var label = $"Also delete the {Plural(promptCount)} in this category";
+        // A group of its own: WPF shares a GroupName across windows that are not shown yet.
+        var group = "PromptsGo-" + Guid.NewGuid().ToString("N");
+        MoveRadio.GroupName = group;
+        DeleteBox.GroupName = group;
+        MoveRadio.IsChecked = _canMove;
+        Title = $"Delete \"{categoryName}\"?";
+        AutomationProperties.SetName(this, Title);
+        var move = $"Move the {Plural(promptCount)} to";
+        MoveRadio.Content = move;
+        AutomationProperties.SetName(MoveRadio, move);
+        var label = $"Delete the {Plural(promptCount)} too";
         DeleteBox.Content = label;
         AutomationProperties.SetName(DeleteBox, label);
+        if (!_canMove) DeleteBox.IsChecked = true;
         Update();
 
         Loaded += (_, _) => (_canMove ? (UIElement)TargetBox : DeleteBox).Focus();
@@ -44,10 +55,17 @@ public partial class MoveCategoryDialog : Window
 
     private void TargetBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => Update();
 
-    private void DeleteBox_Changed(object sender, RoutedEventArgs e) => Update();
+    private void Choice_Changed(object sender, RoutedEventArgs e)
+    {
+        // Unticking "Delete" (from code) goes back to moving, so one choice is always made.
+        if (DeleteBox is not null && MoveRadio is not null && _canMove
+            && DeleteBox.IsChecked != true && MoveRadio.IsChecked != true)
+            MoveRadio.IsChecked = true;
+        Update();
+    }
 
-    /// <summary>True while "Move prompts to" and its label are shown.</summary>
-    internal bool IsMoveChoiceShown => MovePanel.Visibility == Visibility.Visible;
+    /// <summary>True while the category to move the prompts to can be picked (it is greyed while Delete is chosen).</summary>
+    internal bool IsMoveChoiceShown => MovePanel.Visibility == Visibility.Visible && TargetBox.IsEnabled;
 
     /// <summary>The helper line under the choice (empty when there is none).</summary>
     /// <summary>The question at the top, which follows the tick box.</summary>
@@ -56,13 +74,13 @@ public partial class MoveCategoryDialog : Window
     internal string HintMessage => DeleteWarning.Visibility == Visibility.Visible ? DeleteWarning.Text
         : HintText.Visibility == Visibility.Visible ? HintText.Text : "";
 
-    internal CheckBox DeleteTickBox => DeleteBox;
+    internal System.Windows.Controls.Primitives.ToggleButton DeleteTickBox => DeleteBox;
 
     internal Category? ChosenTarget => TargetBox.SelectedItem as Category;
 
     /// <summary>
-    /// Ticked: the move-to choice and its label are off (disabled and collapsed), the helper line says the prompts are
-    /// deleted for good, in Danger text, and the button deletes. Unticked: the choice is back with a category selected.
+    /// Delete chosen: the category box is greyed, the helper line says the prompts are deleted for good, in Danger text,
+    /// and the button deletes. Move chosen: the box is back with a category selected.
     /// </summary>
     private void Update()
     {
@@ -77,7 +95,8 @@ public partial class MoveCategoryDialog : Window
                 : $"\"{_categoryName}\" has {prompts} and there is no other category to move {them} to. " +
                   $"Create one first, or delete {them} with \"{_categoryName}\".";
         TargetBox.IsEnabled = !delete;
-        MovePanel.Visibility = _canMove && !delete ? Visibility.Visible : Visibility.Collapsed;
+        MovePanel.Visibility = _canMove ? Visibility.Visible : Visibility.Collapsed;
+        // The box stays (greyed) while Delete is chosen, so "Move the 3 prompts to" never reads as a cut-off sentence.
         HintText.Visibility = _canMove && !delete ? Visibility.Visible : Visibility.Collapsed;
         HintText.Text = "Prompts move to the category you pick.";
         DeleteWarning.Visibility = delete ? Visibility.Visible : Visibility.Collapsed;

@@ -806,6 +806,15 @@ public sealed class AppHost : IMainHost, IDisposable
     /// </summary>
     public void RefreshBackupState() => _ = RefreshBackupStateAsync();
 
+    /// <summary>Settings → Turn off backups: forgets the backup folder (the backups already made stay where they are).</summary>
+    public void TurnOffBackups()
+    {
+        Settings.BackupFolder = null;
+        Settings.BackupProviderName = null;
+        SaveSettings();
+        RefreshBackupState();
+    }
+
     /// <summary>As <see cref="RefreshBackupState"/>; the result is true when backups are paused.</summary>
     private async Task<bool> RefreshBackupStateAsync()
     {

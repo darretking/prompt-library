@@ -139,13 +139,17 @@
 
         <!-- Pinned at the bottom: the Esc hint (dialog only; the search window's footer has it) and the buttons. -->
         <Grid Grid.Row="3">
-            <StackPanel x:Name="EscHint" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+            <!-- Off by default: the Cancel button beside it already says it (Esc still cancels). -->
+            <StackPanel x:Name="EscHint" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center" Visibility="Collapsed">
                 <Border BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1" CornerRadius="4"
                         Background="{DynamicResource Brush.Surface}" Padding="5,0" Margin="0,0,6,0">
                     <TextBlock Text="Esc" Style="{StaticResource MutedText}" FontSize="11" FontWeight="SemiBold" />
                 </Border>
                 <TextBlock Text="{Binding CancelLabel}" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
             </StackPanel>
+            <!-- Blank fields are allowed; this says what happens to them before the user pastes. -->
+            <TextBlock Text="{Binding BlankNote}" Style="{StaticResource MutedText}" TextWrapping="Wrap" VerticalAlignment="Center"
+                       Margin="0,0,200,0" AutomationProperties.LiveSetting="Polite" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="{Binding CancelLabel}" Click="Cancel_Click" AutomationProperties.Name="{Binding CancelLabel}" />
                 <Button Content="{Binding PrimaryLabel}" Style="{StaticResource PrimaryButton}" Margin="8,0,0,0"

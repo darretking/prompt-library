@@ -196,7 +196,7 @@ internal sealed class SearchController : ISearchActions, IDisposable
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            _toast.Show(copied ? $"Couldn't open {target.Name}. The prompt is on your clipboard." : $"Couldn't open {target.Name}.",
+            _toast.Show(copied ? $"Couldn't open {target.Name}. The prompt is on your clipboard: press Ctrl+V to paste it." : $"Couldn't open {target.Name}.",
                 ToastKind.Error);
             return;
         }

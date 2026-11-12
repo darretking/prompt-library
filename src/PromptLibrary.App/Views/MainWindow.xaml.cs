@@ -123,6 +123,33 @@ public partial class MainWindow : Window, IDialogs
         public static extern int GetSystemMetricsForDpi(int index, uint dpi);
     }
 
+    /// <summary>
+    /// When the editor is narrow (minimum size, large scaling) the save state gives way to the actions: "Saved" shows only
+    /// its check and Save becomes a disk icon (both keep their tooltips), so nothing overlaps Send to.
+    /// </summary>
+    private void UnsavedNote_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e) => ButtonRow_SizeChanged(sender, null!);
+
+    private bool Editor_HasEdits() => ViewModel.Editor?.HasSomethingToSave == true;
+
+    private void ButtonRow_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var room = ButtonRow.ActualWidth - ToolbarActions.ActualWidth;
+        var compact = room < (Editor_HasEdits() ? 220 : 96);
+        SavedText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        UnsavedNote.Margin = compact ? new Thickness(0, 0, 6, 0) : new Thickness(0, 0, 8, 0);
+        ((TextBlock)UnsavedNote.Children[1]).Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        if (compact)
+        {
+            SaveButton.Content = new TextBlock { Text = "", FontFamily = (System.Windows.Media.FontFamily)FindResource("Font.Icons") };
+            SaveButton.MinWidth = 32;
+        }
+        else
+        {
+            SaveButton.Content = "Save";
+            SaveButton.MinWidth = 72;
+        }
+    }
+
     private void ApplyCardShadow()
     {
         if (System.Windows.Media.RenderCapability.Tier >> 16 < 2)
@@ -220,7 +247,7 @@ public partial class MainWindow : Window, IDialogs
     {
         var kind = new ChooseKindDialog("Import prompts",
             "Import prompts from a file or a folder. Prompts that are already in your library are skipped.",
-            "One file (.json)", "A folder of Markdown or text files", "Choose…") { Owner = this };
+            "One file exported from Prompt Library (.json)", "A folder of Markdown or text files", "Choose what to import…") { Owner = this };
         if (kind.ShowDialog() != true) return null;
 
         var start = ExchangeStartFolder();
@@ -243,7 +270,7 @@ public partial class MainWindow : Window, IDialogs
     {
         var kind = new ChooseKindDialog("Export prompts",
             "Export your prompts so you can keep a copy or use them elsewhere.",
-            "One file (.json)", "A folder of Markdown files", "Choose…") { Owner = this };
+            "One backup file, to import into Prompt Library later (.json)", "A folder of Markdown files, readable in any app", "Choose where to save…") { Owner = this };
         if (kind.ShowDialog() != true) return null;
 
         var start = ExchangeStartFolder();
