@@ -18,7 +18,7 @@ Your prompt is pasted right where you were typing.
   <img src="https://img.shields.io/badge/no%20account-F5A524" alt="No account needed" />
   <img src="https://img.shields.io/badge/no%20tracking-F5A524" alt="No tracking" />
   <img src="https://img.shields.io/badge/installs%20without-admin%20rights-1B2230" alt="Installs without admin rights" />
-  <img src="https://img.shields.io/badge/version-1.2.0-4338CA" alt="Version 1.2.0" />
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.0-4338CA" alt="Version 1.2.0, see the changelog" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/free%20%26%20open%20source-GPL--3.0-4338CA" alt="Free and open source, GPL-3.0 licence" /></a>
 </p>
 
@@ -35,6 +35,8 @@ Your prompt is pasted right where you were typing.
 </div>
 
 <br/>
+
+> **New in 1.2:** prompt templates with a live preview, ranked search, version history, import and export, and a new Windows 11 look in light and dark. [See the changelog](CHANGELOG.md).
 
 ## Three keystrokes
 
@@ -265,7 +267,7 @@ One person keeps the team's proven prompts in a shared folder (a network drive, 
 <details>
   <summary><b>Updates</b></summary>
   <br/>
-  Prompt Library asks GitHub once a day whether a newer version exists (or choose Help → Check for updates…). Nothing about you or your prompts is sent. When one is out, choose <b>Update now</b>: it downloads the installer, checks it, closes the app safely and installs. Your prompts and settings are kept. Versions before 1.0.2 don't have this, so install 1.0.2 or later by hand once. See <a href="https://github.com/darretking/prompt-library/releases">what's new in each release</a>.
+  Prompt Library asks GitHub once a day whether a newer version exists (or choose Help → Check for updates…). Nothing about you or your prompts is sent. When one is out, choose <b>Update now</b>: it downloads the installer, checks it, closes the app safely and installs. Your prompts and settings are kept. Versions before 1.0.2 don't have this, so install 1.0.2 or later by hand once. See <a href="CHANGELOG.md">what's new in each version</a>.
 </details>
 
 <details>
@@ -333,7 +335,8 @@ One person keeps the team's proven prompts in a shared folder (a network drive, 
 ## Help and feedback
 
 - 🐛 [Report a bug or suggest an idea](https://github.com/darretking/prompt-library/issues)
-- 📦 [Releases and what's new](https://github.com/darretking/prompt-library/releases)
+- 📦 [Download the latest version](https://github.com/darretking/prompt-library/releases/latest)
+- 📝 [Changelog: what's new in each version](CHANGELOG.md)
 - 🧭 In the app: **Help → Setup guide…** runs setup again; **Help → Check for updates…** looks for a new version now.
 
 ## For developers
