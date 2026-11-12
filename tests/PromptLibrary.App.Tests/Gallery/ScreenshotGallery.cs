@@ -30,7 +30,10 @@ namespace PromptLibrary.App.Tests.Gallery;
 public sealed class ScreenshotGallery
 {
     private static readonly DateTimeOffset Fixed = new(2026, 11, 11, 12, 0, 0, TimeSpan.Zero);
-    private static readonly (string Name, double Scale)[] Scales = [("100", 1), ("150", 1.5)];
+    private static readonly (string Name, double Scale)[] Scales = [("100", 1), ("150", 1.5), ("200", 2)];
+
+    /// <summary>The screens also drawn at 200 % (light-200, dark-200); the others only at 100 % and 150 %.</summary>
+    private static readonly string[] AtTwoHundred = ["01-main", "14-search-empty", "17-search-fill-in", "18-settings"];
 
     private string _out = "";
     private string _theme = "";
@@ -82,6 +85,11 @@ public sealed class ScreenshotGallery
         }));
         yield return ("23-import-results", ImportResults);
         yield return ("25-file-menu", n => Main(n, w => { }, after: win => FileMenu(n, win)));
+        // The frame itself (native caption buttons, Mica) is drawn by DWM and cannot be captured here: this is the title bar row
+        // as WPF draws it, active and inactive (the 144 px on the right are where the native buttons sit).
+        yield return ("29-title-bar", n => Main(n, w => { }, capture: false, after: win => Capture(n, win.TitleBar)));
+        yield return ("29b-title-bar-inactive", n => Main(n, w => { w.Vm.Editor!.Title += " edit"; }, capture: false, inactiveTitle: true,
+            after: win => Capture(n, win.TitleBar)));
         yield return ("26-main-preview-markdown", n => Main(n, w =>
         {
             w.Vm.PlaceholderValues["owner"] = "Priya";
@@ -143,7 +151,7 @@ public sealed class ScreenshotGallery
     }
 
     private void Main(string name, Action<World> setup, bool populated = true, double width = 1100, double height = 700,
-        Action<MainWindow>? after = null)
+        Action<MainWindow>? after = null, bool capture = true, bool inactiveTitle = false)
     {
         var host = NewHost(populated);
         var window = new MainWindow(host);
@@ -153,6 +161,11 @@ public sealed class ScreenshotGallery
         window.Height = height;
         Place(window);
         window.Show();
+        window.Activate();
+        // The offscreen window is never really active, so its title would show dimmed. A window in use shows it in Ink: say so
+        // here (a local value beats the style's inactive trigger), except for the screen that shows the inactive look.
+        if (!inactiveTitle && window.TitleBar.Children.OfType<TextBlock>().FirstOrDefault() is { } title)
+            title.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Ink");
         Pump();
         try
         {
@@ -163,7 +176,7 @@ public sealed class ScreenshotGallery
             }
             setup(world);
             Pump();
-            Capture(name, window);
+            if (capture) Capture(name, window);
             after?.Invoke(window);
         }
         finally { window.CloseForExit(); }
@@ -376,7 +389,7 @@ public sealed class ScreenshotGallery
             element = client;
         double w = element.ActualWidth, h = element.ActualHeight;
         var margin = isWindow ? 0 : 12; // a little of the window colour around a loose popup
-        foreach (var (folder, scale) in Scales)
+        foreach (var (folder, scale) in Scales.Where(s => s.Name != "200" || AtTwoHundred.Contains(name)))
         {
             var dir = Path.Combine(_out, $"{_theme}-{folder}");
             Directory.CreateDirectory(dir);

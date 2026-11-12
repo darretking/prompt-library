@@ -12,6 +12,13 @@
         MinWidth="860" MinHeight="520"
         WindowStartupLocation="CenterScreen">
 
+    <!-- Custom Windows 11 title bar: the client area starts at the top edge (glass, so Mica shows through) and the top 48 px are
+         the caption. DWM draws the native caption buttons (UseAeroCaptionButtons). -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="48" GlassFrameThickness="-1" UseAeroCaptionButtons="True" CornerRadius="0"
+                      ResizeBorderThickness="{x:Static SystemParameters.WindowResizeBorderThickness}" />
+    </WindowChrome.WindowChrome>
+
     <Window.InputBindings>
         <KeyBinding Modifiers="Ctrl" Key="N" Command="{Binding NewPromptCommand}" />
         <KeyBinding Modifiers="Ctrl" Key="S" Command="{Binding SaveCommand}" />
@@ -220,9 +227,26 @@
         </Style>
     </Window.Resources>
 
-    <DockPanel>
-        <Menu DockPanel.Dock="Top"
-              AutomationProperties.Name="Menu">
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Title bar (Windows 11 style, as Notepad and Paint): 48 px, in the window's own client area so Mica shows through. The
+             app icon at a 16 px inset, the File and Help menus, the title. The right 144 px are left for the native minimise /
+             maximise / close buttons that DWM draws over this row (snap layouts keep working). The rest of the row drags the window. -->
+        <Grid x:Name="TitleBar" Grid.Row="0" Height="48" Background="Transparent">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="144" />
+            </Grid.ColumnDefinitions>
+            <Image Grid.Column="0" Width="16" Height="16" Margin="16,0,4,0" Source="/Assets/app.ico"
+                   RenderOptions.BitmapScalingMode="HighQuality" IsHitTestVisible="False" />
+            <Menu Grid.Column="1" VerticalAlignment="Center" Margin="4,0,0,0" WindowChrome.IsHitTestVisibleInChrome="True"
+                  AutomationProperties.Name="Menu">
             <MenuItem Style="{StaticResource MenuBarHeader}" Header="_File" AutomationProperties.Name="File">
                 <MenuItem Style="{StaticResource FlyoutItem}" Header="_Back up now" Command="{Binding BackupNowCommand}" />
                 <MenuItem Style="{StaticResource FlyoutItem}" Header="_Restore from backup…" Command="{Binding RestoreCommand}" />
@@ -239,9 +263,26 @@
                 <MenuItem Style="{StaticResource FlyoutItem}" Header="Check for _updates…" Command="{Binding CheckForUpdatesCommand}" />
                 <MenuItem Style="{StaticResource FlyoutItem}" Header="_About Prompt Library" Command="{Binding AboutCommand}" />
             </MenuItem>
-        </Menu>
+            </Menu>
 
-        <Grid>
+            <!-- The window title in Caption style (12 px); the unsaved dot comes with it; dims while the window is inactive. -->
+            <TextBlock Grid.Column="2" Text="{Binding WindowTitle}" FontSize="12" Margin="12,0,8,0"
+                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" IsHitTestVisible="False"
+                       AutomationProperties.Name="{Binding WindowTitle}">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsActive, RelativeSource={RelativeSource AncestorType=Window}}" Value="False">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Muted}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </Grid>
+
+        <Grid Grid.Row="1">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -402,7 +443,7 @@
                                        VerticalAlignment="Center" />
                         </DockPanel>
 
-                        <ListBox x:Name="RailList" Grid.Row="1" Style="{StaticResource PlainList}"
+                        <ListBox x:Name="RailList" Grid.Row="1" Style="{StaticResource PlainList}" controls:ScrollFade.Enabled="True"
                                  ItemsSource="{Binding Categories}"
                                  SelectedItem="{Binding SelectedCategory}"
                                  ItemContainerStyle="{StaticResource CategoryRow}"
@@ -413,19 +454,31 @@
                                     <Grid>
                                         <Grid Style="{StaticResource HiddenWhileRenaming}">
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="20" />
+                                                <ColumnDefinition Width="22" />
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <!-- A fixed 20 px column so names line up: the category's emoji, or a small
-                                                 Fluent glyph on All prompts and Recent. -->
-                                            <emoji:TextBlock Text="{Binding Emoji}" FontSize="14" HorizontalAlignment="Left"
-                                                             VerticalAlignment="Center" />
+                                            <!-- A fixed 22 px column so names line up: the category's emoji on a faint rounded tile (so dark
+                                                 emoji stay visible in dark mode), or a small Fluent glyph on All prompts and Recent. -->
+                                            <Border Width="22" Height="22" CornerRadius="{StaticResource Radius}"
+                                                    Background="{DynamicResource Brush.EmojiTile}">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Emoji}" Value="{x:Null}">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <emoji:TextBlock Text="{Binding Emoji}" FontSize="14" HorizontalAlignment="Center"
+                                                                 VerticalAlignment="Center" />
+                                            </Border>
                                             <TextBlock Text="{Binding Glyph}" Style="{StaticResource InlineGlyph}"
-                                                       FontSize="14" Foreground="{DynamicResource Brush.Muted}" />
+                                                       FontSize="14" Foreground="{DynamicResource Brush.Muted}" HorizontalAlignment="Center" />
                                             <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis"
-                                                       ToolTip="{Binding Name}"
+                                                       ToolTip="{Binding Name}" Margin="8,0,0,0"
                                                        VerticalAlignment="Center" />
                                             <!-- The count is muted and shows only on the selected or pointed-at row (All prompts always). -->
                                             <TextBlock x:Name="CountText" Grid.Column="2" Text="{Binding Count}"
@@ -542,7 +595,19 @@
 
                 <!-- Middle: search with the New prompt icon button, then the prompt list -->
                 <Border Grid.Column="1" Background="{DynamicResource Brush.WindowBackdrop}">
-                    <Grid>
+                    <!-- The list column is its own subtle layer (Fluent LayerFillColorDefault) over the backdrop; the rail stays on
+                         the base and the editor card is the strongest layer. Flat while the library is empty. -->
+                    <Grid x:Name="ListColumn">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="Background" Value="{DynamicResource Brush.ListLayer}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ShowNoPromptsYet}" Value="True">
+                                        <Setter Property="Background" Value="Transparent" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
@@ -550,6 +615,15 @@
                         </Grid.RowDefinitions>
 
                         <Grid Grid.Row="0" Margin="8,12,8,8">
+                            <Grid.Style>
+                                <Style TargetType="Grid">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ShowNoPromptsYet}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Grid.Style>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
@@ -581,7 +655,7 @@
                                   Visibility="{Binding ShowHiddenToggle, Converter={StaticResource BoolToVisibility}}"
                                   AutomationProperties.Name="{Binding ShowHiddenText}" />
 
-                        <ListBox x:Name="PromptList" Grid.Row="2" Style="{StaticResource PlainList}"
+                        <ListBox x:Name="PromptList" Grid.Row="2" Style="{StaticResource PlainList}" controls:ScrollFade.Enabled="True"
                                  ItemsSource="{Binding Prompts}"
                                  SelectedItem="{Binding SelectedPrompt}"
                                  ItemContainerStyle="{StaticResource PromptRow}"
@@ -667,28 +741,6 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-
-                        <!-- Empty library: one centred card in this column (the editor column stays quiet). -->
-                        <Border Grid.Row="2" VerticalAlignment="Center" Margin="8,0,8,56" Padding="16,24"
-                                Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Line}"
-                                BorderThickness="1" CornerRadius="8"
-                                Visibility="{Binding ShowNoPromptsYet, Converter={StaticResource BoolToVisibility}}">
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource EmptyGlyph}" Text="&#xE8F1;" HorizontalAlignment="Center" />
-                                <TextBlock Text="Your library is empty" FontSize="16" FontWeight="SemiBold"
-                                           TextWrapping="Wrap" TextAlignment="Center" />
-                                <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" TextAlignment="Center"
-                                           Margin="0,6,0,0"
-                                           Text="Write your first prompt, or start with ready-made examples." />
-                                <Button x:Name="EmptyNewPromptButton" Style="{StaticResource PrimaryButton}" Content="New prompt"
-                                        Command="{Binding NewPromptCommand}" Margin="0,16,0,0" Padding="8,0" MinWidth="0"
-                                        ToolTip="New prompt (Ctrl+N)" AutomationProperties.Name="New prompt" />
-                                <Button Content="Add starter prompts" Command="{Binding AddStarterPromptsCommand}"
-                                        Margin="0,8,0,0" Padding="8,0" MinWidth="0"
-                                        ToolTip="Add 39 example prompts you can change or delete"
-                                        AutomationProperties.Name="Add starter prompts" />
-                            </StackPanel>
-                        </Border>
 
                         <!-- Team side states: loading, empty, everything hidden. -->
                         <TextBlock Grid.Row="2" Margin="16,8,16,0" Text="Loading team prompts…"
@@ -803,6 +855,38 @@
                                     </Button>
                                 </StackPanel>
                             </Grid>
+
+                            <!-- Under the card's body, always visible: when it was updated and how often it was used (quiet), the prompt's
+                                 error, and the tab hint at the right (left out for a read-only prompt). -->
+                            <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                                <!-- Only while typing in the prompt box (Hidden, not Collapsed, so nothing moves). -->
+                                <TextBlock DockPanel.Dock="Right" Text="Ctrl+Tab inserts a tab" Margin="8,0,0,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+                                            <Setter Property="Visibility" Value="Hidden" />
+                                            <Style.Triggers>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding IsKeyboardFocusWithin, ElementName=PromptBox}" Value="True" />
+                                                        <Condition Binding="{Binding Editor.IsReadOnly}" Value="False" />
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Editor.MetaText}" Style="{StaticResource MutedText}" />
+                                    <TextBlock Text="{Binding Editor.TextError}" Style="{StaticResource ErrorText}" Margin="12,0,0,0" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <!-- Everything between the header and that line scrolls inside the card when the window is too small for it
+                                 (at the minimum size, 200 % scaling): nothing is clipped. When there is room it is as tall as it needs. -->
+                            <controls:FitScroll VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                            <controls:HeightGate>
+                            <DockPanel LastChildFill="True">
 
                             <!-- Title and description are edited in place: flat fields, no labels (the automation names stay). -->
                             <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
@@ -931,33 +1015,8 @@
 
                             <!-- The prompt slip: a page-toned inset with a 1 px Line frame and 8 px corners. It is as tall as its
                                  text (at least about eight lines) and takes the room left over only when the text is longer. -->
-                            <controls:SlipFrame MinContentHeight="200" VerticalAlignment="Top">
+                            <controls:SlipFrame MinContentHeight="176" VerticalAlignment="Top">
                                 <DockPanel>
-                                    <!-- Under the slip: when it was updated and how often it was used (quiet), the prompt's error, and the
-                                         tab hint at the right (left out for a read-only prompt). -->
-                                <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
-                                    <!-- Only while typing in the prompt box (Hidden, not Collapsed, so nothing moves). -->
-                                    <TextBlock DockPanel.Dock="Right" Text="Ctrl+Tab inserts a tab" Margin="8,0,0,0">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
-                                                <Setter Property="Visibility" Value="Hidden" />
-                                                <Style.Triggers>
-                                                    <MultiDataTrigger>
-                                                        <MultiDataTrigger.Conditions>
-                                                            <Condition Binding="{Binding IsKeyboardFocusWithin, ElementName=PromptBox}" Value="True" />
-                                                            <Condition Binding="{Binding Editor.IsReadOnly}" Value="False" />
-                                                        </MultiDataTrigger.Conditions>
-                                                        <Setter Property="Visibility" Value="Visible" />
-                                                    </MultiDataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{Binding Editor.MetaText}" Style="{StaticResource MutedText}" />
-                                        <TextBlock Text="{Binding Editor.TextError}" Style="{StaticResource ErrorText}" Margin="12,0,0,0" />
-                                    </StackPanel>
-                                </DockPanel>
                                     <Grid>
                                         <Border Background="{DynamicResource Brush.Window}" BorderBrush="{DynamicResource Brush.Line}"
                                                 BorderThickness="1" CornerRadius="8" />
@@ -984,6 +1043,9 @@
                                     </Grid>
                                 </DockPanel>
                             </controls:SlipFrame>
+                            </DockPanel>
+                            </controls:HeightGate>
+                            </controls:FitScroll>
                         </DockPanel>
                     </Border>
 
@@ -991,11 +1053,44 @@
                     <Border x:Name="Toast" Opacity="0" Visibility="Collapsed" IsHitTestVisible="False"
                             HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,56"
                             Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Line}"
-                            BorderThickness="1" CornerRadius="4" Padding="16,6"
+                            BorderThickness="1" CornerRadius="8" Height="40" Padding="16,0"
                             AutomationProperties.LiveSetting="Polite">
-                        <TextBlock x:Name="ToastText" FontWeight="SemiBold" />
+                        <Border.RenderTransform>
+                            <TranslateTransform x:Name="ToastSlide" />
+                        </Border.RenderTransform>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- The glyph follows the message: copy, save, send (MainWindow.ShowToast). -->
+                            <TextBlock x:Name="ToastGlyph" Style="{StaticResource InlineGlyph}" FontSize="16" Margin="0,0,10,0"
+                                       Foreground="{DynamicResource Brush.Brand}" Text="&#xE73E;" />
+                            <TextBlock x:Name="ToastText" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </StackPanel>
                     </Border>
                 </Grid>
+
+                <!-- Empty library: one card centred across the whole content area (the list and editor columns, both ways).
+                     While it shows, the list column drops its layer and its search row, so the area reads as one canvas; the
+                     normal three-column layout is back as soon as the first prompt exists. -->
+                <Border Grid.Column="1" Grid.ColumnSpan="2" HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Width="320" Padding="24,24" Margin="24"
+                        Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Line}"
+                        BorderThickness="1" CornerRadius="8"
+                        Visibility="{Binding ShowNoPromptsYet, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource EmptyGlyph}" Text="&#xE8F1;" HorizontalAlignment="Center" />
+                        <TextBlock Text="Your library is empty" FontSize="16" FontWeight="SemiBold"
+                                   TextWrapping="Wrap" TextAlignment="Center" />
+                        <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" TextAlignment="Center"
+                                   Margin="0,6,0,0"
+                                   Text="Write your first prompt, or start with ready-made examples." />
+                        <Button x:Name="EmptyNewPromptButton" Style="{StaticResource PrimaryButton}" Content="New prompt"
+                                Command="{Binding NewPromptCommand}" Margin="0,16,0,0" Padding="8,0" MinWidth="0"
+                                ToolTip="New prompt (Ctrl+N)" AutomationProperties.Name="New prompt" />
+                        <Button Content="Add starter prompts" Command="{Binding AddStarterPromptsCommand}"
+                                Margin="0,8,0,0" Padding="8,0" MinWidth="0"
+                                ToolTip="Add 39 example prompts you can change or delete"
+                                AutomationProperties.Name="Add starter prompts" />
+                    </StackPanel>
+                </Border>
             </Grid>
 
             <!-- Declared last so it comes last in Tab order; shown at the top. -->
@@ -1025,5 +1120,5 @@
                 </WrapPanel>
             </Border>
         </Grid>
-    </DockPanel>
+    </Grid>
 </Window>

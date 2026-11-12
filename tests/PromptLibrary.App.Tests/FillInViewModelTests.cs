@@ -82,4 +82,56 @@ public class FillInViewModelTests
         Assert.True(vm.IsLast(vm.Fields[2]));
         Assert.False(vm.IsLast(vm.Fields[0]));
     }
+
+    private static string Show(FillInViewModel vm)
+        => string.Concat(vm.PreviewSegments.Select(s => s.Kind switch
+        {
+            FillSegmentKind.Empty => $"[{s.Text}]",
+            FillSegmentKind.Filled => $"<{s.Text}>",
+            _ => s.Text,
+        }));
+
+    [Fact]
+    public void PreviewSegments_ShowEmptyBlanksAsChipsAndFilledValuesAsValues()
+    {
+        var vm = new FillInViewModel("Trip of {number} days for {who's going}.", new AppSettings(), new Tokens());
+        Assert.Equal("Trip of [Number] days for [Who's going].", Show(vm));
+        Assert.Equal(FillSegmentKind.Empty, vm.PreviewSegments[1].Kind);
+    }
+
+    [Fact]
+    public void PreviewSegments_UpdateOnEveryKeystroke_AndRaiseTheChangeNotification()
+    {
+        var vm = new FillInViewModel("Trip of {number} days for {who's going}.", new AppSettings(), new Tokens());
+        var raised = new List<string?>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        var seen = new List<string>();
+        foreach (var typed in new[] { "5", "50", "5", "" })
+        {
+            vm.Fields[0].Value = typed;
+            seen.Add(Show(vm));
+        }
+
+        Assert.Equal(["Trip of <5> days for [Who's going].", "Trip of <50> days for [Who's going].",
+            "Trip of <5> days for [Who's going].", "Trip of [Number] days for [Who's going]."], seen);
+        Assert.Equal(4, raised.Count(n => n == nameof(FillInViewModel.PreviewSegments)));
+    }
+
+    [Fact]
+    public void PreviewSegments_FillTokensAndEscapesLikeThePastedText()
+    {
+        var vm = new FillInViewModel("{{x}} {a} on {date}{cursor}", new AppSettings(), new Tokens());
+        vm.Fields[0].Value = "Z";
+        Assert.Equal("{x} <Z> on 11/3/2026", Show(vm));
+        Assert.Equal(vm.PreviewText, string.Concat(vm.PreviewSegments.Select(s => s.Text)));
+    }
+
+    [Fact]
+    public void Labels_StartWithACapital_AndKeepTheRestAsWritten()
+    {
+        var vm = new FillInViewModel("{number} {who's going} {iPhone model} {city, e.g. Oslo}", new AppSettings(), new Tokens());
+        Assert.Equal(["Number", "Who's going", "IPhone model", "City"], vm.Fields.Select(f => f.Label));
+        Assert.Equal("number", vm.Fields[0].Name); // the key is unchanged
+    }
 }

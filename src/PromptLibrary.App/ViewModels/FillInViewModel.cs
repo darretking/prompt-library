@@ -23,6 +23,9 @@ public sealed class FillField : ObservableObject
     /// <summary>The key used to fill the text (for a choice, the whole <c>a / b</c> text).</summary>
     public string Name => Field.Name;
 
+    /// <summary>The label above the box: the name with its first letter upper-case ("Number", "Who's going"); the rest keeps its casing.</summary>
+    public string Label => Name.Length == 0 ? Name : char.ToUpperInvariant(Name[0]) + Name[1..];
+
     public bool IsChoice => Field.Kind == TemplateFieldKind.Choice;
     public bool IsText => !IsChoice;
     public IReadOnlyList<string> Options => Field.Options;
@@ -125,7 +128,9 @@ public sealed class FillInViewModel : ObservableObject
             var item = new FillField(field, remembered ?? "");
             item.PropertyChanged += (_, e) =>
             {
-                if (e.PropertyName == nameof(FillField.Value)) OnPropertyChanged(nameof(PreviewText));
+                if (e.PropertyName != nameof(FillField.Value)) return;
+                OnPropertyChanged(nameof(PreviewSegments));
+                OnPropertyChanged(nameof(PreviewText));
             };
             Fields.Add(item);
         }
@@ -144,6 +149,46 @@ public sealed class FillInViewModel : ObservableObject
 
     /// <summary>The prompt as it will come out now (unfilled blanks keep their <c>{…}</c>).</summary>
     public string PreviewText => Fill().Text;
+
+    /// <summary>
+    /// The same text as <see cref="PreviewText"/>, cut into pieces for drawing: plain text, a value the user filled in, and
+    /// a blank still to fill (shown as a chip with the field's label). Rebuilt on every keystroke; raising
+    /// <c>PreviewSegments</c> is what makes the view redraw.
+    /// </summary>
+    public IReadOnlyList<FillSegment> PreviewSegments
+    {
+        get
+        {
+            // Every field is filled with a private-use marker so one pass of the real fill (escapes, tokens, code spans)
+            // decides where the fields land; the markers are then swapped for the value or the blank.
+            var markers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < Fields.Count; i++)
+                markers[Fields[i].Name] = Open.ToString() + i.ToString(System.Globalization.CultureInfo.InvariantCulture) + Close;
+
+            var text = PromptTemplate.Fill(Clean(_text), markers, _tokens).Text;
+            var segments = new List<FillSegment>();
+            var at = 0;
+            while (at < text.Length)
+            {
+                var open = text.IndexOf(Open, at);
+                var close = open < 0 ? -1 : text.IndexOf(Close, open);
+                if (open < 0 || close < 0) break;
+                if (open > at) segments.Add(new FillSegment(FillSegmentKind.Text, text[at..open]));
+                var slot = int.TryParse(text.AsSpan(open + 1, close - open - 1), out var index) && index < Fields.Count ? Fields[index] : null;
+                if (slot is not null)
+                    segments.Add(string.IsNullOrWhiteSpace(slot.Value)
+                        ? new FillSegment(FillSegmentKind.Empty, slot.Label)
+                        : new FillSegment(FillSegmentKind.Filled, slot.Value));
+                at = close + 1;
+            }
+            if (at < text.Length) segments.Add(new FillSegment(FillSegmentKind.Text, text[at..]));
+            return segments;
+        }
+    }
+
+    private const char Open = '', Close = '';
+
+    private static string Clean(string text) => text.Replace(Open.ToString(), "").Replace(Close.ToString(), "");
 
     /// <summary>True when <paramref name="field"/> is the last one (Enter there completes the form).</summary>
     public bool IsLast(FillField field) => Fields.Count > 0 && ReferenceEquals(Fields[^1], field);
@@ -170,3 +215,19 @@ public sealed class FillInViewModel : ObservableObject
     private FillResult Fill()
         => PromptTemplate.Fill(_text, Fields.ToDictionary(f => f.Name, f => f.Value, StringComparer.OrdinalIgnoreCase), _tokens);
 }
+
+/// <summary>How a piece of the form's live preview is drawn.</summary>
+public enum FillSegmentKind
+{
+    /// <summary>Plain prompt text.</summary>
+    Text,
+
+    /// <summary>What the user typed (or a remembered value): Ink on a faint BrandSoft chip.</summary>
+    Filled,
+
+    /// <summary>A blank still to fill: a Brand chip with the field's label.</summary>
+    Empty,
+}
+
+/// <summary>One piece of the live preview.</summary>
+public sealed record FillSegment(FillSegmentKind Kind, string Text);

@@ -84,6 +84,38 @@ public class ThemeContrastTests
         Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
     }
 
+    /// <summary>The prompt-list column sits on its own translucent layer over the window: text on it (and on a hovered row) must still read.</summary>
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void Text_on_the_list_layer_meets_contrast(string theme)
+    {
+        var palette = Load(theme);
+        var layer = Over(palette["Brush.ListLayer"], palette["Brush.Window"]);
+        var hover = Over(palette["Brush.Hover"], layer);
+        var failures = new List<string>();
+        foreach (var (name, background) in new[] { ("ListLayer", layer), ("Hover over ListLayer", hover) })
+        {
+            if (Contrast(palette["Brush.Muted"], background) < 5.5) failures.Add($"{theme}: Muted on {name} = {Contrast(palette["Brush.Muted"], background):0.00}");
+            foreach (var text in new[] { "Brush.Ink", "Brush.Brand" })
+                if (Contrast(palette[text], background) < Minimum) failures.Add($"{theme}: {text} on {name} = {Contrast(palette[text], background):0.00}");
+        }
+        // The layer is a subtle step, not a second card: it never becomes as strong as the editor card (Surface).
+        Assert.True(Math.Abs(Luminance(layer) - Luminance(palette["Brush.Window"])) < Math.Abs(Luminance(palette["Brush.Surface"]) - Luminance(palette["Brush.Window"])) + 0.05,
+            $"{theme}: the list layer is stronger than the editor card");
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
+
+    /// <summary>The emoji tile is faint (at most 10 % alpha in light, 10 % in dark) so it lifts an emoji without becoming a button.</summary>
+    [Theory]
+    [InlineData("Light", 0, 0.05)]
+    [InlineData("Dark", 255, 0.10)]
+    public void Emoji_tile_is_a_faint_tint(string theme, byte channel, double maxAlpha)
+    {
+        var tile = Load(theme)["Brush.EmojiTile"];
+        Assert.Equal((channel, channel, channel), (tile.R, tile.G, tile.B));
+        Assert.InRange(tile.A / 255.0, 0.02, maxAlpha);
+    }
+
     /// <summary>The editor card's shadow: black, 8 % in light and 30 % in dark.</summary>
     [Theory]
     [InlineData("Light", 0.08)]

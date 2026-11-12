@@ -462,6 +462,9 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
                         <Grid Margin="4,1" SnapsToDevicePixels="True">
+                            <!-- Hover and selection fills are their own layers so each can fade (83 ms) instead of snapping. -->
+                            <Border x:Name="HoverFill" Background="{DynamicResource Brush.Hover}" CornerRadius="4" Opacity="0" IsHitTestVisible="False" />
+                            <Border x:Name="SelectFill" Background="{DynamicResource Brush.BrandSoft}" CornerRadius="4" Opacity="0" IsHitTestVisible="False" />
                             <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="{TemplateBinding Padding}">
                                 <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                                   VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
@@ -476,13 +479,29 @@
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Hover}" />
-                            </Trigger>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.BrandSoft}" />
                                 <Trigger.EnterActions>
                                     <BeginStoryboard>
                                         <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="HoverFill" Storyboard.TargetProperty="Opacity"
+                                                             To="1" Duration="{x:Static views:Motion.Fast}" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="HoverFill" Storyboard.TargetProperty="Opacity"
+                                                             To="0" Duration="{x:Static views:Motion.Fast}" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="SelectFill" Storyboard.TargetProperty="Opacity"
+                                                             To="1" Duration="{x:Static views:Motion.Fast}" />
                                             <DoubleAnimation Storyboard.TargetName="Indicator"
                                                              Storyboard.TargetProperty="RenderTransform.ScaleY"
                                                              To="1" Duration="{x:Static views:Motion.Fast}" />
@@ -492,6 +511,8 @@
                                 <Trigger.ExitActions>
                                     <BeginStoryboard>
                                         <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="SelectFill" Storyboard.TargetProperty="Opacity"
+                                                             To="0" Duration="{x:Static views:Motion.Fast}" />
                                             <DoubleAnimation Storyboard.TargetName="Indicator"
                                                              Storyboard.TargetProperty="RenderTransform.ScaleY"
                                                              To="0" Duration="{x:Static views:Motion.Fast}" />

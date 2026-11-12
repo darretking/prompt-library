@@ -106,16 +106,19 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="28" />
+                        <ColumnDefinition Width="30" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <!-- Leading 16 px glyph: the category's emoji in colour, else a document icon (people icon for team prompts). -->
-                    <Grid Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,2,0,0">
-                        <emoji:TextBlock Text="{Binding Emoji}" FontSize="13" HorizontalAlignment="Center"
-                                         VerticalAlignment="Center"
-                                         Visibility="{Binding HasEmoji, Converter={StaticResource BoolToVisibility}}" />
+                    <!-- Leading 22 px glyph: the category's emoji in colour, else a document icon (people icon for team prompts). -->
+                    <Grid Width="22" Height="22" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,-2,0,0">
+                        <!-- On a faint 22 px rounded tile, so dark emoji stay visible in dark mode. -->
+                        <Border Background="{DynamicResource Brush.EmojiTile}" CornerRadius="{StaticResource Radius}"
+                                Visibility="{Binding HasEmoji, Converter={StaticResource BoolToVisibility}}">
+                            <emoji:TextBlock Text="{Binding Emoji}" FontSize="13" HorizontalAlignment="Center"
+                                             VerticalAlignment="Center" />
+                        </Border>
                         <TextBlock Text="&#xE8A5;" FontFamily="{StaticResource Font.Icons}" FontSize="14"
                                    Foreground="{DynamicResource Brush.Muted}" HorizontalAlignment="Center"
                                    VerticalAlignment="Center"

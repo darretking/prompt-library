@@ -32,6 +32,10 @@
     <SolidColorBrush x:Key="Brush.CodeBlock" Color="#2D323F" />
     <!-- Shadow of the editor card: black; its alpha is the strength (8 % light, 30 % dark). Not a text colour. -->
     <SolidColorBrush x:Key="Brush.Shadow" Color="#4D000000" />
+    <!-- The prompt-list column: a subtle layer over the backdrop (Fluent LayerFillColorDefault). The rail stays on the base layer, the editor card is the strongest. -->
+    <SolidColorBrush x:Key="Brush.ListLayer" Color="#4D3A3A3A" />
+    <!-- A faint rounded tile behind category emoji so dark ones stay visible in dark mode. -->
+    <SolidColorBrush x:Key="Brush.EmojiTile" Color="#14FFFFFF" />
     <SolidColorBrush x:Key="Brush.DiffAdded" Color="#1D3A29" />
     <SolidColorBrush x:Key="Brush.DiffAddedText" Color="#A8E6BC" />
     <SolidColorBrush x:Key="Brush.DiffRemoved" Color="#4A2226" />

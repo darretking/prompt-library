@@ -72,7 +72,11 @@
                             <DataTemplate>
                                 <Button Style="{StaticResource EmojiCell}" Click="Cell_Click"
                                         AutomationProperties.Name="{Binding}">
-                                    <emoji:TextBlock Text="{Binding}" FontSize="18" />
+                                    <Border Width="22" Height="22" Background="{DynamicResource Brush.EmojiTile}"
+                                            CornerRadius="{StaticResource Radius}">
+                                        <emoji:TextBlock Text="{Binding}" FontSize="15" HorizontalAlignment="Center"
+                                                         VerticalAlignment="Center" />
+                                    </Border>
                                 </Button>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

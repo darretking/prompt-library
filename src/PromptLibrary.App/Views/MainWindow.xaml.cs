@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using PromptLibrary.App.Search;
 using PromptLibrary.App.Team;
@@ -49,6 +50,9 @@ public partial class MainWindow : Window, IDialogs
         };
         DataContext = ViewModel;
 
+        StateChanged += (_, _) => UpdateMaximizedInset();
+        DpiChanged += (_, _) => UpdateMaximizedInset();
+
         // The editor card's shadow follows the theme (8 % black in light, 30 % in dark) and is off on low-tier graphics.
         ApplyCardShadow();
         ThemeManager.Current.ThemeChanged += (_, _) => Dispatcher.BeginInvoke(ApplyCardShadow);
@@ -65,6 +69,36 @@ public partial class MainWindow : Window, IDialogs
     }
 
     public MainViewModel ViewModel { get; }
+
+    // ---- Title bar (custom caption) ------------------------------------------------------------
+
+    /// <summary>
+    /// A maximised window with a custom caption is laid out past the screen edges by the size of its resize border, so the content is
+    /// pulled back in by exactly that much (measured for this window's monitor DPI; the title bar and its menu would otherwise be
+    /// cut off). Restored, there is no inset: the resize border is invisible and sits outside the content.
+    /// </summary>
+    private void UpdateMaximizedInset()
+    {
+        Root.Margin = WindowState == WindowState.Maximized ? MaximizedInset(VisualTreeHelper.GetDpi(this).DpiScaleX) : new Thickness(0);
+    }
+
+    /// <summary>The resize border (device pixels from the system metrics at <paramref name="scale"/> × 96 DPI) in layout units.</summary>
+    internal static Thickness MaximizedInset(double scale)
+    {
+        var dpi = (uint)Math.Round(96 * scale);
+        double Px(int metric) => NativeMethods.GetSystemMetricsForDpi(metric, dpi) / scale;
+        var padded = Px(NativeMethods.SM_CXPADDEDBORDER);
+        return new Thickness(Px(NativeMethods.SM_CXSIZEFRAME) + padded, Px(NativeMethods.SM_CYSIZEFRAME) + padded,
+            Px(NativeMethods.SM_CXSIZEFRAME) + padded, Px(NativeMethods.SM_CYSIZEFRAME) + padded);
+    }
+
+    private static class NativeMethods
+    {
+        public const int SM_CXSIZEFRAME = 32, SM_CYSIZEFRAME = 33, SM_CXPADDEDBORDER = 92;
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern int GetSystemMetricsForDpi(int index, uint dpi);
+    }
 
     private void ApplyCardShadow()
     {
@@ -484,7 +518,6 @@ public partial class MainWindow : Window, IDialogs
     private readonly DispatcherTimer _toastTimer = new() { Interval = TimeSpan.FromMilliseconds(1500) };
     private bool _toastTimerHooked;
 
-    private static readonly Duration ToastFade = new(TimeSpan.FromMilliseconds(167));
 
     /// <summary>
     /// A small pill at the bottom of the editor: fades in over 167 ms (Fluent enter curve), stays 1.5 s, fades out
@@ -503,6 +536,10 @@ public partial class MainWindow : Window, IDialogs
         }
 
         ToastText.Text = text;
+        ToastGlyph.Text = text.StartsWith("Copied", StringComparison.Ordinal) ? ""   // Copy
+            : text.StartsWith("Saved", StringComparison.Ordinal) ? ""                // Save
+            : text.StartsWith("Sent", StringComparison.Ordinal) ? ""                 // Send
+            : "";                                                                    // CheckMark
         System.Windows.Automation.AutomationProperties.SetName(Toast, text);
         Toast.Visibility = Visibility.Visible;
         FadeToast(show: true);
@@ -512,24 +549,34 @@ public partial class MainWindow : Window, IDialogs
 
     private void FadeToast(bool show)
     {
-        if (!SystemParameters.ClientAreaAnimation)
+        if (!Motion.Enabled)
         {
             Toast.BeginAnimation(OpacityProperty, null);
+            ToastSlide.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
+            ToastSlide.Y = 0;
             Toast.Opacity = show ? 1 : 0;
             if (!show) Toast.Visibility = Visibility.Collapsed;
             return;
         }
 
-        // Fluent: enter cubic-bezier(0,0,0,1), exit (1,0,1,1).
-        var spline = show ? new System.Windows.Media.Animation.KeySpline(0, 0, 0, 1) : new System.Windows.Media.Animation.KeySpline(1, 0, 1, 1);
-        var animation = new System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames { Duration = ToastFade };
+        // Fluent: enter cubic-bezier(0,0,0,1), exit (1,0,1,1). Showing also slides up 8 px (167 ms); hiding only fades.
+        var duration = Motion.Normal;
+        var spline = show ? Motion.EnterCurve : new System.Windows.Media.Animation.KeySpline(1, 0, 1, 1);
+        var animation = new System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames { Duration = duration };
         animation.KeyFrames.Add(new System.Windows.Media.Animation.SplineDoubleKeyFrame(
-            show ? 1 : 0, System.Windows.Media.Animation.KeyTime.FromTimeSpan(ToastFade.TimeSpan), spline));
+            show ? 1 : 0, System.Windows.Media.Animation.KeyTime.FromTimeSpan(duration.TimeSpan), spline));
         if (!show)
             animation.Completed += (_, _) =>
             {
                 if (!_toastTimer.IsEnabled) Toast.Visibility = Visibility.Collapsed;
             };
+        if (show)
+        {
+            var slide = new System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames { Duration = duration };
+            slide.KeyFrames.Add(new System.Windows.Media.Animation.DiscreteDoubleKeyFrame(8, System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            slide.KeyFrames.Add(new System.Windows.Media.Animation.SplineDoubleKeyFrame(0, System.Windows.Media.Animation.KeyTime.FromTimeSpan(duration.TimeSpan), spline));
+            ToastSlide.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, slide);
+        }
         Toast.BeginAnimation(OpacityProperty, animation);
     }
 

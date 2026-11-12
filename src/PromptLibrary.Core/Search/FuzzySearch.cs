@@ -124,6 +124,16 @@ public static partial class FuzzySearch
         for (var i = 0; i < p.Tags.Count; i++)
             if (tagFilters.Any(t => p.Tags[i].StartsWith(t, StringComparison.OrdinalIgnoreCase))) tagHits.Add(i);
 
+        // ...and they count: the exact tag outranks one that only starts with the filter (A-Z alone would be arbitrary).
+        foreach (var filter in tagFilters)
+        {
+            var quality = 0.0;
+            foreach (var tag in p.Tags)
+                if (tag.Equals(filter, StringComparison.OrdinalIgnoreCase)) quality = Exact;
+                else if (tag.StartsWith(filter, StringComparison.OrdinalIgnoreCase)) quality = Math.Max(quality, Prefix);
+            score += quality * TagWeight;
+        }
+
         foreach (var word in words)
         {
             var best = 0.0;
