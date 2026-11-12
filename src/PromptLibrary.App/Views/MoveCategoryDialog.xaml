@@ -1,7 +1,7 @@
 <Window x:Class="PromptLibrary.App.Views.MoveCategoryDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:emoji="clr-namespace:Emoji.Wpf;assembly=Emoji.Wpf"
+        xmlns:emoji="clr-namespace:PromptLibrary.App.Views.Controls"
         Style="{StaticResource AppDialog}"
         Title="Delete category"
         AutomationProperties.Name="Delete category"
@@ -21,17 +21,17 @@
                 <ComboBox.ItemTemplate>
                     <DataTemplate>
                         <StackPanel Orientation="Horizontal">
-                            <emoji:TextBlock Text="{Binding Emoji}" Margin="0,0,6,0">
-                                <emoji:TextBlock.Style>
-                                    <Style TargetType="emoji:TextBlock">
+                            <emoji:EmojiImage Text="{Binding Emoji}" Margin="0,0,6,0">
+                                <emoji:EmojiImage.Style>
+                                    <Style TargetType="emoji:EmojiImage">
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding Emoji}" Value="{x:Null}">
                                                 <Setter Property="Visibility" Value="Collapsed" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
-                                </emoji:TextBlock.Style>
-                            </emoji:TextBlock>
+                                </emoji:EmojiImage.Style>
+                            </emoji:EmojiImage>
                             <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </DataTemplate>

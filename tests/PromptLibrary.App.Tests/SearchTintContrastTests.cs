@@ -16,7 +16,7 @@ public class SearchTintContrastTests
 
     [Theory]
     [MemberData(nameof(Themes))]
-    public void TranslucentLayers_KeepInkAndMutedReadable_OnBlackAndOnWhite(string theme) => Sta.Run(() =>
+    public void TranslucentLayers_KeepInkAndMutedReadable_OnBlackAndOnWhite(string theme) => Sta.RunOnApp(() =>
     {
         ChoiceTypingTests.StartApp();
         var palette = Palette(theme);
@@ -39,7 +39,7 @@ public class SearchTintContrastTests
 
     [Theory]
     [MemberData(nameof(Themes))]
-    public void TheTintsAreTranslucent_AndTheSolidFallbackIsTheThemeColour(string theme) => Sta.Run(() =>
+    public void TheTintsAreTranslucent_AndTheSolidFallbackIsTheThemeColour(string theme) => Sta.RunOnApp(() =>
     {
         ChoiceTypingTests.StartApp();
         var palette = Palette(theme);

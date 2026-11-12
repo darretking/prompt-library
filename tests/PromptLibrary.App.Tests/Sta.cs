@@ -22,6 +22,35 @@ internal static class Sta
         failure?.Throw();
     }
 
+    private static readonly Lazy<Dispatcher> AppDispatcher = new(() =>
+    {
+        Dispatcher? dispatcher = null;
+        using var ready = new ManualResetEventSlim();
+        var thread = new Thread(() =>
+        {
+            dispatcher = Dispatcher.CurrentDispatcher;
+            ready.Set();
+            Dispatcher.Run();
+        }) { IsBackground = true, Name = "WpfApplication tests" };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        ready.Wait();
+        return dispatcher!;
+    });
+
+    /// <summary>
+    /// Runs a test body on the one long-lived STA thread that owns the shared App (the "WpfApplication" collection).
+    /// WPF allows a single Application per process and <see cref="Run"/> shuts its thread's dispatcher down afterwards,
+    /// which would end that Application, so the next test couldn't create one.
+    /// </summary>
+    public static void RunOnApp(Action body, int timeoutSeconds = 30)
+    {
+        var op = AppDispatcher.Value.InvokeAsync(body);
+        if (op.Wait(TimeSpan.FromSeconds(timeoutSeconds)) != DispatcherOperationStatus.Completed)
+            throw new TimeoutException("The STA test body didn't finish within the time limit.");
+        op.Task.GetAwaiter().GetResult();
+    }
+
     /// <summary>Runs everything queued on this thread's dispatcher (down to background priority).</summary>
     public static void DoEvents()
     {

@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using PromptLibrary.App.Theming;
 using PromptLibrary.App.ViewModels;
 using PromptLibrary.App.Views;
@@ -25,7 +26,18 @@ public class ChoiceTypingTests
     internal static void StartApp()
     {
         typeof(Application).GetField("_resourceAssembly", BindingFlags.Static | BindingFlags.NonPublic)!.SetValue(null, typeof(App).Assembly);
-        if (Application.Current is null) new App().InitializeComponent();
+        if (Application.Current is null)
+        {
+            // Application's constructor queues OnStartup, which would take the single-instance mutex and start the whole
+            // AppHost (tray, hotkey, the real library) or, while the real app is running, shut this Application down.
+            // Tests only want App's resources, so cancel that queued startup.
+            DispatcherOperation? startup = null;
+            void Capture(object? sender, DispatcherHookEventArgs e) => startup ??= e.Operation;
+            Dispatcher.CurrentDispatcher.Hooks.OperationPosted += Capture;
+            try { new App().InitializeComponent(); }
+            finally { Dispatcher.CurrentDispatcher.Hooks.OperationPosted -= Capture; }
+            startup?.Abort();
+        }
         ThemeManager.Current.Apply("light");
     }
 
@@ -60,7 +72,7 @@ public class ChoiceTypingTests
     }
 
     [Fact]
-    public void TypingAChoiceValue_KeepsEveryLetter_AndDoesNotHang() => Sta.Run(() =>
+    public void TypingAChoiceValue_KeepsEveryLetter_AndDoesNotHang() => Sta.RunOnApp(() =>
     {
         var (vm, _, window, box) = Open();
         box.Focus();
@@ -72,7 +84,7 @@ public class ChoiceTypingTests
     }, timeoutSeconds: 20);
 
     [Fact]
-    public void TypingTheStartOfAnOption_CompletesTheRestSelected_AndALetterReplacesIt() => Sta.Run(() =>
+    public void TypingTheStartOfAnOption_CompletesTheRestSelected_AndALetterReplacesIt() => Sta.RunOnApp(() =>
     {
         var (vm, _, window, box) = Open("A {relaxed / packed / mixed} trip");
         Type(box, 'p');
@@ -86,7 +98,7 @@ public class ChoiceTypingTests
     }, timeoutSeconds: 20);
 
     [Fact]
-    public void FreeTextInAChoiceField_IsKeptAsTyped() => Sta.Run(() =>
+    public void FreeTextInAChoiceField_IsKeptAsTyped() => Sta.RunOnApp(() =>
     {
         var (vm, _, window, box) = Open();
         foreach (var letter in "slow") Type(box, letter);
@@ -97,7 +109,7 @@ public class ChoiceTypingTests
     }, timeoutSeconds: 20);
 
     [Fact]
-    public void Backspace_DeletesTheCompletedTail_WithoutCompletingAgain() => Sta.Run(() =>
+    public void Backspace_DeletesTheCompletedTail_WithoutCompletingAgain() => Sta.RunOnApp(() =>
     {
         var (vm, _, window, box) = Open();
         Type(box, 'p');                                   // "p" + selected "acked"
@@ -109,7 +121,7 @@ public class ChoiceTypingTests
     }, timeoutSeconds: 20);
 
     [Fact]
-    public void RememberedChoice_ShowsInTheBox() => Sta.Run(() =>
+    public void RememberedChoice_ShowsInTheBox() => Sta.RunOnApp(() =>
     {
         StartApp();
         var settings = new AppSettings();

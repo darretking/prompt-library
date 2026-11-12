@@ -30,11 +30,9 @@ public class SearchWindowOpenTimeTests(Xunit.Abstractions.ITestOutputHelper outp
     private const int Runs = 5;
 
     [NotOnCiFact]
-    public void ShowingTheWarmedWindow_RendersWithin150Ms() => Sta.Run(() =>
+    public void ShowingTheWarmedWindow_RendersWithin150Ms() => Sta.RunOnApp(() =>
     {
-        typeof(Application).GetField("_resourceAssembly", BindingFlags.Static | BindingFlags.NonPublic)!.SetValue(null, typeof(App).Assembly);
-        if (Application.Current is null) new App().InitializeComponent();
-        ThemeManager.Current.Apply("light");
+        ChoiceTypingTests.StartApp();
 
         // An un-started AppHost: no tray, hotkey, backups or disk access; just the seed library in memory.
         var host = new AppHost();
