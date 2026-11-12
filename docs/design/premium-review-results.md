@@ -98,3 +98,14 @@ round 6:
 
 Memory: GC gen0 budget and JIT variants moved idle private bytes only within run-to-run noise (108–123 MB); the rest is
 WPF/Direct3D native memory. U8 stays open.
+
+## Round 6 (2026-11-11), same reviewer: 89.6 %, FAIL (+1.3)
+
+F1 9 · F2 9.5 · F3 9 · F4 9 · F5 10 · F6 9 · F7 9 · F8 9 · U1 8.5 · U2 9 · U3 9 · U4 7 · U5 9.5 · U6 8.5 · U7 9 · U8 7.5.
+0.45 points short. Fixed for round 7:
+- U4 motion evidence: MotionTests samples the real search-window opening animation through a seeked clock (167 ms,
+  0 → 1 opacity, 8 → 0 px, ease-out, monotonic) and checks the Motion ramp (83/167 ms, zero when suppressed). The
+  gallery adds frames of the opening at 0, 33, 67, 100 and 167 ms (30-search-opening-*.png, 162 PNGs).
+- U1/U2: picker emoji that faded into their tiles were swapped for bundled bright ones: plate → necktie, stethoscope →
+  handshake, graduation cap → check mark (the old images stay bundled for libraries that use them).
+- F5: "This can't be undone." now sits under the tick box that causes it.

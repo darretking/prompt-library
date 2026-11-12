@@ -53,7 +53,8 @@ public partial class MoveCategoryDialog : Window
     /// <summary>The question at the top, which follows the tick box.</summary>
     internal string Message => MessageText.Text;
 
-    internal string HintMessage => HintText.Visibility == Visibility.Visible ? HintText.Text : "";
+    internal string HintMessage => DeleteWarning.Visibility == Visibility.Visible ? DeleteWarning.Text
+        : HintText.Visibility == Visibility.Visible ? HintText.Text : "";
 
     internal CheckBox DeleteTickBox => DeleteBox;
 
@@ -77,9 +78,9 @@ public partial class MoveCategoryDialog : Window
                   $"Create one first, or delete {them} with \"{_categoryName}\".";
         TargetBox.IsEnabled = !delete;
         MovePanel.Visibility = _canMove && !delete ? Visibility.Visible : Visibility.Collapsed;
-        HintText.Visibility = _canMove || delete ? Visibility.Visible : Visibility.Collapsed;
-        HintText.Text = delete ? "This can't be undone." : "Prompts move to the category you pick.";
-        HintText.SetResourceReference(StyleProperty, delete ? "ErrorText" : "MutedText");
+        HintText.Visibility = _canMove && !delete ? Visibility.Visible : Visibility.Collapsed;
+        HintText.Text = "Prompts move to the category you pick.";
+        DeleteWarning.Visibility = delete ? Visibility.Visible : Visibility.Collapsed;
 
         var text = delete ? $"Delete category and {Plural(_promptCount)}" : "Move and delete";
         ActionButton.Content = text;

@@ -133,6 +133,7 @@ public sealed class ScreenshotGallery
         yield return ("17-search-fill-in", n => Search(n, vm => { vm.Query = "plan a trip"; vm.Move(0); vm.UseSelected(); }, fitForm: true));
         yield return ("27-search-no-results", n => Search(n, vm => vm.Query = "zzzz"));
         yield return ("28-search-over-backdrop", SearchOverBackdrop);
+        yield return ("30-search-opening", SearchOpening);
         yield return ("17b-search-tags", n => Search(n, vm => { vm.Query = "kids"; vm.Move(0); }));
         yield return ("18-settings", n => Window(n, new SettingsWindow(NewHost(populated: true)), null, null));
         yield return ("19-onboarding-step1", n => Onboarding(n, last: false));
@@ -318,6 +319,30 @@ public sealed class ScreenshotGallery
             _backdrop = null;
             resources["Brush.WindowBackdrop"] = opaque;
         }
+    }
+
+    /// <summary>
+    /// The search window's opening motion as frames (0, 33, 67, 100 and 167 ms), each drawn with the opacity and slide the
+    /// real animation (SearchWindow.ShowAnimations) has at that moment, sampled through a seeked clock.
+    /// </summary>
+    private void SearchOpening(string name)
+    {
+        var host = NewHost(true);
+        var vm = new SearchViewModel(new SearchActions(host.Library, host.Settings), () => DateTimeOffset.Now);
+        var window = new SearchWindow(vm) { Width = 640, Height = 420 };
+        vm.Reset();
+        Place(window);
+        window.Show();
+        Pump();
+        var (opacity, slide) = SearchWindow.ShowAnimations();
+        foreach (var ms in new[] { 0, 33, 67, 100, 167 })
+        {
+            window.Body.Opacity = MotionTests.At(opacity, 1, ms);
+            window.Slide.Y = MotionTests.At(slide, 0, ms);
+            window.UpdateLayout();
+            Capture($"{name}-{ms:000}ms", window);
+        }
+        window.Close();
     }
 
     private Brush? _backdrop;

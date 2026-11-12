@@ -225,9 +225,16 @@ public partial class SearchWindow : Window
             return;
         }
 
+        var (opacity, slide) = ShowAnimations();
+        Body.BeginAnimation(OpacityProperty, opacity);
+        Slide.BeginAnimation(TranslateTransform.YProperty, slide);
+    }
+
+    /// <summary>The opening motion: the body's opacity 0 → 1 and its slide 8 → 0 px, over 167 ms on the Fluent enter curve.</summary>
+    internal static (DoubleAnimationUsingKeyFrames Opacity, DoubleAnimationUsingKeyFrames Slide) ShowAnimations()
+    {
         var spline = new KeySpline(0, 0, 0, 1);
-        Body.BeginAnimation(OpacityProperty, Frames(0, 1, spline));
-        Slide.BeginAnimation(TranslateTransform.YProperty, Frames(8, 0, spline));
+        return (Frames(0, 1, spline), Frames(8, 0, spline));
     }
 
     private static DoubleAnimationUsingKeyFrames Frames(double from, double to, KeySpline spline)

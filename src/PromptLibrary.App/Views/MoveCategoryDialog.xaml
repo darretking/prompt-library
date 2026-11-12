@@ -48,6 +48,9 @@
         <!-- The other way out: delete the prompts with the category. Only for a category that has some. -->
         <CheckBox x:Name="DeleteBox" Margin="0,16,0,0" Checked="DeleteBox_Changed" Unchecked="DeleteBox_Changed"
                   ToolTip="Delete the prompts too instead of moving them" />
+        <!-- Under the box that causes it: shown only while the prompts are to be deleted. -->
+        <TextBlock x:Name="DeleteWarning" Style="{StaticResource ErrorText}" Text="This can't be undone." TextWrapping="Wrap"
+                   Margin="28,4,0,0" Visibility="Collapsed" />
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
             <Button Content="Cancel" IsCancel="True" Margin="0,0,8,0" AutomationProperties.Name="Cancel" />
