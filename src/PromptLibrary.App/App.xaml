@@ -670,7 +670,7 @@
             </Setter>
         </Style>
 
-        <!-- A header of the menu bar (File, Help): 28 px, 4 px radius, Hover while pointed at or open; its drop-down is a
+        <!-- A header of the menu bar (File, Help): the title bar's height less 2 px above and below, 4 px radius, Hover while pointed at or open; its drop-down is a
              flyout (Surface, 1 px Line, 8 px radius, 4 px padding). -->
         <Style x:Key="MenuBarHeader" TargetType="MenuItem">
             <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
@@ -678,8 +678,8 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="MenuItem">
-                        <Grid>
-                            <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="10,0" MinHeight="28"
+                        <Grid Margin="0,2">
+                            <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="10,0"
                                     Margin="0,0,2,0" SnapsToDevicePixels="True">
                                 <ContentPresenter ContentSource="Header" VerticalAlignment="Center" RecognizesAccessKey="True" />
                             </Border>

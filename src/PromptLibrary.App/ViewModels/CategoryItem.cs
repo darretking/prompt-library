@@ -11,9 +11,11 @@ public sealed class CategoryItem : ObservableObject
     /// <summary>The id the Recent row has in the rail (it isn't a category; nothing else uses this id).</summary>
     public static readonly Guid RecentId = new("5f3a1c52-8d1b-4b53-9c1e-7a7c2b0e4d11");
 
-    /// <summary>Segoe Fluent Icons code points of the rail's two fixed rows.</summary>
-    public const string AllGlyph = "";
-    public const string RecentGlyph = "";
+    /// <summary>
+    /// Colour emoji the rail shows where a row has none of its own (all in the bundled Fluent Emoji set, and none used by a
+    /// starter category): a house on All prompts, a clock on Recent, and a memo on a category without an emoji.
+    /// </summary>
+    public const string AllEmoji = "\U0001F3E0", RecentEmoji = "\U0001F552", DefaultEmoji = "\U0001F4DD";
 
     private bool _isRenaming;
     private string _editName = "";
@@ -48,11 +50,8 @@ public sealed class CategoryItem : ObservableObject
     /// <summary>True for a real category (not All prompts, not Recent): it can be renamed, given an emoji and deleted.</summary>
     public bool IsCategory => Id is not null && !IsRecent;
 
-    /// <summary>The Fluent glyph that stands in for the emoji on the fixed rows, or null.</summary>
-    public string? Glyph => IsAll ? AllGlyph : IsRecent ? RecentGlyph : null;
-
-    /// <summary>The emoji in the rail: the category's own, none for the fixed rows (they show <see cref="Glyph"/>).</summary>
-    public bool HasEmoji => Emoji is not null;
+    /// <summary>The emoji in the rail: always colour, so every row lines up the same way (the category's own when it has one).</summary>
+    public string RailEmoji => IsAll ? AllEmoji : IsRecent ? RecentEmoji : Emoji ?? DefaultEmoji;
 
     /// <summary>What the rail says for a screen reader: the plain name.</summary>
     public string DisplayName => Emoji is null ? Name : $"{Emoji} {Name}";

@@ -79,12 +79,11 @@ public sealed class SearchItem
     /// <summary>The category's name (no emoji), or empty.</summary>
     public string CategoryName { get; init; } = "";
 
-    /// <summary>The category's emoji for the leading glyph column, or empty (the view then shows a document or team icon).</summary>
+    /// <summary>
+    /// The colour emoji in the leading column: the category's own, or <see cref="CategoryItem.DefaultEmoji"/> (as in the main
+    /// window's rail) when it has none. Empty only on headers.
+    /// </summary>
     public string Emoji { get; init; } = "";
-
-    public bool HasEmoji => Emoji.Length > 0;
-    public bool ShowsTeamGlyph => !HasEmoji && IsTeam;
-    public bool ShowsDocumentGlyph => !HasEmoji && !IsTeam;
 
     /// <summary>What a screen reader says for the row: <c>Plan a trip itinerary, Travel, team, pinned</c>.</summary>
     public string AutomationName => IsHeader
@@ -562,7 +561,7 @@ public sealed class SearchViewModel : ObservableObject
             Subtitle = subtitle,
             SubtitleSegments = Segments(subtitle, descriptionMarks),
             CategoryName = e.Category,
-            Emoji = e.Emoji,
+            Emoji = string.IsNullOrWhiteSpace(e.Emoji) ? CategoryItem.DefaultEmoji : e.Emoji,
             TagChips = tags,
             SnippetSegments = snippet,
         };

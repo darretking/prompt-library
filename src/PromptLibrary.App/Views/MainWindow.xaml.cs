@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Shell;
 using System.Windows.Threading;
 using PromptLibrary.App.Search;
 using PromptLibrary.App.Team;
@@ -50,6 +51,7 @@ public partial class MainWindow : Window, IDialogs
         };
         DataContext = ViewModel;
 
+        SourceInitialized += (_, _) => UpdateMaximizedInset();
         StateChanged += (_, _) => UpdateMaximizedInset();
         DpiChanged += (_, _) => UpdateMaximizedInset();
 
@@ -79,7 +81,28 @@ public partial class MainWindow : Window, IDialogs
     /// </summary>
     private void UpdateMaximizedInset()
     {
-        Root.Margin = WindowState == WindowState.Maximized ? MaximizedInset(VisualTreeHelper.GetDpi(this).DpiScaleX) : new Thickness(0);
+        var scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+        var maximized = WindowState == WindowState.Maximized;
+        Root.Margin = maximized ? MaximizedInset(scale) : new Thickness(0);
+
+        // The title bar is exactly as tall as the caption band DWM draws behind the native caption buttons, so the menu, the
+        // title and the buttons share one even strip (a taller row showed the band as a darker stripe over a lighter one).
+        var height = CaptionBandHeight(scale, maximized);
+        TitleBar.Height = height;
+        if (WindowChrome.GetWindowChrome(this) is { IsFrozen: false } chrome)
+            chrome.CaptionHeight = height;
+    }
+
+    /// <summary>
+    /// The height, in layout units, of the caption band DWM draws: caption plus the top resize border while restored; just the
+    /// caption while maximised (the border is then off screen and the content is already inset by <see cref="MaximizedInset"/>).
+    /// </summary>
+    internal static double CaptionBandHeight(double scale, bool maximized)
+    {
+        var dpi = (uint)Math.Round(96 * scale);
+        double Px(int metric) => NativeMethods.GetSystemMetricsForDpi(metric, dpi) / scale;
+        var caption = Px(NativeMethods.SM_CYCAPTION);
+        return maximized ? caption : caption + Px(NativeMethods.SM_CYSIZEFRAME) + Px(NativeMethods.SM_CXPADDEDBORDER);
     }
 
     /// <summary>The resize border (device pixels from the system metrics at <paramref name="scale"/> × 96 DPI) in layout units.</summary>
@@ -94,7 +117,7 @@ public partial class MainWindow : Window, IDialogs
 
     private static class NativeMethods
     {
-        public const int SM_CXSIZEFRAME = 32, SM_CYSIZEFRAME = 33, SM_CXPADDEDBORDER = 92;
+        public const int SM_CYCAPTION = 4, SM_CXSIZEFRAME = 32, SM_CYSIZEFRAME = 33, SM_CXPADDEDBORDER = 92;
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         public static extern int GetSystemMetricsForDpi(int index, uint dpi);

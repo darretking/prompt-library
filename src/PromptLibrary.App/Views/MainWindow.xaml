@@ -12,10 +12,11 @@
         MinWidth="860" MinHeight="520"
         WindowStartupLocation="CenterScreen">
 
-    <!-- Custom Windows 11 title bar: the client area starts at the top edge (glass, so Mica shows through) and the top 48 px are
-         the caption. DWM draws the native caption buttons (UseAeroCaptionButtons). -->
+    <!-- Custom Windows 11 title bar: the client area starts at the top edge (glass, so Mica shows through) and the top row is
+         the caption (its height follows DWM's caption band, see MainWindow.UpdateMaximizedInset). DWM draws the native caption
+         buttons (UseAeroCaptionButtons). -->
     <WindowChrome.WindowChrome>
-        <WindowChrome CaptionHeight="48" GlassFrameThickness="-1" UseAeroCaptionButtons="True" CornerRadius="0"
+        <WindowChrome CaptionHeight="32" GlassFrameThickness="-1" UseAeroCaptionButtons="True" CornerRadius="0"
                       ResizeBorderThickness="{x:Static SystemParameters.WindowResizeBorderThickness}" />
     </WindowChrome.WindowChrome>
 
@@ -233,10 +234,11 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Title bar (Windows 11 style, as Notepad and Paint): 48 px, in the window's own client area so Mica shows through. The
+        <!-- Title bar (Windows 11 style): as tall as DWM's caption band (set in code from the system metrics, about 30 px), in the
+             window's own client area so Mica shows through. The
              app icon at a 16 px inset, the File and Help menus, the title. The right 144 px are left for the native minimise /
              maximise / close buttons that DWM draws over this row (snap layouts keep working). The rest of the row drags the window. -->
-        <Grid x:Name="TitleBar" Grid.Row="0" Height="48" Background="Transparent">
+        <Grid x:Name="TitleBar" Grid.Row="0" Height="32" Background="Transparent">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
@@ -245,7 +247,7 @@
             </Grid.ColumnDefinitions>
             <Image Grid.Column="0" Width="16" Height="16" Margin="16,0,4,0" Source="/Assets/app.ico"
                    RenderOptions.BitmapScalingMode="HighQuality" IsHitTestVisible="False" />
-            <Menu Grid.Column="1" VerticalAlignment="Center" Margin="4,0,0,0" WindowChrome.IsHitTestVisibleInChrome="True"
+            <Menu Grid.Column="1" VerticalAlignment="Stretch" Margin="4,0,0,0" Padding="4,0" WindowChrome.IsHitTestVisibleInChrome="True"
                   AutomationProperties.Name="Menu">
             <MenuItem Style="{StaticResource MenuBarHeader}" Header="_File" AutomationProperties.Name="File">
                 <MenuItem Style="{StaticResource FlyoutItem}" Header="_Back up now" Command="{Binding BackupNowCommand}" />
@@ -459,24 +461,13 @@
                                                 <ColumnDefinition Width="Auto" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <!-- A fixed 22 px column so names line up: the category's emoji on a faint rounded tile (so dark
-                                                 emoji stay visible in dark mode), or a small Fluent glyph on All prompts and Recent. -->
+                                            <!-- A fixed 22 px column so names line up: every row's colour emoji (All prompts, Recent and
+                                                 categories without one get a default) on a faint rounded tile, so dark emoji stay visible in dark mode. -->
                                             <Border Width="22" Height="22" CornerRadius="{StaticResource Radius}"
                                                     Background="{DynamicResource Brush.EmojiTile}" BorderBrush="{DynamicResource Brush.EmojiTileRing}" BorderThickness="1">
-                                                <Border.Style>
-                                                    <Style TargetType="Border">
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Emoji}" Value="{x:Null}">
-                                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Border.Style>
-                                                <emoji:EmojiImage Text="{Binding Emoji}" FontSize="14" HorizontalAlignment="Center"
+                                                <emoji:EmojiImage Text="{Binding RailEmoji}" FontSize="14" HorizontalAlignment="Center"
                                                                  VerticalAlignment="Center" />
                                             </Border>
-                                            <TextBlock Text="{Binding Glyph}" Style="{StaticResource InlineGlyph}"
-                                                       FontSize="14" Foreground="{DynamicResource Brush.Muted}" HorizontalAlignment="Center" />
                                             <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis"
                                                        ToolTip="{Binding Name}" Margin="8,0,0,0"
                                                        VerticalAlignment="Center" />

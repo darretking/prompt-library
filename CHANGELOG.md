@@ -4,6 +4,17 @@ All notable changes to Prompt Library are listed here. Download any version from
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- 18 emoji for business departments and functions in the category emoji picker: people and HR, finance, growth, operations, IT, security, compliance, projects, records, product, logistics, manufacturing, the company, customer support, communications, wins, strategy, and research and testing.
+
+### Changed
+- Every row in the category rail shows a colour emoji: All prompts has a house, Recent a clock, and a category without its own emoji a memo. The search window uses the same memo instead of a grey icon.
+
+### Fixed
+- The title bar is one even strip: the menu, the title and the window buttons line up, with no lighter band underneath, restored or maximised.
+
 ## [1.2.0] - 2026-11-12
 
 A redesigned, faster Prompt Library with templates, search and history.
@@ -54,6 +65,7 @@ A redesigned, faster Prompt Library with templates, search and history.
 ### Added
 - First release: a global shortcut (Ctrl + Alt + P) that pastes a prompt into any app, a categorised library with search and an editor, automatic backups to OneDrive, Google Drive, Dropbox, iCloud Drive or any folder, and a short first-run setup.
 
+[Unreleased]: https://github.com/darretking/prompt-library/compare/v1.2.0...HEAD
 [1.2.0]: https://github.com/darretking/prompt-library/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/darretking/prompt-library/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/darretking/prompt-library/compare/v1.0.1...v1.0.2

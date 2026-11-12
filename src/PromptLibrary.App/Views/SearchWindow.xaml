@@ -111,23 +111,13 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <!-- Leading 22 px glyph: the category's emoji in colour, else a document icon (people icon for team prompts). -->
-                    <Grid Width="22" Height="22" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,-2,0,0">
-                        <!-- On a faint 22 px rounded tile, so dark emoji stay visible in dark mode. -->
-                        <Border Background="{DynamicResource Brush.EmojiTile}" BorderBrush="{DynamicResource Brush.EmojiTileRing}" BorderThickness="1" CornerRadius="{StaticResource Radius}"
-                                Visibility="{Binding HasEmoji, Converter={StaticResource BoolToVisibility}}">
-                            <emoji:EmojiImage Text="{Binding Emoji}" FontSize="13" HorizontalAlignment="Center"
-                                             VerticalAlignment="Center" />
-                        </Border>
-                        <TextBlock Text="&#xE8A5;" FontFamily="{StaticResource Font.Icons}" FontSize="14"
-                                   Foreground="{DynamicResource Brush.Muted}" HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   Visibility="{Binding ShowsDocumentGlyph, Converter={StaticResource BoolToVisibility}}" />
-                        <TextBlock Text="&#xE716;" FontFamily="{StaticResource Font.Icons}" FontSize="14"
-                                   Foreground="{DynamicResource Brush.Muted}" HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   Visibility="{Binding ShowsTeamGlyph, Converter={StaticResource BoolToVisibility}}" />
-                    </Grid>
+                    <!-- Leading 22 px colour emoji (the category's own, or the default memo, as in the main window's rail; team
+                         rows say "Team" on the right), on a faint rounded tile so dark emoji stay visible in dark mode. -->
+                    <Border Width="22" Height="22" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,-2,0,0"
+                            Background="{DynamicResource Brush.EmojiTile}" BorderBrush="{DynamicResource Brush.EmojiTileRing}" BorderThickness="1" CornerRadius="{StaticResource Radius}">
+                        <emoji:EmojiImage Text="{Binding Emoji}" FontSize="13" HorizontalAlignment="Center"
+                                         VerticalAlignment="Center" />
+                    </Border>
 
                     <TextBlock Grid.Column="1" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
                                views:InlineText.Segments="{Binding TitleSegments}" />

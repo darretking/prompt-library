@@ -65,7 +65,7 @@
                     <ItemsControl x:Name="Cells" AutomationProperties.Name="Emoji">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <UniformGrid Columns="6" Rows="6" />
+                                <UniformGrid Columns="6" Rows="9" />
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>

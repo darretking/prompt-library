@@ -6,10 +6,10 @@ namespace PromptLibrary.Core.Tests;
 public class EmojiChoicesTests
 {
     [Fact]
-    public void Offers36DistinctSingleEmoji()
+    public void Offers54DistinctSingleEmoji()
     {
-        Assert.Equal(36, EmojiChoices.All.Count);
-        Assert.Equal(36, EmojiChoices.All.Distinct().Count());
+        Assert.Equal(54, EmojiChoices.All.Count);
+        Assert.Equal(54, EmojiChoices.All.Distinct().Count());
         Assert.All(EmojiChoices.All, e => Assert.Equal(1, new StringInfo(e).LengthInTextElements));
     }
 }
