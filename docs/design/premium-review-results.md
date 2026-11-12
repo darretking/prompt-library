@@ -109,3 +109,13 @@ F1 9 · F2 9.5 · F3 9 · F4 9 · F5 10 · F6 9 · F7 9 · F8 9 · U1 8.5 · U2 
 - U1/U2: picker emoji that faded into their tiles were swapped for bundled bright ones: plate → necktie, stethoscope →
   handshake, graduation cap → check mark (the old images stay bundled for libraries that use them).
 - F5: "This can't be undone." now sits under the tick box that causes it.
+
+## Round 7 (2026-11-11), same reviewer: 90.5 %, PASS (+0.9)
+
+F1 9 · F2 9.5 · F3 9 · F4 9 · F5 10 · F6 9 · F7 9 · F8 9 · U1 9 · U2 9 · U3 9 · U4 8.5 · U5 9.5 · U6 8.5 · U7 9 · U8 7.5.
+Passes the bar (≥ 90 %, lowest criterion 7.5), with a thin margin. Optional follow-ups the reviewer listed:
+- brighter Fluent variants for 💬 and 🔧 (light) and 💼 and 📣 (dark): needs a new asset download, owner's call
+- seeked-clock tests and frames for the toast fade and the dialog fade-and-scale
+- idle private bytes towards 90 MB by releasing the main window and AvalonEdit when the main window closes
+- a 200 % shot of the in-place title and tag box with keyboard focus
+Still unverified anywhere: real Mica/Acrylic over a live desktop, live motion, caption buttons and Alt/F10 menu keys.
