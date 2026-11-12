@@ -1,0 +1,332 @@
+<Window x:Class="PromptLibrary.App.Views.SearchWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:PromptLibrary.App.Views"
+        xmlns:emoji="clr-namespace:PromptLibrary.App.Views.Controls"
+        Style="{StaticResource SearchWindow}"
+        Title="Search prompts"
+        AutomationProperties.Name="Search prompts"
+        WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True" ShowActivated="True"
+        Width="640" Height="420">
+    <!-- The launcher the global shortcut opens (docs/superpowers/specs/2026-11-11-premium-design.md section 1 and 12).
+         Created once at startup and reused. DWM draws the 8 px corners, the shadow and the Acrylic backdrop. For that the
+         glass must cover the whole window (GlassFrameThickness -1: a thinner frame leaves a solid panel over the backdrop)
+         and AllowsTransparency must stay False. The search bar, list, preview and footer are translucent tints
+         (Brush.Search.Chrome / List / Preview, set in code from Theming/SearchTints) so the backdrop shows through. -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" ResizeBorderThickness="0" GlassFrameThickness="-1" CornerRadius="0"
+                      UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <!-- The search box: 18 px, no frame of its own, a muted hint while empty. -->
+        <Style x:Key="LauncherBox" TargetType="TextBox">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Ink}" />
+            <Setter Property="CaretBrush" Value="{DynamicResource Brush.Ink}" />
+            <Setter Property="SelectionBrush" Value="{DynamicResource Brush.BrandFill}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Grid Background="Transparent">
+                            <TextBlock x:Name="Hint" Text="{TemplateBinding Tag}" Foreground="{DynamicResource Brush.Muted}"
+                                       VerticalAlignment="Center" IsHitTestVisible="False" Visibility="Collapsed" />
+                            <ScrollViewer x:Name="PART_ContentHost" Focusable="False" VerticalAlignment="Center"
+                                          HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Text" Value="">
+                                <Setter TargetName="Hint" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- A result row: a rounded 4 px pill; the selected one gets a BrandSoft fill and a 3 x 16 Brand bar on its left
+             (the main window's direction). Never takes the keyboard from the search box; group headers are inert. -->
+        <Style x:Key="ResultRow" TargetType="ListBoxItem" BasedOn="{StaticResource RowItem}">
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Padding" Value="12,6,12,6" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
+            <EventSetter Event="PreviewMouseLeftButtonUp" Handler="Row_Click" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Pill" Margin="8,1" CornerRadius="4" Background="Transparent" SnapsToDevicePixels="True">
+                            <Grid>
+                                <Border x:Name="Bar" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left"
+                                        VerticalAlignment="Center" Margin="2,0,0,0" Background="{DynamicResource Brush.Brand}"
+                                        Visibility="Collapsed" />
+                                <ContentPresenter Margin="{TemplateBinding Padding}"
+                                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Pill" Property="Background" Value="{DynamicResource Brush.Hover}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Pill" Property="Background" Value="{DynamicResource Brush.BrandSoft}" />
+                                <Setter TargetName="Bar" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsHeader}" Value="True">
+                    <Setter Property="IsEnabled" Value="False" />
+                    <Setter Property="Padding" Value="12,10,12,2" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="ActionRow" TargetType="ListBoxItem" BasedOn="{StaticResource RowItem}">
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Padding" Value="9,6,8,6" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
+            <EventSetter Event="PreviewMouseLeftButtonUp" Handler="Action_Click" />
+        </Style>
+
+        <DataTemplate x:Key="ItemTemplate">
+            <Grid>
+                <TextBlock Text="{Binding Header}" Style="{StaticResource MutedText}" FontWeight="SemiBold"
+                           Visibility="{Binding IsHeader, Converter={StaticResource BoolToVisibility}}" />
+                <Grid MinHeight="24" Visibility="{Binding IsRow, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="30" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Leading 22 px glyph: the category's emoji in colour, else a document icon (people icon for team prompts). -->
+                    <Grid Width="22" Height="22" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,-2,0,0">
+                        <!-- On a faint 22 px rounded tile, so dark emoji stay visible in dark mode. -->
+                        <Border Background="{DynamicResource Brush.EmojiTile}" BorderBrush="{DynamicResource Brush.EmojiTileRing}" BorderThickness="1" CornerRadius="{StaticResource Radius}"
+                                Visibility="{Binding HasEmoji, Converter={StaticResource BoolToVisibility}}">
+                            <emoji:EmojiImage Text="{Binding Emoji}" FontSize="13" HorizontalAlignment="Center"
+                                             VerticalAlignment="Center" />
+                        </Border>
+                        <TextBlock Text="&#xE8A5;" FontFamily="{StaticResource Font.Icons}" FontSize="14"
+                                   Foreground="{DynamicResource Brush.Muted}" HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Visibility="{Binding ShowsDocumentGlyph, Converter={StaticResource BoolToVisibility}}" />
+                        <TextBlock Text="&#xE716;" FontFamily="{StaticResource Font.Icons}" FontSize="14"
+                                   Foreground="{DynamicResource Brush.Muted}" HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Visibility="{Binding ShowsTeamGlyph, Converter={StaticResource BoolToVisibility}}" />
+                    </Grid>
+
+                    <TextBlock Grid.Column="1" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                               views:InlineText.Segments="{Binding TitleSegments}" />
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0">
+                        <TextBlock Text="Team" Style="{StaticResource MutedText}" Margin="0,0,8,0"
+                                   Visibility="{Binding IsTeam, Converter={StaticResource BoolToVisibility}}" />
+                        <TextBlock Text="&#xE718;" FontFamily="{StaticResource Font.Icons}" FontSize="12"
+                                   Foreground="{DynamicResource Brush.Muted}" VerticalAlignment="Center"
+                                   Margin="0,0,8,0" ToolTip="Pinned"
+                                   Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}" />
+                        <TextBlock Text="{Binding NumberHint}" Style="{StaticResource MutedText}" />
+                    </StackPanel>
+                    <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" views:InlineText.Segments="{Binding SubtitleSegments}"
+                               Style="{StaticResource MutedText}" TextTrimming="CharacterEllipsis" />
+
+                    <!-- Third line, only when the tags or the text matched: #tag chips (matched one bold) or a snippet. -->
+                    <ItemsControl Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" ItemsSource="{Binding TagChips}"
+                                  Margin="0,2,0,0" Focusable="False" IsTabStop="False"
+                                  Visibility="{Binding HasTagLine, Converter={StaticResource BoolToVisibility}}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource Brush.BrandSoft}" CornerRadius="4" Padding="6,0"
+                                        Margin="0,0,6,0">
+                                    <TextBlock Text="{Binding Text}" FontSize="12">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{DynamicResource Brush.Muted}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsMatch}" Value="True">
+                                                        <Setter Property="FontWeight" Value="Bold" />
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Brand}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,2,0,0"
+                               Style="{StaticResource MutedText}" TextTrimming="CharacterEllipsis"
+                               views:InlineText.Highlight="MatchBold"
+                               views:InlineText.Segments="{Binding SnippetSegments}"
+                               Visibility="{Binding HasSnippetLine, Converter={StaticResource BoolToVisibility}}" />
+                </Grid>
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ActionTemplate">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Label}" />
+                <TextBlock Grid.Column="1" Text="&#xE76C;" FontFamily="{StaticResource Font.Icons}" FontSize="12"
+                           Foreground="{DynamicResource Brush.Muted}" VerticalAlignment="Center"
+                           Visibility="{Binding OpensSubmenu, Converter={StaticResource BoolToVisibility}}" />
+            </Grid>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Border x:Name="Frame" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1" CornerRadius="8">
+        <Grid x:Name="Body" RenderTransformOrigin="0.5,0.5">
+            <Grid.RenderTransform>
+                <TranslateTransform x:Name="Slide" />
+            </Grid.RenderTransform>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="32" />
+            </Grid.RowDefinitions>
+
+            <!-- Search box -->
+            <Border Grid.Row="0" Height="56" Background="{DynamicResource Brush.Search.Chrome}"
+                    BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,0,1"
+                    Visibility="{Binding IsListOpen, Converter={StaticResource BoolToVisibility}}">
+                <Grid Margin="16,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="&#xE721;" FontFamily="{StaticResource Font.Icons}" FontSize="18"
+                               Foreground="{DynamicResource Brush.Muted}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                    <TextBox x:Name="SearchBox" Grid.Column="1" Style="{StaticResource LauncherBox}" Tag="Search prompts"
+                             Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="Search prompts" />
+                </Grid>
+            </Border>
+
+            <!-- Results and preview, or the fill-in form -->
+            <Grid Grid.Row="1">
+                <Grid Visibility="{Binding IsListOpen, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="3*" />
+                        <ColumnDefinition Width="2*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Background="{DynamicResource Brush.Search.List}">
+                        <!-- No results: the empty state spans both panes (there is nothing to preview). -->
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasResults}" Value="False">
+                                        <Setter Property="Grid.ColumnSpan" Value="2" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
+                        <ListBox x:Name="ResultList" Style="{StaticResource PlainList}" ItemsSource="{Binding Items}"
+                                 SelectedItem="{Binding Selected, Mode=TwoWay}" Focusable="False" Padding="0,4"
+                                 ItemContainerStyle="{StaticResource ResultRow}" ItemTemplate="{StaticResource ItemTemplate}"
+                                 AutomationProperties.Name="Results"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto" />
+
+                        <!-- No results: a glyph, what was searched, and how to widen it. -->
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="24,56,24,0"
+                                    AutomationProperties.Name="No results">
+                            <StackPanel.Visibility>
+                                <Binding Path="HasResults">
+                                    <Binding.Converter>
+                                        <views:InverseBoolToVisibility />
+                                    </Binding.Converter>
+                                </Binding>
+                            </StackPanel.Visibility>
+                            <TextBlock Text="&#xE721;" FontFamily="{StaticResource Font.Icons}" FontSize="32"
+                                       Foreground="{DynamicResource Brush.Muted}" HorizontalAlignment="Center" />
+                            <TextBlock Text="{Binding EmptyText}" FontWeight="SemiBold" TextWrapping="Wrap"
+                                       TextAlignment="Center" Margin="0,12,0,0" />
+                            <TextBlock Text="{Binding EmptyHint}" Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                                       TextAlignment="Center" Margin="0,4,0,0" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Border Grid.Column="1" Background="{DynamicResource Brush.Search.Preview}"
+                            BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1,0,0,0"
+                            Visibility="{Binding HasResults, Converter={StaticResource BoolToVisibility}}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      Focusable="False">
+                            <TextBlock x:Name="PreviewText" TextWrapping="Wrap" Padding="12"
+                                       FontFamily="{StaticResource Font.Prompt}" FontSize="13"
+                                       Foreground="{DynamicResource Brush.Ink}"
+                                       views:InlineText.Highlight="Chip"
+                                       views:InlineText.Segments="{Binding Preview}"
+                                       AutomationProperties.Name="Prompt preview" />
+                        </ScrollViewer>
+                    </Border>
+
+                    <!-- Ctrl+K menu -->
+                    <Border Grid.ColumnSpan="2" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="220"
+                            Margin="8" Padding="4" CornerRadius="8" Background="{DynamicResource Brush.Surface}"
+                            BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1"
+                            Visibility="{Binding IsActionsOpen, Converter={StaticResource BoolToVisibility}}">
+                        <ListBox Style="{StaticResource PlainList}" ItemsSource="{Binding Actions}"
+                                 SelectedItem="{Binding SelectedAction, Mode=TwoWay}" Focusable="False"
+                                 ItemContainerStyle="{StaticResource ActionRow}" ItemTemplate="{StaticResource ActionTemplate}"
+                                 AutomationProperties.Name="Actions" />
+                    </Border>
+                </Grid>
+
+                <Grid Background="{DynamicResource Brush.Search.List}"
+                      Visibility="{Binding IsFormOpen, Converter={StaticResource BoolToVisibility}}">
+                    <views:FillInPanel x:Name="FormPanel" DataContext="{Binding Form}" ShowEscHint="False" />
+                </Grid>
+            </Grid>
+
+            <!-- Footer hints -->
+            <Border Grid.Row="2" Background="{DynamicResource Brush.Search.Chrome}"
+                    BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,1,0,0">
+                <ItemsControl ItemsSource="{Binding Footer}" Margin="16,0" VerticalAlignment="Center" Focusable="False"
+                              IsTabStop="False" AutomationProperties.Name="{Binding FooterText}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,16,0"
+                                        AutomationProperties.Name="{Binding AutomationName}">
+                                <!-- A key cap: 4 px radius, Line stroke -->
+                                <Border BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1" CornerRadius="4"
+                                        Background="{DynamicResource Brush.Surface}" Padding="5,0" Margin="0,0,6,0">
+                                    <TextBlock Text="{Binding Key}" Style="{StaticResource MutedText}" FontSize="11"
+                                               FontWeight="SemiBold" />
+                                </Border>
+                                <TextBlock Text="{Binding Label}" Style="{StaticResource MutedText}"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

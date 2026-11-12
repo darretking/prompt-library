@@ -1,0 +1,19 @@
+<Window x:Class="PromptLibrary.App.Views.ToastWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Prompt Library"
+        WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True" ShowActivated="False"
+        AllowsTransparency="True" Background="Transparent" Focusable="False" IsHitTestVisible="False"
+        SizeToContent="WidthAndHeight" MaxWidth="560" UseLayoutRounding="True">
+    <!-- A short confirmation ("Pasted: ...", "Copied: ..."). Never takes the focus and lets clicks through
+         (see ToastWindow.xaml.cs). 8 px radius, Surface fill, Line stroke, a Fluent check and one line of text. -->
+    <Border x:Name="Card" Margin="1" Padding="14,10,16,10" CornerRadius="8"
+            Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1">
+        <StackPanel Orientation="Horizontal">
+            <TextBlock x:Name="Glyph" Text="&#xE73E;" FontFamily="{StaticResource Font.Icons}" FontSize="16"
+                       Foreground="{DynamicResource Brush.Brand}" VerticalAlignment="Center" Margin="0,0,10,0" />
+            <TextBlock x:Name="Message" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                       Foreground="{DynamicResource Brush.Ink}" MaxWidth="480" />
+        </StackPanel>
+    </Border>
+</Window>

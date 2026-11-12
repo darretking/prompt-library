@@ -11,13 +11,13 @@ public class TrayMenuTests
     private static QuickMenuCategory C(string n, bool team = false, int count = 1)
         => new(n, Enumerable.Range(0, count).Select(i => P($"{n} p{i}", team)).ToList());
 
-    private static List<string> Read(QuickMenu menu)
+    private static List<string> Read(QuickMenu menu, bool reduced = false)
     {
         var result = new List<string>();
         Sta.Run(() =>
         {
             using var tray = new TrayIcon("t", headless: true);
-            tray.Rebuild(menu);
+            tray.Rebuild(menu, reduced);
             foreach (Forms.ToolStripItem item in tray.MenuStrip.Items)
             {
                 result.Add(item switch
@@ -51,6 +51,39 @@ public class TrayMenuTests
                 "Settings…", "Open Prompt Library…", "Exit"],
             Read(new QuickMenu([], [C("Sales", true)], [], false)));
     }
+
+    [Fact]
+    public void Tray_SearchMode_ReducedMenuIsOpenSettingsExit()
+    {
+        // The "search" shortcut mode: the right-click menu has no prompts, whatever the library holds.
+        Assert.Equal(["Open Prompt Library…", "Settings…", "Exit"],
+            Read(new QuickMenu([], [], [], false), reduced: true));
+        Assert.Equal(["Open Prompt Library…", "Settings…", "Exit"],
+            Read(new QuickMenu([P("Pin A")], [C("Sales", true)], [C("Work")], false), reduced: true));
+    }
+
+    [Fact]
+    public void Tray_SearchMode_KeepsUpdateItemOnTopAndSwitchesBackToTheFullMenu() => Sta.Run(() =>
+    {
+        using var tray = new TrayIcon("t", headless: true);
+        tray.SetUpdateItem("Update to 9.9.9…");
+        tray.Rebuild(new QuickMenu([], [], [], false), reduced: true);
+        Assert.Equal(["Update to 9.9.9…", "", "Open Prompt Library…", "Settings…", "Exit"],
+            tray.MenuStrip.Items.Cast<Forms.ToolStripItem>().Select(i => i.Text ?? "").ToList());
+
+        tray.Rebuild(new QuickMenu([], [], [C("Work")], false)); // "menu" mode again
+        Assert.Equal("Work", tray.MenuStrip.Items[2].Text);
+        Assert.Equal("Settings…", tray.MenuStrip.Items[4].Text);
+    });
+
+    [Fact]
+    public void Tray_LeftClickOpensSearch_IsOffUntilTheHostTurnsItOn() => Sta.Run(() =>
+    {
+        using var tray = new TrayIcon("t", headless: true);
+        Assert.False(tray.LeftClickOpensSearch); // "menu" mode: today's behaviour, the menu for both buttons
+        tray.LeftClickOpensSearch = true;
+        Assert.True(tray.LeftClickOpensSearch);
+    });
 
     [Fact]
     public void Tray_Rebuild_KeepsUpdateItemFirst() => Sta.Run(() =>

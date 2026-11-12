@@ -73,6 +73,31 @@ public class SeedLibraryTests
     }
 
     [Fact]
+    public void Seed_EveryCategoryHasAnEmoji_AndEveryPromptOneToThreeValidTags()
+    {
+        var lib = SeedLibrary.Create(Now);
+        Assert.All(lib.Categories, c => Assert.False(string.IsNullOrWhiteSpace(c.Emoji), c.Name));
+        Assert.Equal(lib.Categories.Count, lib.Categories.Select(c => c.Emoji).Distinct().Count());
+        Assert.All(lib.Prompts, p =>
+        {
+            Assert.InRange(p.Tags.Count, 1, 3);
+            Assert.Equal(TagRules.Normalize(p.Tags), p.Tags);
+        });
+    }
+
+    [Fact]
+    public void TeamSeed_EveryCategoryHasAnEmoji_AndEveryPromptOneToThreeValidTags()
+    {
+        var lib = PromptLibrary.Core.Team.TeamSeedLibrary.Create(Now);
+        Assert.All(lib.Categories, c => Assert.False(string.IsNullOrWhiteSpace(c.Emoji), c.Name));
+        Assert.All(lib.Prompts, p =>
+        {
+            Assert.InRange(p.Tags.Count, 1, 3);
+            Assert.Equal(TagRules.Normalize(p.Tags), p.Tags);
+        });
+    }
+
+    [Fact]
     public void Seed_RoundTripsThroughJsonStore()
     {
         var original = SeedLibrary.Create(Now);

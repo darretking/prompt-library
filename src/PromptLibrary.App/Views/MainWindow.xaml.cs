@@ -2,9 +2,15 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
+using PromptLibrary.App.Search;
 using PromptLibrary.App.Team;
+using PromptLibrary.App.Theming;
 using PromptLibrary.App.ViewModels;
+using PromptLibrary.Core.Backup;
+using PromptLibrary.Core.Exchange;
+using PromptLibrary.Core.History;
 using PromptLibrary.Core.Models;
 
 namespace PromptLibrary.App.Views;
@@ -26,9 +32,30 @@ public partial class MainWindow : Window, IDialogs
         _closes = new UserCloseTracker(this, host);
         _closeQuestion = new CloseQuestion(this);
         InitializeComponent();
-        ViewModel = new MainViewModel(host, this);
+        ViewModel = new MainViewModel(host, this, new PromptHistoryStore(Paths.HistoryFolder, Paths.CrashLogFile));
         ViewModel.TitleFocusRequested += (_, _) => FocusLater(TitleBox);
+        ViewModel.ToastRequested += (_, text) => ShowToast(text);
+        ViewModel.HistoryDialog = model => new HistoryWindow(_host, model) { Owner = this }.ShowDialog() == true;
+
+        // Copy / Send on a template prompt: the fill-in form as a small dialog. The tokens ({clipboard}, {date}…) are
+        // taken now, at the press, before the dialog takes the focus; the values typed are remembered.
+        ViewModel.TokenSource = TokenValues.For;
+        ViewModel.FillInResolver = text =>
+        {
+            var model = new FillInViewModel(text, _host.Settings, TokenValues.For(text), ViewModel.FillInPrimaryLabel,
+                ViewModel.FillInTitle, cancelLabel: "Cancel");
+            var filled = FillInDialog.Ask(this, model);
+            if (filled is not null) _host.SaveSettings();
+            return filled;
+        };
         DataContext = ViewModel;
+
+        StateChanged += (_, _) => UpdateMaximizedInset();
+        DpiChanged += (_, _) => UpdateMaximizedInset();
+
+        // The editor card's shadow follows the theme (8 % black in light, 30 % in dark) and is off on low-tier graphics.
+        ApplyCardShadow();
+        ThemeManager.Current.ThemeChanged += (_, _) => Dispatcher.BeginInvoke(ApplyCardShadow);
 
         // Coming back to the window re-checks a paused backup folder (e.g. Google Drive signed in again).
         Activated += (_, _) => _host.RecheckBackups();
@@ -42,6 +69,48 @@ public partial class MainWindow : Window, IDialogs
     }
 
     public MainViewModel ViewModel { get; }
+
+    // ---- Title bar (custom caption) ------------------------------------------------------------
+
+    /// <summary>
+    /// A maximised window with a custom caption is laid out past the screen edges by the size of its resize border, so the content is
+    /// pulled back in by exactly that much (measured for this window's monitor DPI; the title bar and its menu would otherwise be
+    /// cut off). Restored, there is no inset: the resize border is invisible and sits outside the content.
+    /// </summary>
+    private void UpdateMaximizedInset()
+    {
+        Root.Margin = WindowState == WindowState.Maximized ? MaximizedInset(VisualTreeHelper.GetDpi(this).DpiScaleX) : new Thickness(0);
+    }
+
+    /// <summary>The resize border (device pixels from the system metrics at <paramref name="scale"/> × 96 DPI) in layout units.</summary>
+    internal static Thickness MaximizedInset(double scale)
+    {
+        var dpi = (uint)Math.Round(96 * scale);
+        double Px(int metric) => NativeMethods.GetSystemMetricsForDpi(metric, dpi) / scale;
+        var padded = Px(NativeMethods.SM_CXPADDEDBORDER);
+        return new Thickness(Px(NativeMethods.SM_CXSIZEFRAME) + padded, Px(NativeMethods.SM_CYSIZEFRAME) + padded,
+            Px(NativeMethods.SM_CXSIZEFRAME) + padded, Px(NativeMethods.SM_CYSIZEFRAME) + padded);
+    }
+
+    private static class NativeMethods
+    {
+        public const int SM_CXSIZEFRAME = 32, SM_CYSIZEFRAME = 33, SM_CXPADDEDBORDER = 92;
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern int GetSystemMetricsForDpi(int index, uint dpi);
+    }
+
+    private void ApplyCardShadow()
+    {
+        if (System.Windows.Media.RenderCapability.Tier >> 16 < 2)
+        {
+            EditorCard.Effect = null; // software rendering: no blur
+            return;
+        }
+        if (TryFindResource("Brush.Shadow") is not System.Windows.Media.SolidColorBrush brush) return;
+        CardShadow.Color = System.Windows.Media.Color.FromRgb(brush.Color.R, brush.Color.G, brush.Color.B);
+        CardShadow.Opacity = brush.Color.A / 255.0;
+    }
 
     /// <summary>Really closes the window; used when the app exits.</summary>
     public void CloseForExit()
@@ -91,6 +160,17 @@ public partial class MainWindow : Window, IDialogs
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
+        if (e.Key == Key.Enter && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+        {
+            ViewModel.SendCommand.Execute(null); // Send to the prompt's default AI app
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F6 && Keyboard.Modifiers is ModifierKeys.None or ModifierKeys.Shift)
+        {
+            CycleFocusPane(backwards: Keyboard.Modifiers == ModifierKeys.Shift);
+            e.Handled = true;
+        }
+
         if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
         {
             SearchBox.Focus();
@@ -107,16 +187,82 @@ public partial class MainWindow : Window, IDialogs
     public bool ConfirmDestructive(string message, string action)
         => ConfirmDialog.Ask(this, message, action, "Cancel", danger: true);
 
-    public Guid? ChooseMoveTarget(string categoryName, int promptCount, IReadOnlyList<Category> targets)
+    public CategoryDeletion? ChooseCategoryDeletion(string categoryName, int promptCount, IReadOnlyList<Category> targets)
     {
         var dialog = new MoveCategoryDialog(categoryName, promptCount, targets) { Owner = this };
-        return dialog.ShowDialog() == true ? dialog.SelectedCategoryId : null;
+        return dialog.ShowDialog() == true ? new CategoryDeletion(dialog.SelectedCategoryId, dialog.DeletePrompts) : null;
+    }
+
+    public ExchangePick? ChooseImportSource()
+    {
+        var kind = new ChooseKindDialog("Import prompts",
+            "Import prompts from a file or a folder. Prompts that are already in your library are skipped.",
+            "One file (.json)", "A folder of Markdown or text files", "Choose…") { Owner = this };
+        if (kind.ShowDialog() != true) return null;
+
+        var start = ExchangeStartFolder();
+        if (kind.IsFolder)
+        {
+            var folder = new Microsoft.Win32.OpenFolderDialog { Title = "Import prompts from a folder", InitialDirectory = start };
+            return folder.ShowDialog(this) == true ? new ExchangePick(folder.FolderName, IsFolder: true) : null;
+        }
+
+        var file = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Import prompts",
+            Filter = "Prompt Library export (*.json)|*.json|All files (*.*)|*.*",
+            InitialDirectory = start,
+        };
+        return file.ShowDialog(this) == true ? new ExchangePick(file.FileName, IsFolder: false) : null;
+    }
+
+    public ExchangePick? ChooseExportTarget()
+    {
+        var kind = new ChooseKindDialog("Export prompts",
+            "Export your prompts so you can keep a copy or use them elsewhere.",
+            "One file (.json)", "A folder of Markdown files", "Choose…") { Owner = this };
+        if (kind.ShowDialog() != true) return null;
+
+        var start = ExchangeStartFolder();
+        if (kind.IsFolder)
+        {
+            var folder = new Microsoft.Win32.OpenFolderDialog { Title = "Export prompts to a folder", InitialDirectory = start };
+            return folder.ShowDialog(this) == true ? new ExchangePick(folder.FolderName, IsFolder: true) : null;
+        }
+
+        var file = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Export prompts",
+            Filter = "Prompt Library export (*.json)|*.json",
+            DefaultExt = ".json",
+            FileName = $"Prompt Library prompts {DateTime.Now:yyyy-MM-dd}.json",
+            InitialDirectory = start,
+        };
+        return file.ShowDialog(this) == true ? new ExchangePick(file.FileName, IsFolder: false) : null;
+    }
+
+    /// <summary>The folder the import and export pickers open in: Documents, Desktop or the profile, never a cloud drive.</summary>
+    private static string? ExchangeStartFolder()
+    {
+        var cloudRoots = CloudFolderDetector.Detect(new SystemCloudProbe()).Select(c => c.RootPath).ToList();
+        return ExportLocations.SafeStartFolder(
+        [
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        ], cloudRoots);
     }
 
     public void ShowMessage(string message)
     {
         if (!_host.AsksNothing)
             ConfirmDialog.Inform(this, message);
+    }
+
+    public void ShowImportResults(ImportResult result)
+    {
+        if (!_host.AsksNothing)
+            new ImportResultsDialog(result) { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog();
     }
 
     public bool ShowTeamHistory(TeamLibraryService service, bool review)
@@ -136,7 +282,7 @@ public partial class MainWindow : Window, IDialogs
             ViewModel.StartRename(RailList.SelectedItem as CategoryItem);
             e.Handled = true;
         }
-        else if (e.Key == Key.Delete && RailList.SelectedItem is CategoryItem { IsAll: false } item)
+        else if (e.Key == Key.Delete && RailList.SelectedItem is CategoryItem { IsCategory: true } item)
         {
             ViewModel.DeleteCategory(item);
             e.Handled = true;
@@ -173,6 +319,7 @@ public partial class MainWindow : Window, IDialogs
         // Deferred so the click that moved focus finishes first: committing rebuilds the rail, which
         // would otherwise swallow that click.
         if (((FrameworkElement)sender).DataContext is not CategoryItem { IsRenaming: true } item) return;
+        if (StaysInEditor(sender, e.NewFocus)) return; // from the name box to the emoji button (or back) is not leaving
         Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
         {
             if (item.IsRenaming && !ViewModel.CommitRename(item))
@@ -199,8 +346,68 @@ public partial class MainWindow : Window, IDialogs
     private void NewCategoryBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
         // Leaving an empty box closes it; a typed name stays so it isn't lost.
+        if (StaysInEditor(sender, e.NewFocus)) return; // the emoji button beside the box is part of the editor
         if (ViewModel.IsAddingCategory && string.IsNullOrWhiteSpace(ViewModel.NewCategoryName))
             ViewModel.CancelNewCategory();
+    }
+
+    /// <summary>After an emoji is picked for the new category, the cursor goes back to the name box.</summary>
+    private void NewEmoji_Picked(object? sender, EventArgs e) => FocusLater(NewCategoryBox);
+
+    /// <summary>After an emoji is picked while renaming, the cursor goes back to the name box; "Change emoji…" saves at once.</summary>
+    private void RenameEmoji_Picked(object? sender, EventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: CategoryItem item } button) return;
+        if (_commitAfterEmoji == item)
+        {
+            _commitAfterEmoji = null;
+            if (ViewModel.CommitRename(item)) FocusSelectedCategory();
+            return;
+        }
+        if (button.Parent is Panel panel && panel.Children.OfType<TextBox>().FirstOrDefault() is { } box)
+            FocusLater(box);
+    }
+
+    // The row whose "Change emoji…" is open: choosing an emoji saves it without pressing Enter.
+    private CategoryItem? _commitAfterEmoji;
+
+    /// <summary>The category menu's Change emoji…: opens the inline editor with the emoji grid showing.</summary>
+    private void ChangeEmoji_Click(object sender, RoutedEventArgs e)
+    {
+        if (((FrameworkElement)sender).DataContext is not CategoryItem item) return;
+        ViewModel.StartRename(item);
+        if (!item.IsRenaming) return;
+        _commitAfterEmoji = item;
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            if (RailList.ItemContainerGenerator.ContainerFromItem(item) is DependencyObject row
+                && FindDescendant<Controls.EmojiButton>(row) is { } picker)
+                picker.Open();
+        });
+    }
+
+    /// <summary>
+    /// True when the keyboard moved to another part of the same inline editor (the name box and its emoji button, or the
+    /// emoji grid): the editor stays open.
+    /// </summary>
+    private static bool StaysInEditor(object sender, IInputElement? newFocus)
+    {
+        if (sender is not FrameworkElement { Parent: { } container } || newFocus is not DependencyObject target) return false;
+        for (DependencyObject? node = target; node is not null;
+             node = LogicalTreeHelper.GetParent(node) ?? (node is System.Windows.Media.Visual ? System.Windows.Media.VisualTreeHelper.GetParent(node) : null))
+            if (ReferenceEquals(node, container)) return true;
+        return false;
+    }
+
+    private static T? FindDescendant<T>(DependencyObject from) where T : DependencyObject
+    {
+        for (var i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(from); i++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(from, i);
+            if (child is T match) return match;
+            if (FindDescendant<T>(child) is { } deeper) return deeper;
+        }
+        return null;
     }
 
     /// <summary>Inline name boxes take the cursor as soon as they appear.</summary>
@@ -219,20 +426,6 @@ public partial class MainWindow : Window, IDialogs
             ViewModel.SearchText = "";
             e.Handled = true;
         }
-    }
-
-    /// <summary>
-    /// Tab and Shift+Tab leave the prompt box like any other field; Ctrl+Tab types a tab character
-    /// (replacing any selected text).
-    /// </summary>
-    private void PromptBox_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key != Key.Tab || Keyboard.Modifiers != ModifierKeys.Control || PromptBox.IsReadOnly) return;
-
-        var start = PromptBox.SelectionStart;
-        PromptBox.SelectedText = "\t";
-        PromptBox.Select(start + 1, 0);
-        e.Handled = true;
     }
 
     private void PromptList_KeyDown(object sender, KeyEventArgs e)
@@ -263,19 +456,162 @@ public partial class MainWindow : Window, IDialogs
 
     // ---- Editor buttons ------------------------------------------------------------------------
 
-    /// <summary>
-    /// The editor's two button groups share one line when they fit; near the minimum width (the Team side's row is
-    /// the wider one) the right group, ending in Copy prompt, moves to a second line, still right-aligned. The slip
-    /// and the gap above the buttons then give up that line's height, so nothing is cut off at the minimum size.
-    /// </summary>
-    private void ButtonRow_SizeChanged(object sender, SizeChangedEventArgs e)
+    /// <summary>The header's ... button: opens its menu under the button.</summary>
+    private void Overflow_Click(object sender, RoutedEventArgs e)
     {
-        if (!e.WidthChanged) return;
-        var stacked = LeftButtons.ActualWidth + RightButtons.ActualWidth + 8 > ButtonRow.ActualWidth;
-        Grid.SetRow(RightButtons, stacked ? 1 : 0);
-        RightButtons.Margin = stacked ? new Thickness(0, 8, 0, 0) : new Thickness(0);
-        ButtonRow.Margin = new Thickness(0, stacked ? 8 : 16, 0, 0);
-        SlipRow.MinHeight = stacked ? 40 : 64;
+        if (sender is not Button { ContextMenu: { } menu } button) return;
+        OpenBelow(menu, button);
+    }
+
+    /// <summary>Opens <paramref name="menu"/> just under <paramref name="target"/>, its right edge in line with the target's.</summary>
+    private static void OpenBelow(ContextMenu menu, FrameworkElement target)
+    {
+        menu.PlacementTarget = target;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Custom;
+        menu.CustomPopupPlacementCallback = (popupSize, targetSize, _) =>
+        [
+            new System.Windows.Controls.Primitives.CustomPopupPlacement(
+                new Point(targetSize.Width - popupSize.Width, targetSize.Height + 2),
+                System.Windows.Controls.Primitives.PopupPrimaryAxis.None),
+        ];
+        menu.IsOpen = true;
+    }
+
+    /// <summary>
+    /// The Send to arrow: the AI apps (a check on the prompt's default), then <c>Set as default for this prompt</c>
+    /// with the same apps as a submenu. Built when opened, so the check is always current.
+    /// </summary>
+    private void SendMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button) return;
+        OpenBelow(BuildSendMenu(), button);
+    }
+
+    /// <summary>Builds the Send to menu for the current prompt (also drawn by the screenshot gallery).</summary>
+    internal ContextMenu BuildSendMenu()
+    {
+        var item = (Style)FindResource("FlyoutItem");
+        var menu = new ContextMenu { Style = (Style)FindResource("FlyoutMenu") };
+
+        var choices = ViewModel.SendChoices;
+        foreach (var choice in choices)
+        {
+            var id = choice.Id;
+            var entry = new MenuItem { Style = item, Header = choice.Name, IsChecked = choice.IsDefault };
+            entry.Click += (_, _) => ViewModel.SendCommand.Execute(id);
+            menu.Items.Add(entry);
+        }
+
+        if (ViewModel.Editor is { IsEditable: true })
+        {
+            menu.Items.Add(new Separator { Style = (Style)FindResource("FlyoutSeparator") });
+            var setDefault = new MenuItem { Style = item, Header = "Set as default for this prompt" };
+            foreach (var choice in choices)
+            {
+                var id = choice.Id;
+                var entry = new MenuItem { Style = item, Header = choice.Name, IsChecked = choice.IsDefault };
+                entry.Click += (_, _) => ViewModel.SetDefaultSendCommand.Execute(id);
+                setDefault.Items.Add(entry);
+            }
+            menu.Items.Add(setDefault);
+        }
+        return menu;
+    }
+
+    // ---- Toast ---------------------------------------------------------------------------------
+
+    private readonly DispatcherTimer _toastTimer = new() { Interval = TimeSpan.FromMilliseconds(1500) };
+    private bool _toastTimerHooked;
+
+
+    /// <summary>
+    /// A small pill at the bottom of the editor: fades in over 167 ms (Fluent enter curve), stays 1.5 s, fades out
+    /// (exit curve). With animations off in Windows it just appears and disappears.
+    /// </summary>
+    private void ShowToast(string text)
+    {
+        if (!_toastTimerHooked)
+        {
+            _toastTimerHooked = true;
+            _toastTimer.Tick += (_, _) =>
+            {
+                _toastTimer.Stop();
+                FadeToast(show: false);
+            };
+        }
+
+        ToastText.Text = text;
+        ToastGlyph.Text = text.StartsWith("Copied", StringComparison.Ordinal) ? ""   // Copy
+            : text.StartsWith("Saved", StringComparison.Ordinal) ? ""                // Save
+            : text.StartsWith("Sent", StringComparison.Ordinal) ? ""                 // Send
+            : "";                                                                    // CheckMark
+        System.Windows.Automation.AutomationProperties.SetName(Toast, text);
+        Toast.Visibility = Visibility.Visible;
+        FadeToast(show: true);
+        _toastTimer.Stop();
+        _toastTimer.Start();
+    }
+
+    private void FadeToast(bool show)
+    {
+        if (!Motion.Enabled)
+        {
+            Toast.BeginAnimation(OpacityProperty, null);
+            ToastSlide.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
+            ToastSlide.Y = 0;
+            Toast.Opacity = show ? 1 : 0;
+            if (!show) Toast.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        // Fluent: enter cubic-bezier(0,0,0,1), exit (1,0,1,1). Showing also slides up 8 px (167 ms); hiding only fades.
+        var duration = Motion.Normal;
+        var spline = show ? Motion.EnterCurve : new System.Windows.Media.Animation.KeySpline(1, 0, 1, 1);
+        var animation = new System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames { Duration = duration };
+        animation.KeyFrames.Add(new System.Windows.Media.Animation.SplineDoubleKeyFrame(
+            show ? 1 : 0, System.Windows.Media.Animation.KeyTime.FromTimeSpan(duration.TimeSpan), spline));
+        if (!show)
+            animation.Completed += (_, _) =>
+            {
+                if (!_toastTimer.IsEnabled) Toast.Visibility = Visibility.Collapsed;
+            };
+        if (show)
+        {
+            var slide = new System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames { Duration = duration };
+            slide.KeyFrames.Add(new System.Windows.Media.Animation.DiscreteDoubleKeyFrame(8, System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            slide.KeyFrames.Add(new System.Windows.Media.Animation.SplineDoubleKeyFrame(0, System.Windows.Media.Animation.KeyTime.FromTimeSpan(duration.TimeSpan), spline));
+            ToastSlide.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, slide);
+        }
+        Toast.BeginAnimation(OpacityProperty, animation);
+    }
+
+    // ---- F6 ------------------------------------------------------------------------------------
+
+    /// <summary>F6 / Shift+F6: moves the focus rail → prompt list → editor → rail.</summary>
+    private void CycleFocusPane(bool backwards)
+    {
+        // 0 = rail, 1 = list, 2 = editor; anything else (search box, menu) counts as before the rail.
+        var current = RailList.IsKeyboardFocusWithin ? 0
+            : PromptList.IsKeyboardFocusWithin ? 1
+            : PromptBox.IsKeyboardFocusWithin || TitleBox.IsKeyboardFocusWithin ? 2
+            : -1;
+        var next = backwards ? (current <= 0 ? 2 : current - 1) : (current + 1) % 3;
+        if (next == 2 && !ViewModel.HasEditor) next = backwards ? 1 : 0;
+
+        switch (next)
+        {
+            case 0:
+                if (RailList.ItemContainerGenerator.ContainerFromItem(RailList.SelectedItem) is ListBoxItem railRow) railRow.Focus();
+                else RailList.Focus();
+                break;
+            case 1:
+                if (PromptList.ItemContainerGenerator.ContainerFromItem(PromptList.SelectedItem) is ListBoxItem listRow) listRow.Focus();
+                else PromptList.Focus();
+                break;
+            default:
+                PromptBox.Focus();
+                break;
+        }
     }
 
     // ---- Window size ---------------------------------------------------------------------------

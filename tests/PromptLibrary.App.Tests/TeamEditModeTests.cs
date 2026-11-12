@@ -158,6 +158,45 @@ public sealed class TeamEditModeTests : IDisposable
     });
 
     [Fact]
+    public void DeleteCategory_WithItsPrompts_RemovesThemForEveryone() => Sta.Run(() =>
+    {
+        var host = NewHost();
+        var dialogs = new FakeDialogs { Deletion = new CategoryDeletion(null, DeletePrompts: true) };
+        var vm = new MainViewModel(host, dialogs);
+        vm.ShowTeamCommand.Execute(null);
+        vm.EditTeamCommand.Execute(null);
+        var sales = vm.Categories.Single(c => c.Name == "Sales");
+        var salesIds = host.Team!.Team!.Content.Prompts.Where(p => p.CategoryId == sales.Id).Select(p => p.Id).ToList();
+        Assert.Equal(2, salesIds.Count);
+
+        vm.DeleteCategoryCommand.Execute(sales);
+
+        Assert.Equal(("Sales", 2), dialogs.LastDeletionAsked);
+        Assert.Equal("Deleted \"Sales\" and 2 prompts.", vm.StatusText);
+        Until(() => ReadTeamFile() is { Length: > 0 } text && !text.Contains("Follow-up email"));
+        Until(() => vm.StatusText == "Saved for everyone");
+        var file = ReadTeamFile();
+        Assert.DoesNotContain("Discovery questions", file);
+        Assert.Contains("Complaint reply", file); // the other category is untouched
+        Assert.DoesNotContain(vm.Categories, c => c.Name == "Sales");
+        Assert.Empty(host.Library.Prompts); // nothing in your prompts changed
+        Assert.Equal(0, host.LibrarySaves);
+    });
+
+    [Fact]
+    public void ImportAndExport_AreForYourPromptsOnly() => Sta.Run(() =>
+    {
+        var vm = new MainViewModel(NewHost(), new FakeDialogs());
+        Assert.True(vm.ImportCommand.CanExecute(null));
+        Assert.True(vm.ExportCommand.CanExecute(null));
+
+        vm.ShowTeamCommand.Execute(null);
+
+        Assert.False(vm.ImportCommand.CanExecute(null));
+        Assert.False(vm.ExportCommand.CanExecute(null));
+    });
+
+    [Fact]
     public void NewerSchema_NoEditButton_ShowsReason() => Sta.Run(() =>
     {
         var host = NewHost(schemaVersion: 2);
@@ -571,8 +610,18 @@ public sealed class TeamEditModeTests : IDisposable
             return Confirm;
         }
 
-        public Guid? ChooseMoveTarget(string categoryName, int promptCount, IReadOnlyList<Category> targets) => null;
         public void ShowMessage(string message) => Messages.Add(message);
+
+        /// <summary>The answer to the delete-category question; null = cancel.</summary>
+        public CategoryDeletion? Deletion { get; set; }
+        public (string Name, int Count)? LastDeletionAsked { get; private set; }
+
+        public CategoryDeletion? ChooseCategoryDeletion(string categoryName, int promptCount, IReadOnlyList<Category> targets)
+        {
+            LastDeletionAsked = (categoryName, promptCount);
+            return Deletion;
+        }
+
         public bool? LastHistoryReview { get; private set; }
 
         public bool ShowTeamHistory(TeamLibraryService service, bool review)

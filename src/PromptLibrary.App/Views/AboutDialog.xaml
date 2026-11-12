@@ -1,7 +1,7 @@
 <Window x:Class="PromptLibrary.App.Views.AboutDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Style="{StaticResource AppWindow}"
+        Style="{StaticResource AppDialog}"
         Title="About Prompt Library"
         AutomationProperties.Name="About Prompt Library"
         Icon="/Assets/app.ico"

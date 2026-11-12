@@ -25,8 +25,8 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
-        _singleInstance = new Mutex(initiallyOwned: true, MutexName, out _ownsMutex);
+        _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName + Paths.InstanceSuffix);
+        _singleInstance = new Mutex(initiallyOwned: true, MutexName + Paths.InstanceSuffix, out _ownsMutex);
         if (!_ownsMutex)
         {
             _showSignal.Set();
@@ -36,6 +36,9 @@ public partial class App : Application
 
         // Lets the WinForms tray menu get keyboard and mouse handling inside the WPF message loop.
         WindowsFormsHost.EnableWindowsFormsInterop();
+
+        // Windows 11 window chrome; AppHost.Start applies the saved Theme setting (light/dark palette) once settings are loaded.
+        Theming.WindowBackdrop.Register();
 
         _host = new AppHost();
         HandleCrashes(_host);

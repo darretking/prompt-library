@@ -33,6 +33,14 @@ public class MenuTextTests
     }
 
     [Fact]
+    public void WithEmoji_PrefixesWhenSet_OtherwiseNameOnly()
+    {
+        Assert.Equal("\U0001F4A1 Ideas", MenuText.WithEmoji("\U0001F4A1", "Ideas"));
+        Assert.Equal("Ideas", MenuText.WithEmoji(null, "Ideas"));
+        Assert.Equal("Ideas", MenuText.WithEmoji(" ", "Ideas"));
+    }
+
+    [Fact]
     public void ForMenu_TruncatesThenEscapes()
         => Assert.Equal("Q&&A", MenuText.ForMenu("Q&A"));
 }

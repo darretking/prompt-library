@@ -27,6 +27,22 @@ public class QuickMenuBuilderTests
     }
 
     [Fact]
+    public void Build_CategoryWithEmoji_ShowsEmojiThenName_ButSortsByName()
+    {
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        var lib = new Library();
+        lib.Categories.Add(new Category { Id = a, Name = "Beta", Emoji = "\U0001F4A1" });
+        lib.Categories.Add(new Category { Id = b, Name = "Alpha" });
+        lib.Prompts.Add(new Prompt { Id = Guid.NewGuid(), Title = "x", CategoryId = a });
+        lib.Prompts.Add(new Prompt { Id = Guid.NewGuid(), Title = "y", CategoryId = b });
+
+        var menu = QuickMenuBuilder.Build(lib);
+
+        Assert.Equal(new[] { "Alpha", "\U0001F4A1 Beta" }, menu.Select(c => c.Name));
+    }
+
+    [Fact]
     public void Build_OmitsEmptyCategories()
     {
         var full = Guid.NewGuid();

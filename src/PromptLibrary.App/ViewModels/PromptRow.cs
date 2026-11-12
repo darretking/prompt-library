@@ -23,7 +23,9 @@ public sealed class PromptRow : ObservableObject
     private bool _isPinned;
     private TeamMarker _marker;
 
-    public PromptRow(Prompt prompt, bool isTeam, bool isHidden, bool isPinned, TeamMarker marker, bool showTeamIcon)
+    public PromptRow(Prompt prompt, bool isTeam, bool isHidden, bool isPinned, TeamMarker marker, bool showTeamIcon,
+        IReadOnlyList<(int Start, int Length)>? titleMatches = null,
+        IReadOnlyList<(int Start, int Length)>? descriptionMatches = null)
     {
         Prompt = prompt;
         IsTeam = isTeam;
@@ -31,6 +33,26 @@ public sealed class PromptRow : ObservableObject
         _isPinned = isPinned;
         _marker = marker;
         ShowTeamIcon = showTeamIcon;
+        TitleSegments = TextSegments.Split(prompt.Title, titleMatches);
+        DescriptionSegments = TextSegments.Split(FirstLine(prompt.Description), descriptionMatches);
+    }
+
+    /// <summary>The title in matched and unmatched pieces (the matched letters of a search show in Brand).</summary>
+    public IReadOnlyList<TextSegment> TitleSegments { get; }
+
+    /// <summary>The description's first line in matched and unmatched pieces.</summary>
+    public IReadOnlyList<TextSegment> DescriptionSegments { get; }
+
+    /// <summary>Up to three tags, shown as small chips after the description when they fit.</summary>
+    public IReadOnlyList<string> TagChips => Prompt.Tags is { Count: > 0 } tags ? tags.Take(3).ToList() : [];
+
+    public bool HasDescription => !string.IsNullOrWhiteSpace(Prompt.Description);
+
+    private static string FirstLine(string? text)
+    {
+        text ??= "";
+        var cut = text.AsSpan().IndexOfAny('\r', '\n');
+        return cut < 0 ? text : text[..cut];
     }
 
     public Prompt Prompt { get; }

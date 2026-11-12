@@ -261,7 +261,7 @@ public sealed class TeamWriter(Func<DateTimeOffset> now)
             var into = target.Categories.FirstOrDefault(c => string.Equals(c.Name, category.Name, StringComparison.CurrentCultureIgnoreCase));
             if (into is null)
             {
-                into = new Category { Id = Guid.NewGuid(), Name = category.Name };
+                into = new Category { Id = Guid.NewGuid(), Name = category.Name, Emoji = category.Emoji };
                 target.Categories.Add(into);
             }
             foreach (var p in prompts.Where(p => p.CategoryId == category.Id))
@@ -272,6 +272,8 @@ public sealed class TeamWriter(Func<DateTimeOffset> now)
                     Description = p.Description,
                     CategoryId = into.Id,
                     Text = p.Text,
+                    Tags = [.. p.Tags ?? []],
+                    SendTo = p.SendTo,
                     CreatedAt = at,
                     UpdatedAt = at,
                 });

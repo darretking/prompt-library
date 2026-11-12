@@ -3,6 +3,7 @@ using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
 using PromptLibrary.App.Hotkeys;
+using PromptLibrary.App.Search;
 using PromptLibrary.App.Startup;
 using PromptLibrary.App.Team;
 using System.Net.Http;
@@ -19,6 +20,7 @@ using PromptLibrary.Core.Models;
 using PromptLibrary.Core.Seed;
 using PromptLibrary.Core.Storage;
 using PromptLibrary.Core.Updates;
+using PromptLibrary.Core.Usage;
 
 namespace PromptLibrary.App;
 
@@ -52,6 +54,7 @@ public sealed class AppHost : IMainHost, IDisposable
     private CloseRequestWindow? _closeRequestWindow;
     private HotkeyGesture? _activeGesture;
     private MainWindow? _mainWindow;
+    private SearchController? _search;
     private SettingsWindow? _settingsWindow;
     private OnboardingWindow? _onboardingWindow;
     private DispatcherTimer? _backupTimer;
@@ -116,6 +119,12 @@ public sealed class AppHost : IMainHost, IDisposable
 
     public event EventHandler? LibraryChanged;
 
+    /// <summary>Raised when pins or usage changed outside the main window (the search window, the tray menu): its lists refresh.</summary>
+    public event EventHandler? UserStateChanged;
+
+    /// <summary>Tells the main window that pins or usage changed.</summary>
+    public void RaiseUserStateChanged() => UserStateChanged?.Invoke(this, EventArgs.Empty);
+
     /// <summary>Raised when <see cref="BackupWarning"/> changes.</summary>
     public event EventHandler? BackupStateChanged;
 
@@ -123,6 +132,7 @@ public sealed class AppHost : IMainHost, IDisposable
     public bool Start()
     {
         Settings = LoadSettings();
+        Theming.ThemeManager.Current.Apply(Settings.Theme); // the saved theme, before any window shows
 
         string? restoredFrom = null;
         var libraryResult = JsonStore.LoadLibrary(Paths.LibraryFile);
@@ -168,9 +178,11 @@ public sealed class AppHost : IMainHost, IDisposable
         Tray.OpenRequested += (_, _) => ShowMainWindow();
         Tray.SettingsRequested += (_, _) => OpenSettings();
         Tray.DoubleClicked += (_, _) => ShowMainWindow();
+        Tray.SearchRequested += (_, _) => ShowSearch(fromTray: true);
         Tray.ExitRequested += (_, _) => ExitApp();
         Tray.UpdateRequested += (_, _) => Updates?.OpenDialog();
-        RefreshQuickMenu();
+        _search = new SearchController(this);
+        ApplyShortcutMode(); // sets the tray's left click and builds the menu
         _started = true;
 
         _hotkey = new GlobalHotkey();
@@ -181,6 +193,18 @@ public sealed class AppHost : IMainHost, IDisposable
         _closeRequestWindow.CloseRequested += (_, _) => ExitApp(ExitReason.External);
 
         var hotkeyRegistered = ApplyHotkey(Settings.Hotkey);
+
+        // Create the search window once, hidden, when the app is idle: opening it later is then instant.
+        // Then, once it has been quiet for a few seconds, give the idle memory back (the warm-up leaves a lot of it).
+        Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
+        {
+            _search?.Warm();
+            Startup.MemoryTrimmer.Schedule();
+            // Reviews of the sandbox copy can't press the global shortcut from a script: this opens the search window once.
+            if (Paths.IsSandbox && Environment.GetEnvironmentVariable("PROMPTLIBRARY_SANDBOX_OPEN_SEARCH") == "1")
+                Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,
+                    () => ShowSearch(fromTray: true));
+        });
 
         ApplyStartupRegistration();
         RefreshBackupState();
@@ -238,6 +262,7 @@ public sealed class AppHost : IMainHost, IDisposable
             var assembly = typeof(AppHost).Assembly;
             string? Metadata(string key) => assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
                 .FirstOrDefault(a => a.Key == key)?.Value is { Length: > 0 } value ? value : null;
+            if (Paths.IsSandbox) return;
             if (Metadata("UpdateRepositoryOwner") is not { } owner || Metadata("UpdateRepositoryName") is not { } repo)
                 return;
 
@@ -284,6 +309,7 @@ public sealed class AppHost : IMainHost, IDisposable
     /// <summary>The main window was closed (hidden): the first time ever, the tray says the app is still running.</summary>
     public void OnMainWindowHidden()
     {
+        Startup.MemoryTrimmer.Schedule();
         if (Settings.HideToTrayNoticeShown || _exiting || IsSessionEnding) return;
         Tray.ShowMessage(AppName, $"Still running. Press {Settings.Hotkey} or click the tray icon.");
         Settings.HideToTrayNoticeShown = true;
@@ -319,7 +345,51 @@ public sealed class AppHost : IMainHost, IDisposable
 
     /// <summary>Rebuilds the quick menu from the in-memory library (e.g. after an unsaved change was rolled back).</summary>
     public void RefreshQuickMenu()
-        => Tray.Rebuild(QuickMenuBuilder.Build(Library, Team?.Team?.Content, Settings));
+    {
+        // With the search window as the shortcut's target the tray's right-click menu is just Open, Settings, Exit.
+        var reduced = Settings.ShortcutOpens == "search";
+        Tray.Rebuild(reduced ? new QuickMenu([], [], [], false) : QuickMenuBuilder.Build(Library, Team?.Team?.Content, Settings),
+            reduced);
+    }
+
+    /// <summary>
+    /// Applies <see cref="AppSettings.ShortcutOpens"/>: with <c>search</c> the shortcut and a left click on the tray icon
+    /// open the search window and the tray menu is reduced; with <c>menu</c> both show the full category menu as before.
+    /// </summary>
+    public void ApplyShortcutMode()
+    {
+        Tray.LeftClickOpensSearch = Settings.ShortcutOpens == "search";
+        RefreshQuickMenu();
+    }
+
+    /// <summary>Opens the search window (a second call closes it). From the tray, a pick is only copied.</summary>
+    public void ShowSearch(bool fromTray)
+    {
+        if (_exiting) return;
+        _search?.Toggle(fromTray);
+    }
+
+    /// <summary>Copies <paramref name="text"/> (CRLF) without any message; false if the clipboard stayed busy.</summary>
+    public bool TryCopy(string text) => _clipboard.TryCopy(text);
+
+    /// <summary>
+    /// Shows the main window with <paramref name="prompt"/> selected (its category, on the Team side for team prompts).
+    /// Uses only the public selection members of <c>MainViewModel</c>; if the user has unsaved edits the usual question appears.
+    /// </summary>
+    public void OpenPromptInMainWindow(Prompt prompt, bool isTeam)
+    {
+        ShowMainWindow();
+        if (_mainWindow?.ViewModel is not { } vm) return;
+        if (isTeam && !vm.IsTeamSide) vm.ShowTeamCommand.Execute(null);
+        else if (!isTeam && !vm.IsYoursSide) vm.ShowYoursCommand.Execute(null);
+
+        // "All prompts" always lists it (a search in the main window may have filtered the list).
+        vm.SearchText = "";
+        if (vm.Categories.FirstOrDefault(c => c.Id == prompt.CategoryId) is { } category)
+            vm.SelectedCategory = category;
+        if (vm.Prompts.FirstOrDefault(r => r.Id == prompt.Id) is { } row)
+            vm.SelectedPrompt = row;
+    }
 
     /// <summary>Saves settings; if the file can't be written the user is told and false is returned.</summary>
     public bool SaveSettings()
@@ -353,6 +423,10 @@ public sealed class AppHost : IMainHost, IDisposable
             return;
         }
 
+        UsageTracker.Record(Settings, prompt.Id, DateTimeOffset.Now);
+        SaveSettings();
+        RaiseUserStateChanged();
+
         var hasTarget = AutoPaster.IsOtherAppWindow(pick.ReturnTo, out var isOurs);
         var outcome = PasteDecision.ShouldPaste(Settings.PasteAfterCopy, fromShortcutMenu: pick.ReturnTo != IntPtr.Zero,
             hasTarget, isOurs)
@@ -369,11 +443,15 @@ public sealed class AppHost : IMainHost, IDisposable
     /// Copies <paramref name="text"/> (normalised to CRLF) and shows <c>Copied: title</c> in the tray.
     /// False if the clipboard stayed busy.
     /// </summary>
-    public bool CopyText(string text, string title)
+    public bool CopyText(string text, string title) => CopyText(text, title, notifyInTray: true);
+
+    /// <summary>As <see cref="CopyText(string, string)"/>; without <paramref name="notifyInTray"/> a copy is silent (a failure is still shown).</summary>
+    public bool CopyText(string text, string title, bool notifyInTray)
     {
         if (_clipboard.TryCopy(text))
         {
-            Tray.ShowMessage(AppName, PasteDecision.CopiedMessage(title, PasteOutcome.NotAttempted)!);
+            if (notifyInTray)
+                Tray.ShowMessage(AppName, PasteDecision.CopiedMessage(title, PasteOutcome.NotAttempted)!);
             return true;
         }
 
@@ -385,6 +463,7 @@ public sealed class AppHost : IMainHost, IDisposable
     public void ShowMainWindow()
     {
         if (_exiting) return; // the window is closed and the app is waiting for its exit backup
+        _search?.Hide();
         if (_mainWindow?.IsAskingToClose == true)
         {
             // Its "Save changes?" is open: that answer decides whether the window stays.
@@ -991,6 +1070,8 @@ public sealed class AppHost : IMainHost, IDisposable
         _firstBackupTimer?.Stop();
         Updates?.Dispose();
         Team?.Dispose();
+        _search?.Dispose();
+        _search = null;
         _hotkey?.Dispose();
         _hotkey = null;
         _closeRequestWindow?.Dispose();
@@ -1011,7 +1092,10 @@ public sealed class AppHost : IMainHost, IDisposable
             _onboardingWindow.Activate();
             return;
         }
-        Tray.ShowMenuAtCursor(returnFocusAfterwards: true);
+        if (Settings.ShortcutOpens == "search")
+            ShowSearch(fromTray: false);
+        else
+            Tray.ShowMenuAtCursor(returnFocusAfterwards: true);
     }
 
     private static string TooltipFor(string hotkey) => $"{AppName} ({hotkey})";
@@ -1226,6 +1310,8 @@ public sealed class AppHost : IMainHost, IDisposable
             ? gesture!.ToString()
             : DefaultHotkey;
         settings.BackupsToKeep = Math.Clamp(settings.BackupsToKeep, 1, 365);
+        if (settings.ShortcutOpens is not ("search" or "menu")) settings.ShortcutOpens = "search";
+        if (settings.Theme is not ("system" or "light" or "dark")) settings.Theme = "system";
         if (string.IsNullOrWhiteSpace(settings.BackupFolder))
             settings.BackupFolder = null;
 

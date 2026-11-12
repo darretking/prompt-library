@@ -46,7 +46,7 @@ public static class QuickMenuBuilder
         return lib.Categories
             .OrderBy(c => c.Name, comparer)
             .Select(c => new QuickMenuCategory(
-                c.Name,
+                MenuText.WithEmoji(c.Emoji, c.Name),
                 lib.Prompts
                     .Where(p => p.CategoryId == c.Id && hidden?.Contains(p.Id) != true)
                     .OrderBy(p => p.Title, comparer)

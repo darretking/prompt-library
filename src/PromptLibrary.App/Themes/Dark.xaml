@@ -1,0 +1,45 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Dark colour tokens. Same keys as Light.xaml; values documented in docs/design/ui-style.md. -->
+    <SolidColorBrush x:Key="Brush.Window" Color="#1C1F26" />
+    <SolidColorBrush x:Key="Brush.Rail" Color="#161920" />
+    <!-- Window and Rail areas that show the Mica backdrop. Opaque here; ThemeManager makes them translucent
+         while Mica is active. -->
+    <SolidColorBrush x:Key="Brush.WindowBackdrop" Color="#1C1F26" />
+    <SolidColorBrush x:Key="Brush.RailBackdrop" Color="#161920" />
+    <SolidColorBrush x:Key="Brush.Surface" Color="#242833" />
+    <SolidColorBrush x:Key="Brush.Ink" Color="#E8EAF0" />
+    <SolidColorBrush x:Key="Brush.Muted" Color="#B2B9C6" />
+    <SolidColorBrush x:Key="Brush.Line" Color="#353B48" />
+    <!-- Brand: text, edges, links, focus ring. BrandFill: fills that carry white text (Copy button, ticked box). -->
+    <SolidColorBrush x:Key="Brush.Brand" Color="#8B85F0" />
+    <SolidColorBrush x:Key="Brush.BrandFill" Color="#4338CA" />
+    <SolidColorBrush x:Key="Brush.BrandSoft" Color="#27264A" />
+    <SolidColorBrush x:Key="Brush.BrandHover" Color="#3730A3" />
+    <!-- Row hover: BrandSoft at 50 % opacity (list and rail rows). -->
+    <SolidColorBrush x:Key="Brush.Hover" Color="#8027264A" />
+    <!-- Danger: text. DangerFill: the filled delete button with white text. -->
+    <SolidColorBrush x:Key="Brush.Danger" Color="#F97066" />
+    <SolidColorBrush x:Key="Brush.DangerFill" Color="#B42318" />
+    <SolidColorBrush x:Key="Brush.DangerHover" Color="#912018" />
+    <!-- Bookmark amber from the icon: onboarding illustration only, never text. -->
+    <SolidColorBrush x:Key="Brush.Accent" Color="#F5A524" />
+    <SolidColorBrush x:Key="Brush.Warn" Color="#3A2F12" />
+    <SolidColorBrush x:Key="Brush.WarnText" Color="#F5D48A" />
+    <!-- Text on a BrandFill or DangerFill. -->
+    <SolidColorBrush x:Key="Brush.OnBrand" Color="#FFFFFF" />
+    <!-- Fenced code blocks in the prompt editor; version-history diff rows (text colours checked at 4.5:1 on their fill). -->
+    <SolidColorBrush x:Key="Brush.CodeBlock" Color="#2D323F" />
+    <!-- Shadow of the editor card: black; its alpha is the strength (8 % light, 30 % dark). Not a text colour. -->
+    <SolidColorBrush x:Key="Brush.Shadow" Color="#4D000000" />
+    <!-- The prompt-list column: a subtle layer over the backdrop (Fluent LayerFillColorDefault). The rail stays on the base layer, the editor card is the strongest. -->
+    <SolidColorBrush x:Key="Brush.ListLayer" Color="#4D3A3A3A" />
+    <!-- A faint rounded tile behind category emoji so dark ones stay visible in dark mode. -->
+    <SolidColorBrush x:Key="Brush.EmojiTile" Color="#19FFFFFF" />
+    <!-- A hairline around emoji tiles, so dark emoji (cap, gamepad) keep an edge. -->
+    <SolidColorBrush x:Key="Brush.EmojiTileRing" Color="#2EFFFFFF" />
+    <SolidColorBrush x:Key="Brush.DiffAdded" Color="#1D3A29" />
+    <SolidColorBrush x:Key="Brush.DiffAddedText" Color="#A8E6BC" />
+    <SolidColorBrush x:Key="Brush.DiffRemoved" Color="#4A2226" />
+    <SolidColorBrush x:Key="Brush.DiffRemovedText" Color="#FBB8B2" />
+</ResourceDictionary>

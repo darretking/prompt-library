@@ -1,4 +1,5 @@
 using PromptLibrary.Core.Models;
+using PromptLibrary.Core.Seed;
 
 namespace PromptLibrary.Core.Team;
 
@@ -13,7 +14,7 @@ public static class TeamSeedLibrary
 {
     public static Library Create(DateTimeOffset now)
     {
-        Category C(string name) => new() { Id = Guid.NewGuid(), Name = name };
+        Category C(string name) => new() { Id = Guid.NewGuid(), Name = name, Emoji = SeedDecor.Emoji(name) };
 
         var sales = C("Sales");
         var support = C("Customer support");
@@ -29,6 +30,7 @@ public static class TeamSeedLibrary
             Description = description,
             CategoryId = category.Id,
             Text = text,
+            Tags = SeedDecor.Tags(title),
             CreatedAt = now,
             UpdatedAt = now,
         };

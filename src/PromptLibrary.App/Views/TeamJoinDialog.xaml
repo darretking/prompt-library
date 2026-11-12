@@ -1,7 +1,7 @@
 <Window x:Class="PromptLibrary.App.Views.TeamJoinDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Style="{StaticResource AppWindow}"
+        Style="{StaticResource AppDialog}"
         Title="Join a team library"
         AutomationProperties.Name="Join a team library"
         Icon="/Assets/app.ico"
@@ -30,7 +30,7 @@
         <StackPanel Margin="0,16,0,0" Visibility="{Binding IsChecking, Converter={StaticResource BoolToVisibility}}">
             <TextBlock Text="Checking…" Style="{StaticResource MutedText}" AutomationProperties.LiveSetting="Polite" />
             <ProgressBar IsIndeterminate="True" Height="6" Margin="0,6,0,0"
-                         Foreground="{StaticResource Brush.Brand}" Background="{StaticResource Brush.Line}"
+                         Foreground="{DynamicResource Brush.Brand}" Background="{DynamicResource Brush.Line}"
                          BorderThickness="0" AutomationProperties.Name="Checking the team library" />
         </StackPanel>
 

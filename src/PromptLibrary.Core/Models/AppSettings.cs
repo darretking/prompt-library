@@ -30,20 +30,43 @@ public class AppSettings
     public string? RecoveredLibraryFile { get; set; }
 
     /// <summary>File names of the copies restores made of the library first (labelled in the Restore window).</summary>
-    public List<string> PreRestoreBackupFiles { get; set; } = [];
+    public List<string> PreRestoreBackupFiles { get => _preRestoreBackupFiles; set => _preRestoreBackupFiles = value ?? []; }
+    private List<string> _preRestoreBackupFiles = [];
 
     /// <summary>Where this PC's team library lives (folder or link); null when not joined.</summary>
     public string? TeamSource { get; set; }
 
     /// <summary>Pinned prompts (personal or team), in pin order, newest last.</summary>
-    public List<Guid> PinnedPromptIds { get; set; } = [];
+    public List<Guid> PinnedPromptIds { get => _pinned; set => _pinned = value ?? []; }
+    private List<Guid> _pinned = [];
 
     /// <summary>Team prompts this PC has hidden.</summary>
-    public List<Guid> HiddenTeamPromptIds { get; set; } = [];
+    public List<Guid> HiddenTeamPromptIds { get => _hidden; set => _hidden = value ?? []; }
+    private List<Guid> _hidden = [];
 
     /// <summary>Team prompt ID to the fingerprint of the copy this PC last saw (drives New / Updated markers).</summary>
-    public Dictionary<Guid, string> SeenTeamPrompts { get; set; } = [];
+    public Dictionary<Guid, string> SeenTeamPrompts { get => _seen; set => _seen = value ?? []; }
+    private Dictionary<Guid, string> _seen = [];
 
     /// <summary>True once the first copy of the team library has been recorded as already seen.</summary>
     public bool TeamBaselineTaken { get; set; }
+
+    /// <summary>How often and when each prompt (personal or team) was last used.</summary>
+    public Dictionary<Guid, PromptUsage> Usage { get => _usage; set => _usage = value ?? []; }
+    private Dictionary<Guid, PromptUsage> _usage = [];
+
+    /// <summary>The last value typed for each placeholder name (key lower-cased).</summary>
+    public Dictionary<string, string> PlaceholderValues { get => _placeholders; set => _placeholders = value ?? []; }
+    private Dictionary<string, string> _placeholders = [];
+
+    /// <summary><c>search</c> (default) or <c>menu</c>: what the shortcut opens.</summary>
+    public string ShortcutOpens { get => _shortcutOpens; set => _shortcutOpens = value ?? "search"; }
+    private string _shortcutOpens = "search";
+
+    /// <summary>After an auto-paste, put the text that was on the clipboard before back (only when it held nothing but text).</summary>
+    public bool RestoreClipboard { get; set; } = true;
+
+    /// <summary><c>system</c> (default), <c>light</c> or <c>dark</c>.</summary>
+    public string Theme { get => _theme; set => _theme = value ?? "system"; }
+    private string _theme = "system";
 }

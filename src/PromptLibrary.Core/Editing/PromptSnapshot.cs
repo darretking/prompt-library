@@ -30,6 +30,8 @@ public sealed class PromptSnapshot
             Description = prompt.Description,
             CategoryId = prompt.CategoryId,
             Text = prompt.Text,
+            Tags = [.. prompt.Tags],
+            SendTo = prompt.SendTo,
             CreatedAt = prompt.CreatedAt,
             UpdatedAt = prompt.UpdatedAt,
         });
@@ -56,6 +58,8 @@ public sealed class PromptSnapshot
         prompt.Title = _before.Title;
         prompt.Description = _before.Description;
         prompt.Text = _before.Text;
+        prompt.Tags = [.. _before.Tags];
+        prompt.SendTo = _before.SendTo;
         prompt.UpdatedAt = _before.UpdatedAt;
         if (library.Categories.Any(c => c.Id == _before.CategoryId))
             prompt.CategoryId = _before.CategoryId;

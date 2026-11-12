@@ -440,3 +440,6 @@ publish/
 artifacts/
 installer/bin/
 installer/obj/
+
+# Screenshot gallery output (tools/make-gallery.ps1)
+artifacts/

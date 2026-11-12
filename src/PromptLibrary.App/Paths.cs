@@ -5,7 +5,23 @@ namespace PromptLibrary.App;
 /// <summary>Where the app keeps its data: <c>%APPDATA%\PromptLibrary\</c>.</summary>
 public static class Paths
 {
-    public static string DataFolder { get; } =
+    /// <summary>
+    /// Developer/test switch: when the <c>PROMPTLIBRARY_DATA_DIR</c> environment variable holds an absolute path, the app
+    /// keeps all its data there instead, runs beside the normal copy, and skips update checks. Used for screenshots and
+    /// reviews so the owner's real library is never touched.
+    /// </summary>
+    public static string? SandboxFolder { get; } =
+        Environment.GetEnvironmentVariable("PROMPTLIBRARY_DATA_DIR") is { Length: > 0 } dir && Path.IsPathFullyQualified(dir)
+            ? dir : null;
+
+    public static bool IsSandbox => SandboxFolder is not null;
+
+    /// <summary>Suffix for named kernel objects (single-instance mutex, show event) so a sandbox copy runs alongside.</summary>
+    public static string InstanceSuffix { get; } = SandboxFolder is { } s
+        ? "." + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(s.ToUpperInvariant())))[..12]
+        : "";
+
+    public static string DataFolder { get; } = SandboxFolder ??
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "PromptLibrary");
 
     public static string LibraryFile { get; } = Path.Combine(DataFolder, "library.json");
@@ -16,6 +32,9 @@ public static class Paths
     public static string RecoveredFolder { get; } = Path.Combine(DataFolder, "Recovered");
 
     /// <summary>Unexpected errors, appended by the crash handler.</summary>
+    /// <summary>Earlier versions of each personal prompt, one file per prompt.</summary>
+    public static string HistoryFolder { get; } = Path.Combine(DataFolder, "History");
+
     public static string CrashLogFile { get; } = Path.Combine(DataFolder, "crash.log");
 
     /// <summary>Safety copies made before a restore when no backup folder is set or it isn't available.</summary>

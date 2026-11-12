@@ -1,0 +1,21 @@
+<Window x:Class="PromptLibrary.App.Views.ChooseKindDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Style="{StaticResource AppDialog}"
+        Icon="/Assets/app.ico"
+        Width="400" SizeToContent="Height"
+        ResizeMode="NoResize" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+    <!-- A question with two radio answers (import / export: one file, or a folder of files), then the Windows picker. -->
+    <StackPanel Margin="16">
+        <TextBlock x:Name="MessageText" TextWrapping="Wrap" Margin="0,0,0,16" />
+        <RadioButton x:Name="FileOption" GroupName="Kind" IsChecked="True" Margin="0,0,0,8" />
+        <RadioButton x:Name="FolderOption" GroupName="Kind" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
+            <Button Content="Cancel" IsCancel="True" Margin="0,0,8,0" AutomationProperties.Name="Cancel" />
+            <Button x:Name="PrimaryButton" Style="{StaticResource PrimaryButton}" IsDefault="True"
+                    Click="Primary_Click" />
+        </StackPanel>
+    </StackPanel>
+</Window>

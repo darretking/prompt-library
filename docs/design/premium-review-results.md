@@ -1,0 +1,121 @@
+# Premium review results
+
+Scores against `premium-rubric.md`, one section per review round.
+
+## Sources (web research, 2026-11-11)
+
+**Product criteria**: dev.to/navbuildz (best AI prompt managers 2026); raycast.com/blog/raycast-for-windows;
+textexpander.com/ai-prompts; manual.raycast.com/dynamic-placeholders; manual.raycast.com/snippets;
+promptbuilder.cc/blog/best-ai-prompt-manager-tools-2026; g2.com/products/textexpander/reviews; g2.com/products/aiprm/reviews;
+macworld TextExpander 6 review; tidbits 2016 TextExpander pricing; hn.svelte.dev/item/48296678; makerstack PromptPaste review;
+blog.ergonis.com best AI prompt tools 2026; windowslatest 2026-05-15 native UI. Findings: what matters most is instant
+retrieval, working in every app, dynamic fill-ins, reliable insertion, no lock-in, local-first, stability, native feel and
+fuzzy search. Visual polish has weaker evidence.
+
+**Windows 11 UI**: learn.microsoft.com, design pages for typography, geometry, mica, acrylic, layering, color,
+titlebar-design, iconography, timing-and-easing, page-transitions and keyboard-accessibility; dwmapi DWMWINDOWATTRIBUTE;
+PowerToys Command Palette overview and settings; WPF what's new in .NET 9 and .NET 10; github lepoco/wpfui,
+Kinnara/ModernWpf, iNKORE-NET/UI.WPF.Modern, Flow-Launcher. Recommendation: hand-rolled styles on our own tokens plus
+DWM calls, because the built-in WPF Fluent ThemeMode is still incomplete or experimental in .NET 10.
+
+## Round 1 (2026-11-11), independent reviewer: 78.7 %, FAIL
+
+| ID | wt | pts | | ID | wt | pts |
+|---|---|---|---|---|---|---|
+| F1 | 11 | 9 | | U1 | 7 | 7 |
+| F2 | 10 | 8 | | U2 | 5 | 8 |
+| F3 | 7 | 8 | | U3 | 7 | 7 |
+| F4 | 5 | 8 | | U4 | 4 | 6 |
+| F5 | 5 | 8 | | U5 | 10 | 9 |
+| F6 | 3 | 8 | | U6 | 4 | 7 |
+| F7 | 8 | 7.5 | | U7 | 4 | 7 |
+| F8 | 6 | 8 | | U8 | 4 | 8 |
+
+Main gaps:
+- Preview only restyles the text.
+- Pasting relies on fixed delays, and nothing visible appears in the app after a paste.
+- Speed isn't measured.
+- The menu bar looks native.
+- Emoji draw in one colour.
+- The fill-in form is cramped.
+- The title and description don't look editable.
+- Rail labels get cut off.
+- The delete-category dialog contradicts itself.
+- Search-window placement uses the wrong monitor's DPI.
+
+Ruling R15: the rubric's U4 limit of "≤ 150 ms" contradicted the spec and Microsoft's Fluent motion ramp (83/167 ms). It now follows the Fluent ramp.
+Ruling R14: category emoji are drawn in colour with Emoji.Wpf (WTFPL licence), because single-colour glyphs look cheap.
+Ruling R16: the File/Help menu bar stays, since it's a familiar Windows pattern, but it's restyled flat with theme tokens.
+
+## Round 2 (2026-11-11), new independent reviewer: 77.2 %, FAIL
+
+F1 8 · F2 8 · F3 8 · F4 9 · F5 9 · F6 8 · F7 7 · F8 8 · U1 7 · U2 8 · U3 7 · U4 6 · U5 8 · U6 8 · U7 7 · U8 7.
+This reviewer was new and viewed only about 16 of 28 screens, so its calibration differs from round 1. From now on the same
+reviewer is reused every round so scores are comparable. Its verdict: the search window meets launcher expectations; the
+main window "looks like a good internal tool": flat, no depth, a huge empty editor, Save and "…" drifting along the bottom,
+dim muted text, plain rail rows, generic empty states. Idle memory (~190 MB) is too high.
+
+## Round 3 (2026-11-11), same reviewer as round 2: 84.0 %, FAIL (+6.8)
+
+F1 9 · F2 9 · F3 8 · F4 9 · F5 9 · F6 8 · F7 8 · F8 8 · U1 8 · U2 8 · U3 9 · U4 7 · U5 9 · U6 8 · U7 8 · U8 7.
+The reviewer viewed only 15 screens and read no code. Two of its fix items already exist: a per-prompt default send
+target (Send menu → Set as default) and the "Couldn't paste" toast. Real bugs it found:
+- the fill-in preview doesn't update while typing
+- clipping at the minimum window size
+- the empty-library card isn't centred
+- dim dark-mode emoji
+
+Ruling R18: integrate the File/Help menu into a custom Windows 11 title bar (as Notepad and Paint do), with native
+caption buttons kept. It came up in three reviews.
+
+## Round 4 (2026-11-11), new reviewer (the round 2/3 reviewer was lost with its session): 85.3 %, FAIL (+1.3)
+
+F1 9 · F2 9 · F3 8 · F4 9 · F5 9 · F6 9 · F7 8.5 · F8 9 · U1 8 · U2 8 · U3 9 · U4 7 · U5 9 · U6 8 · U7 8 · U8 7.
+This reviewer was briefed with rounds 1–3 for calibration, viewed all 64 screens at 100 % plus 150/200 % samples, and
+read the code. Changes going in: Fluent Emoji PNGs replace Emoji.Wpf (R14 updated), and the WPF test collection no longer
+boots or kills a real App (OnStartup is cancelled in tests). Bugs it found, all fixed for round 5:
+- search rows ignored description matches (now highlighted after the "Category · " prefix)
+- dark import-results dialog: failed file names near-black (now Ink)
+- delete-category question still said "Move them" when deleting the prompts (now rewritten when ticked)
+- no-results search kept an empty preview pane and offered "Enter paste" (now spans both panes, footer "Esc close")
+- pale/dark emoji lost on their tiles (hairline ring added, tile tints within the existing caps)
+- empty-title placeholder sat 5 px left of the text (placeholder now follows the box's padding)
+- gallery fidelity: fill-in scenes show remembered values; the Send menu shot uses the real builder (submenu chevron)
+
+Memory, measured in Release with the sandbox at true idle (no window open, 30 s): private bytes 110 MB, working set
+12 MB after the idle trim. The reviewer's 134 MB came from a run where the onboarding window was still open.
+
+## Round 5 (2026-11-11), same reviewer as round 4: 88.3 %, FAIL (+3.0)
+
+F1 9 · F2 9 · F3 9 · F4 9 · F5 9.5 · F6 9 · F7 9 · F8 9 · U1 8 · U2 9 · U3 9 · U4 7 · U5 9.5 · U6 8.5 · U7 8.5 · U8 7.5.
+All round 4 fixes confirmed. New: a remembered fill-in value kept the caret before it, so typing added to it. Fixed for
+round 6:
+- tabbing into (or opening on) a fill-in field selects its text, so typing replaces a remembered value (test included)
+- the delete-category warning no longer repeats the question; it says only "This can't be undone."
+- seed emoji that faded into their tiles were swapped: Writing & email ✉️ → ✍️, Learning 🎓 → 📚 (new libraries only);
+  the tile ring is stronger
+- the gallery adds 200 % shots of history, fill-in and delete-category dialogs (142 PNGs)
+
+Memory: GC gen0 budget and JIT variants moved idle private bytes only within run-to-run noise (108–123 MB); the rest is
+WPF/Direct3D native memory. U8 stays open.
+
+## Round 6 (2026-11-11), same reviewer: 89.6 %, FAIL (+1.3)
+
+F1 9 · F2 9.5 · F3 9 · F4 9 · F5 10 · F6 9 · F7 9 · F8 9 · U1 8.5 · U2 9 · U3 9 · U4 7 · U5 9.5 · U6 8.5 · U7 9 · U8 7.5.
+0.45 points short. Fixed for round 7:
+- U4 motion evidence: MotionTests samples the real search-window opening animation through a seeked clock (167 ms,
+  0 → 1 opacity, 8 → 0 px, ease-out, monotonic) and checks the Motion ramp (83/167 ms, zero when suppressed). The
+  gallery adds frames of the opening at 0, 33, 67, 100 and 167 ms (30-search-opening-*.png, 162 PNGs).
+- U1/U2: picker emoji that faded into their tiles were swapped for bundled bright ones: plate → necktie, stethoscope →
+  handshake, graduation cap → check mark (the old images stay bundled for libraries that use them).
+- F5: "This can't be undone." now sits under the tick box that causes it.
+
+## Round 7 (2026-11-11), same reviewer: 90.5 %, PASS (+0.9)
+
+F1 9 · F2 9.5 · F3 9 · F4 9 · F5 10 · F6 9 · F7 9 · F8 9 · U1 9 · U2 9 · U3 9 · U4 8.5 · U5 9.5 · U6 8.5 · U7 9 · U8 7.5.
+Passes the bar (≥ 90 %, lowest criterion 7.5), with a thin margin. Optional follow-ups the reviewer listed:
+- brighter Fluent variants for 💬 and 🔧 (light) and 💼 and 📣 (dark): needs a new asset download, owner's call
+- seeked-clock tests and frames for the toast fade and the dialog fade-and-scale
+- idle private bytes towards 90 MB by releasing the main window and AvalonEdit when the main window closes
+- a 200 % shot of the in-place title and tag box with keyboard focus
+Still unverified anywhere: real Mica/Acrylic over a live desktop, live motion, caption buttons and Alt/F10 menu keys.

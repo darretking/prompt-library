@@ -16,5 +16,9 @@ public static class MenuText
         return s[..cut] + "…";
     }
 
+    /// <summary><c>emoji name</c> when the category has an emoji, otherwise just the name.</summary>
+    public static string WithEmoji(string? emoji, string name)
+        => string.IsNullOrWhiteSpace(emoji) ? name : $"{emoji.Trim()} {name}";
+
     public static string ForMenu(string s) => Escape(Truncate(s));
 }
