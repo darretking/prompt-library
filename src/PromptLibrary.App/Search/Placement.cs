@@ -17,15 +17,27 @@ public static class Placement
 {
     public const double LauncherWidth = 640;
     public const double LauncherHeight = 420;
-    private const double LauncherMinHeight = 240;
+    public const double LauncherMinHeight = 240;
     private const double LauncherTopFraction = 0.25;
+
+    /// <summary>The fill-in form may grow the launcher to this share of the work area's height before its fields scroll.</summary>
+    public const double FormMaxShare = 0.8;
     public const double ToastLift = 48;
 
     /// <summary>The launcher: 640 x 420 DIPs (shorter on a short screen), centred, a quarter down, never below the work area.</summary>
-    public static PixelRect Launcher(PixelRect work, double scale)
+    public static PixelRect Launcher(PixelRect work, double scale) => Launcher(work, scale, null);
+
+    /// <summary>
+    /// As the two-argument overload. With <paramref name="formHeightDips"/> (the fill-in form's height including the footer)
+    /// the window is as tall as the form: at least <see cref="LauncherMinHeight"/>, at most <see cref="FormMaxShare"/> of the
+    /// work area. The top edge stays where it was unless the window would pass the bottom.
+    /// </summary>
+    public static PixelRect Launcher(PixelRect work, double scale, double? formHeightDips)
     {
         var width = Math.Min(work.Width, (int)Math.Round(LauncherWidth * scale));
-        var heightDips = Math.Min(LauncherHeight, Math.Max(LauncherMinHeight, work.Height / scale - 32));
+        var heightDips = formHeightDips is { } wanted
+            ? Math.Clamp(wanted, LauncherMinHeight, Math.Max(LauncherMinHeight, work.Height / scale * FormMaxShare))
+            : Math.Min(LauncherHeight, Math.Max(LauncherMinHeight, work.Height / scale - 32));
         var height = Math.Min(work.Height, (int)Math.Round(heightDips * scale));
         var x = work.X + (work.Width - width) / 2;
         var y = work.Y + (int)Math.Round(work.Height * LauncherTopFraction);

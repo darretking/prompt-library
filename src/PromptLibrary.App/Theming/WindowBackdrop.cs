@@ -116,7 +116,9 @@ public static class WindowBackdrop
             if (!MicaSupported)
                 return;
 
-            Set(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, kind == BackdropKind.Main ? DWMSBT_MAINWINDOW : DWMSBT_TRANSIENTWINDOW);
+            var backdropResult = Set(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, kind == BackdropKind.Main ? DWMSBT_MAINWINDOW : DWMSBT_TRANSIENTWINDOW);
+            LastBackdropResult = backdropResult;
+            LogBackdrop(window, kind, backdropResult);
 
             // Let the backdrop show through the whole window: glass over the client area, and nothing opaque
             // painted by WPF underneath (the Window and Rail brushes are translucent tints while Mica is on).
@@ -124,7 +126,8 @@ public static class WindowBackdrop
             if (source?.CompositionTarget is { } target)
                 target.BackgroundColor = Colors.Transparent;
             var margins = new Margins { Left = -1, Right = -1, Top = -1, Bottom = -1 };
-            DwmExtendFrameIntoClientArea(hwnd, ref margins);
+            var extendResult = DwmExtendFrameIntoClientArea(hwnd, ref margins);
+            LogExtend(window, extendResult);
         }
         catch (Exception)
         {
@@ -132,8 +135,19 @@ public static class WindowBackdrop
         }
     }
 
-    private static void Set(IntPtr hwnd, int attribute, int value) =>
+    private static int Set(IntPtr hwnd, int attribute, int value) =>
         DwmSetWindowAttribute(hwnd, attribute, ref value, sizeof(int));
+
+    /// <summary>The HRESULT of the last <c>DWMWA_SYSTEMBACKDROP_TYPE</c> call (0 = S_OK), or null before any call.</summary>
+    public static int? LastBackdropResult { get; private set; }
+
+    [System.Diagnostics.Conditional("DEBUG")]
+    private static void LogBackdrop(Window window, BackdropKind kind, int hr)
+        => System.Diagnostics.Debug.WriteLine($"[backdrop] {window.GetType().Name} {kind}: DWMWA_SYSTEMBACKDROP_TYPE HRESULT 0x{hr:X8}{(hr == 0 ? " (ok)" : " (FAILED)")}, AllowsTransparency={window.AllowsTransparency}");
+
+    [System.Diagnostics.Conditional("DEBUG")]
+    private static void LogExtend(Window window, int hr)
+        => System.Diagnostics.Debug.WriteLine($"[backdrop] {window.GetType().Name}: DwmExtendFrameIntoClientArea HRESULT 0x{hr:X8}");
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Margins

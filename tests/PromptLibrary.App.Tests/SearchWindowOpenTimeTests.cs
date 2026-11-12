@@ -23,6 +23,7 @@ internal sealed class NotOnCiFactAttribute : FactAttribute
 /// Speed of the launcher (rubric F1/U8): after the controller has pre-created and warmed the window, showing it must reach a
 /// rendered frame in under 150 ms (median of five). The window is shown far off screen and never takes the focus.
 /// </summary>
+[Collection("WpfApplication")]
 public class SearchWindowOpenTimeTests(Xunit.Abstractions.ITestOutputHelper output)
 {
     private const int BudgetMs = 150;

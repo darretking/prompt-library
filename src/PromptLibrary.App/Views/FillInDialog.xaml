@@ -6,9 +6,9 @@
         Title="Fill in the blanks"
         AutomationProperties.Name="Fill in the blanks"
         Icon="/Assets/app.ico"
-        Width="560" Height="480" MinHeight="360"
+        Width="560" SizeToContent="Height" MinHeight="240"
         ResizeMode="NoResize" ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner">
-    <!-- The main window's version of the search window's form: the same panel, with Cancel and Copy (or Send). -->
+    <!-- The main window's version of the search window's form: the same panel, with Cancel and Copy (or Send). It is as tall as its form, up to 80 % of the work area (set in code), then the fields scroll. -->
     <views:FillInPanel x:Name="Panel" />
 </Window>

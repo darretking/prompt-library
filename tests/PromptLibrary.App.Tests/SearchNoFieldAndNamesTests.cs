@@ -133,5 +133,6 @@ public class SearchNoFieldAndNamesTests
         Assert.False(vm.HasResults);
         Assert.Equal("No prompts match \"zzzz\".", vm.EmptyText);
         Assert.Equal("Try fewer words, or #tag / cat:name", vm.EmptyHint);
+        Assert.Empty(vm.Preview); // the last prompt's text must not linger beside "No prompts match"
     });
 }

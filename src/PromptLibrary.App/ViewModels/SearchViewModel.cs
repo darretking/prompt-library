@@ -466,6 +466,7 @@ public sealed class SearchViewModel : ObservableObject
         var keep = keepSelectionOf is { } id ? Items.FirstOrDefault(i => i.Prompt?.Id == id) : null;
         _selected = null; // force the preview to refresh even when the same row object is chosen again
         Selected = keep ?? Items.FirstOrDefault(i => i.IsRow);
+        if (_selected is null) Preview = []; // no results: nothing is left to preview
         OnPropertyChanged(nameof(HasResults));
         OnPropertyChanged(nameof(EmptyText));
         OnPropertyChanged(nameof(EmptyHint));

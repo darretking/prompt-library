@@ -195,7 +195,16 @@ public sealed class AppHost : IMainHost, IDisposable
         var hotkeyRegistered = ApplyHotkey(Settings.Hotkey);
 
         // Create the search window once, hidden, when the app is idle: opening it later is then instant.
-        Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => _search?.Warm());
+        // Then, once it has been quiet for a few seconds, give the idle memory back (the warm-up leaves a lot of it).
+        Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
+        {
+            _search?.Warm();
+            Startup.MemoryTrimmer.Schedule();
+            // Reviews of the sandbox copy can't press the global shortcut from a script: this opens the search window once.
+            if (Paths.IsSandbox && Environment.GetEnvironmentVariable("PROMPTLIBRARY_SANDBOX_OPEN_SEARCH") == "1")
+                Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,
+                    () => ShowSearch(fromTray: true));
+        });
 
         ApplyStartupRegistration();
         RefreshBackupState();
@@ -300,6 +309,7 @@ public sealed class AppHost : IMainHost, IDisposable
     /// <summary>The main window was closed (hidden): the first time ever, the tray says the app is still running.</summary>
     public void OnMainWindowHidden()
     {
+        Startup.MemoryTrimmer.Schedule();
         if (Settings.HideToTrayNoticeShown || _exiting || IsSessionEnding) return;
         Tray.ShowMessage(AppName, $"Still running. Press {Settings.Hotkey} or click the tray icon.");
         Settings.HideToTrayNoticeShown = true;

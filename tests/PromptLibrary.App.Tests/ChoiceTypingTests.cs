@@ -12,6 +12,7 @@ using PromptLibrary.Core.Templates;
 namespace PromptLibrary.App.Tests;
 
 /// <summary>Typing into a choice field (<c>{relaxed / packed}</c>) must act like typing into a text box.</summary>
+[Collection("WpfApplication")]
 public class ChoiceTypingTests
 {
     private sealed class Tokens : ITokenValues

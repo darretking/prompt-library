@@ -36,6 +36,17 @@
     <InternalsVisibleTo Include="PromptLibrary.App.Tests" />
   </ItemGroup>
 
+  <!-- Runtime settings for a tray app that mostly sits idle: workstation, non-concurrent GC (no background GC thread, a
+       smaller heap), no PGO instrumentation (less JIT memory), and a GC that prefers a compact heap. -->
+  <PropertyGroup>
+    <ServerGarbageCollector>false</ServerGarbageCollector>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredPGO>false</TieredPGO>
+  </PropertyGroup>
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
+  </ItemGroup>
+
   <!-- Single-file, self-contained publish (dotnet publish -c Release). Release only, so Debug builds and
        `dotnet run` keep the normal framework-dependent layout. -->
   <PropertyGroup Condition="'$(Configuration)'=='Release'">

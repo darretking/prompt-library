@@ -9,11 +9,15 @@ namespace PromptLibrary.App.Views;
 /// </summary>
 public partial class FillInDialog : Window
 {
+    /// <summary>The dialog grows with its form up to this share of the work area's height; the fields scroll beyond it.</summary>
+    public const double MaxWorkAreaShare = 0.8;
+
     private string? _result;
 
     private FillInDialog(FillInViewModel model)
     {
         InitializeComponent();
+        MaxHeight = Math.Max(MinHeight, WindowFit.WorkAreaHeight * MaxWorkAreaShare);
         Panel.DataContext = model;
         model.Completed += (text, _) =>
         {

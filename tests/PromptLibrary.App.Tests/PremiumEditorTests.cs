@@ -115,9 +115,9 @@ public sealed class PremiumEditorTests : IDisposable
         Assert.Contains(spans, s => s.Kind == HighlightKind.Placeholder && Of(s) == "{date}");
         Assert.Contains(spans, s => s.Kind == HighlightKind.Bold && Of(s) == "**bold**");
         Assert.Contains(spans, s => s.Kind == HighlightKind.CodeBlock && Of(s).StartsWith("```") && Of(s).EndsWith("```"));
-        // Inside the fence a "#" line is not a heading and bold isn't applied, but placeholders still are.
+        // Inside the fence a "#" line is not a heading, bold isn't applied, and braces are code, not placeholders.
         Assert.Single(spans, s => s.Kind == HighlightKind.Heading);
-        Assert.Contains(spans, s => s.Kind == HighlightKind.Placeholder && Of(s) == "{x}");
+        Assert.DoesNotContain(spans, s => s.Kind == HighlightKind.Placeholder && Of(s) == "{x}");
     }
 
     [Fact]
