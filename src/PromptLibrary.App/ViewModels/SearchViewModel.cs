@@ -73,6 +73,9 @@ public sealed class SearchItem
     /// <summary>Category name and description on one muted line.</summary>
     public string Subtitle { get; init; } = "";
 
+    /// <summary>The subtitle split into pieces, with the description's matched letters marked.</summary>
+    public IReadOnlyList<TextSegment> SubtitleSegments { get; init; } = [];
+
     /// <summary>The category's name (no emoji), or empty.</summary>
     public string CategoryName { get; init; } = "";
 
@@ -224,7 +227,9 @@ public sealed class SearchViewModel : ObservableObject
         ? [new("Tab", "next field"), new("Enter", _form!.PrimaryLabel.ToLowerInvariant()), new("Esc", "back")]
         : IsActionsOpen
             ? [new("Enter", "choose"), new("Esc", "back")]
-            : [new("Enter", "paste"), new("Ctrl+Enter", "send"), new("Ctrl+K", "actions"), new("Esc", "close")];
+            : HasResults
+                ? [new("Enter", "paste"), new("Ctrl+Enter", "send"), new("Ctrl+K", "actions"), new("Esc", "close")]
+                : [new("Esc", "close")]; // nothing to paste, send or act on
 
     /// <summary>The footer as plain text (for screen readers and tests).</summary>
     public string FooterText => string.Join(" · ", Footer.Select(h => $"{h.Key} {h.Label}"));
@@ -470,6 +475,8 @@ public sealed class SearchViewModel : ObservableObject
         OnPropertyChanged(nameof(HasResults));
         OnPropertyChanged(nameof(EmptyText));
         OnPropertyChanged(nameof(EmptyHint));
+        OnPropertyChanged(nameof(Footer));
+        OnPropertyChanged(nameof(FooterText));
     }
 
     private void AddGroups(Dictionary<Guid, Entry> entries, HashSet<Guid> pinned)
@@ -535,10 +542,17 @@ public sealed class SearchViewModel : ObservableObject
             ? Segments(s.Text, [(s.Start, s.Length)])
             : [];
 
-        var description = FirstLine(e.Prompt.Description);
+        var raw = e.Prompt.Description.Split('\n', 2)[0];
+        var description = raw.Trim();
+        var lead = raw.Length - raw.TrimStart().Length; // match ranges count from the untrimmed description
         var subtitle = e.Category.Length == 0 ? description
             : description.Length == 0 ? e.Category
             : $"{e.Category} · {description}";
+        // Description matches, moved past the "Category · " prefix; ones beyond the first line are dropped.
+        var offset = subtitle.Length - description.Length - lead;
+        var descriptionMarks = (hit?.DescriptionMatches ?? [])
+            .Where(m => m.Start >= lead && m.Start + m.Length <= lead + description.Length)
+            .Select(m => (m.Start + offset, m.Length));
         return new SearchItem
         {
             Prompt = e.Prompt,
@@ -546,17 +560,12 @@ public sealed class SearchViewModel : ObservableObject
             IsPinned = pinned.Contains(e.Prompt.Id),
             TitleSegments = Segments(e.Prompt.Title, matches.Select(m => (m.Start, m.Length))),
             Subtitle = subtitle,
+            SubtitleSegments = Segments(subtitle, descriptionMarks),
             CategoryName = e.Category,
             Emoji = e.Emoji,
             TagChips = tags,
             SnippetSegments = snippet,
         };
-    }
-
-    private static string FirstLine(string text)
-    {
-        var line = text.Split('\n', 2)[0].Trim();
-        return line;
     }
 
     private static List<TextSegment> Segments(string text, IEnumerable<(int Start, int Length)> marks)

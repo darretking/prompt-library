@@ -14,6 +14,7 @@ public partial class MoveCategoryDialog : Window
 {
     private readonly int _promptCount;
     private readonly bool _canMove;
+    private readonly string _categoryName;
 
     public MoveCategoryDialog(string categoryName, int promptCount, IReadOnlyList<Category> targets)
     {
@@ -21,16 +22,11 @@ public partial class MoveCategoryDialog : Window
         _promptCount = promptCount;
         _canMove = targets.Count > 0;
 
-        var prompts = Plural(promptCount);
-        var them = promptCount == 1 ? "it" : "them";
-        MessageText.Text = _canMove
-            ? $"\"{categoryName}\" has {prompts}. Move {them} to another category, then \"{categoryName}\" is deleted."
-            : $"\"{categoryName}\" has {prompts} and there is no other category to move {them} to. " +
-              $"Create one first, or delete {them} with \"{categoryName}\".";
+        _categoryName = categoryName;
         TargetBox.ItemsSource = targets;
         TargetBox.SelectedIndex = _canMove ? 0 : -1; // never empty: the first other category is the default
 
-        var label = $"Also delete the {prompts} in this category";
+        var label = $"Also delete the {Plural(promptCount)} in this category";
         DeleteBox.Content = label;
         AutomationProperties.SetName(DeleteBox, label);
         Update();
@@ -54,6 +50,9 @@ public partial class MoveCategoryDialog : Window
     internal bool IsMoveChoiceShown => MovePanel.Visibility == Visibility.Visible;
 
     /// <summary>The helper line under the choice (empty when there is none).</summary>
+    /// <summary>The question at the top, which follows the tick box.</summary>
+    internal string Message => MessageText.Text;
+
     internal string HintMessage => HintText.Visibility == Visibility.Visible ? HintText.Text : "";
 
     internal CheckBox DeleteTickBox => DeleteBox;
@@ -68,6 +67,14 @@ public partial class MoveCategoryDialog : Window
     {
         if (ActionButton is null) return; // while the XAML is still being loaded
         var delete = DeleteBox.IsChecked == true;
+        var prompts = Plural(_promptCount);
+        var them = _promptCount == 1 ? "it" : "them";
+        MessageText.Text = delete
+            ? $"\"{_categoryName}\" and its {prompts} will be deleted."
+            : _canMove
+                ? $"\"{_categoryName}\" has {prompts}. Move {them} to another category, then \"{_categoryName}\" is deleted."
+                : $"\"{_categoryName}\" has {prompts} and there is no other category to move {them} to. " +
+                  $"Create one first, or delete {them} with \"{_categoryName}\".";
         TargetBox.IsEnabled = !delete;
         MovePanel.Visibility = _canMove && !delete ? Visibility.Visible : Visibility.Collapsed;
         HintText.Visibility = _canMove || delete ? Visibility.Visible : Visibility.Collapsed;

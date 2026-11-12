@@ -114,7 +114,7 @@
                     <!-- Leading 22 px glyph: the category's emoji in colour, else a document icon (people icon for team prompts). -->
                     <Grid Width="22" Height="22" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,-2,0,0">
                         <!-- On a faint 22 px rounded tile, so dark emoji stay visible in dark mode. -->
-                        <Border Background="{DynamicResource Brush.EmojiTile}" CornerRadius="{StaticResource Radius}"
+                        <Border Background="{DynamicResource Brush.EmojiTile}" BorderBrush="{DynamicResource Brush.EmojiTileRing}" BorderThickness="1" CornerRadius="{StaticResource Radius}"
                                 Visibility="{Binding HasEmoji, Converter={StaticResource BoolToVisibility}}">
                             <emoji:EmojiImage Text="{Binding Emoji}" FontSize="13" HorizontalAlignment="Center"
                                              VerticalAlignment="Center" />
@@ -140,7 +140,7 @@
                                    Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}" />
                         <TextBlock Text="{Binding NumberHint}" Style="{StaticResource MutedText}" />
                     </StackPanel>
-                    <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Subtitle}"
+                    <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" views:InlineText.Segments="{Binding SubtitleSegments}"
                                Style="{StaticResource MutedText}" TextTrimming="CharacterEllipsis" />
 
                     <!-- Third line, only when the tags or the text matched: #tag chips (matched one bold) or a snippet. -->
@@ -233,6 +233,16 @@
                     </Grid.ColumnDefinitions>
 
                     <Grid Background="{DynamicResource Brush.Search.List}">
+                        <!-- No results: the empty state spans both panes (there is nothing to preview). -->
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasResults}" Value="False">
+                                        <Setter Property="Grid.ColumnSpan" Value="2" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
                         <ListBox x:Name="ResultList" Style="{StaticResource PlainList}" ItemsSource="{Binding Items}"
                                  SelectedItem="{Binding Selected, Mode=TwoWay}" Focusable="False" Padding="0,4"
                                  ItemContainerStyle="{StaticResource ResultRow}" ItemTemplate="{StaticResource ItemTemplate}"
@@ -259,7 +269,8 @@
                     </Grid>
 
                     <Border Grid.Column="1" Background="{DynamicResource Brush.Search.Preview}"
-                            BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1,0,0,0">
+                            BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1,0,0,0"
+                            Visibility="{Binding HasResults, Converter={StaticResource BoolToVisibility}}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                                       Focusable="False">
                             <TextBlock x:Name="PreviewText" TextWrapping="Wrap" Padding="12"

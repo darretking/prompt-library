@@ -67,3 +67,20 @@ target (Send menu → Set as default) and the "Couldn't paste" toast. Real bugs 
 
 Ruling R18: integrate the File/Help menu into a custom Windows 11 title bar (as Notepad and Paint do), with native
 caption buttons kept. It came up in three reviews.
+
+## Round 4 (2026-11-11), new reviewer (the round 2/3 reviewer was lost with its session): 85.3 %, FAIL (+1.3)
+
+F1 9 · F2 9 · F3 8 · F4 9 · F5 9 · F6 9 · F7 8.5 · F8 9 · U1 8 · U2 8 · U3 9 · U4 7 · U5 9 · U6 8 · U7 8 · U8 7.
+This reviewer was briefed with rounds 1–3 for calibration, viewed all 64 screens at 100 % plus 150/200 % samples, and
+read the code. Changes going in: Fluent Emoji PNGs replace Emoji.Wpf (R14 updated), and the WPF test collection no longer
+boots or kills a real App (OnStartup is cancelled in tests). Bugs it found, all fixed for round 5:
+- search rows ignored description matches (now highlighted after the "Category · " prefix)
+- dark import-results dialog: failed file names near-black (now Ink)
+- delete-category question still said "Move them" when deleting the prompts (now rewritten when ticked)
+- no-results search kept an empty preview pane and offered "Enter paste" (now spans both panes, footer "Esc close")
+- pale/dark emoji lost on their tiles (hairline ring added, tile tints within the existing caps)
+- empty-title placeholder sat 5 px left of the text (placeholder now follows the box's padding)
+- gallery fidelity: fill-in scenes show remembered values; the Send menu shot uses the real builder (submenu chevron)
+
+Memory, measured in Release with the sandbox at true idle (no window open, 30 s): private bytes 110 MB, working set
+12 MB after the idle trim. The reviewer's 134 MB came from a run where the onboarding window was still open.

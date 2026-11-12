@@ -843,7 +843,7 @@
                                     CornerRadius="4" SnapsToDevicePixels="True">
                                 <Grid>
                                     <TextBlock x:Name="Placeholder" Text="{TemplateBinding Tag}" FontWeight="Normal"
-                                               Foreground="{DynamicResource Brush.Muted}" Margin="7,0" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Brush.Muted}" Margin="{TemplateBinding Padding}" Padding="7,0,0,0" VerticalAlignment="Center"
                                                IsHitTestVisible="False" Visibility="Collapsed" />
                                     <ScrollViewer x:Name="PART_ContentHost" Focusable="False" Margin="{TemplateBinding Padding}"
                                                   HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" />

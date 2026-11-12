@@ -72,7 +72,7 @@
                             <DataTemplate>
                                 <Button Style="{StaticResource EmojiCell}" Click="Cell_Click"
                                         AutomationProperties.Name="{Binding}">
-                                    <Border Width="22" Height="22" Background="{DynamicResource Brush.EmojiTile}"
+                                    <Border Width="22" Height="22" Background="{DynamicResource Brush.EmojiTile}" BorderBrush="{DynamicResource Brush.EmojiTileRing}" BorderThickness="1"
                                             CornerRadius="{StaticResource Radius}">
                                         <emoji:EmojiImage Text="{Binding}" FontSize="15" HorizontalAlignment="Center"
                                                          VerticalAlignment="Center" />

@@ -49,7 +49,7 @@
                     </ListBox.ItemContainerStyle>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <TextBlock TextWrapping="Wrap" AutomationProperties.Name="{Binding Line}">
+                            <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Brush.Ink}" AutomationProperties.Name="{Binding Line}">
                                 <Run Text="{Binding File, Mode=OneWay}" FontWeight="SemiBold" />
                                 <Run Text=" — " Foreground="{DynamicResource Brush.Muted}" />
                                 <Run Text="{Binding Reason, Mode=OneWay}" Foreground="{DynamicResource Brush.Danger}" />

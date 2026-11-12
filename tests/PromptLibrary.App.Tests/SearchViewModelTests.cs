@@ -156,6 +156,24 @@ public class SearchViewModelTests
     });
 
     [Fact]
+    public void Typing_HighlightsDescriptionMatches_AfterTheCategoryPrefix() => Sta.Run(() =>
+    {
+        var host = new FakeActions();
+        var (lib, cat) = NewLibrary();
+        host.Library = lib;
+        Add(lib, cat, "Plan a trip", description: "Day by day, at your budget");
+        var vm = Make(host);
+        vm.Reset();
+
+        vm.Query = "budget";
+
+        var row = Assert.Single(vm.Items);
+        Assert.Equal(row.Subtitle, string.Concat(row.SubtitleSegments.Select(s => s.Text)));
+        var marked = Assert.Single(row.SubtitleSegments, s => s.Highlight);
+        Assert.Equal("budget", marked.Text);
+    });
+
+    [Fact]
     public void Keys_ArrowsSkipHeaders_PageKeysJump_EndsStop() => Sta.Run(() =>
     {
         var host = new FakeActions();

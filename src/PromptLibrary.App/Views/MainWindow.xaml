@@ -462,7 +462,7 @@
                                             <!-- A fixed 22 px column so names line up: the category's emoji on a faint rounded tile (so dark
                                                  emoji stay visible in dark mode), or a small Fluent glyph on All prompts and Recent. -->
                                             <Border Width="22" Height="22" CornerRadius="{StaticResource Radius}"
-                                                    Background="{DynamicResource Brush.EmojiTile}">
+                                                    Background="{DynamicResource Brush.EmojiTile}" BorderBrush="{DynamicResource Brush.EmojiTileRing}" BorderThickness="1">
                                                 <Border.Style>
                                                     <Style TargetType="Border">
                                                         <Style.Triggers>

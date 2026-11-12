@@ -199,10 +199,20 @@ public sealed class ScreenshotGallery
         Window(name, new HistoryWindow(host, model), null, null);
     }
 
+    /// <summary>Values a returning user would have typed before, so the fill-in shots show remembered answers.</summary>
+    private static void RememberTripValues(AppSettings settings)
+    {
+        settings.PlaceholderValues["number"] = "5";
+        settings.PlaceholderValues["destination"] = "Lisbon";
+        settings.PlaceholderValues["who's going"] = "two adults";
+        settings.PlaceholderValues["budget"] = "mid-range";
+    }
+
     private void FillIn(string name)
     {
         var host = NewHost(true);
         var trip = host.Library.Prompts.First(p => p.Title == "Plan a trip itinerary");
+        RememberTripValues(host.Settings);
         var model = new FillInViewModel(trip.Text, host.Settings, new Tokens(), "Copy", trip.Title, cancelLabel: "Cancel");
         var dialog = (Window)Activator.CreateInstance(typeof(FillInDialog),
             BindingFlags.Instance | BindingFlags.NonPublic, null, [model], null)!;
@@ -275,6 +285,7 @@ public sealed class ScreenshotGallery
     private void Search(string name, Action<SearchViewModel> setup, bool fitForm = false)
     {
         var host = NewHost(true);
+        RememberTripValues(host.Settings);
         var vm = new SearchViewModel(new SearchActions(host.Library, host.Settings), () => DateTimeOffset.Now);
         var window = new SearchWindow(vm);
         vm.Reset();
@@ -347,15 +358,11 @@ public sealed class ScreenshotGallery
         window.ShowInTaskbar = false;
     }
 
-    /// <summary>The Send menu is built in code when the arrow is pressed (MainWindow.SendMenu_Click); this builds the same menu without opening it.</summary>
+    /// <summary>The real Send to menu (MainWindow.BuildSendMenu), drawn without opening it.</summary>
     private void SendMenu(string name, MainWindow window)
     {
-        var item = (Style)window.FindResource("FlyoutItem");
-        var menu = new ContextMenu { Style = (Style)window.FindResource("FlyoutMenu"), DataContext = window.DataContext };
-        foreach (var choice in window.ViewModel.SendChoices)
-            menu.Items.Add(new MenuItem { Style = item, Header = choice.Name, IsChecked = choice.IsDefault });
-        menu.Items.Add(new Separator { Style = (Style)window.FindResource("FlyoutSeparator") });
-        menu.Items.Add(new MenuItem { Style = item, Header = "Set as default for this prompt" });
+        var menu = window.BuildSendMenu();
+        menu.DataContext = window.DataContext;
         Capture(name, Isolate(menu));
     }
 

@@ -484,6 +484,12 @@ public partial class MainWindow : Window, IDialogs
     private void SendMenu_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button button) return;
+        OpenBelow(BuildSendMenu(), button);
+    }
+
+    /// <summary>Builds the Send to menu for the current prompt (also drawn by the screenshot gallery).</summary>
+    internal ContextMenu BuildSendMenu()
+    {
         var item = (Style)FindResource("FlyoutItem");
         var menu = new ContextMenu { Style = (Style)FindResource("FlyoutMenu") };
 
@@ -509,8 +515,7 @@ public partial class MainWindow : Window, IDialogs
             }
             menu.Items.Add(setDefault);
         }
-
-        OpenBelow(menu, button);
+        return menu;
     }
 
     // ---- Toast ---------------------------------------------------------------------------------

@@ -98,4 +98,15 @@ public class SearchRowLineTests
         Assert.True(vm.IsFormOpen);
         Assert.Equal("Tab next field · Enter paste · Esc back", vm.FooterText);
     });
+
+    [Fact]
+    public void Footer_WithNoResults_OffersOnlyClose() => Sta.Run(() =>
+    {
+        var (vm, _) = Make("Greeting", "Hello {name}");
+        vm.Query = "zzzz-nothing";
+        Assert.False(vm.HasResults);
+        Assert.Equal("Esc close", vm.FooterText);
+        vm.Query = "";
+        Assert.Equal("Enter paste · Ctrl+Enter send · Ctrl+K actions · Esc close", vm.FooterText);
+    });
 }
