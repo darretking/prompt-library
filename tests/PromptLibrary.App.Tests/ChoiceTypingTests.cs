@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using PromptLibrary.App.Theming;
@@ -70,6 +71,29 @@ public class ChoiceTypingTests
         if (box.SelectedText == letter.ToString() && box.SelectionStart + 1 == box.Text.Length) box.Select(box.Text.Length, 0); // the caret moves past the letter
         Sta.DoEvents();
     }
+
+    [Fact]
+    public void KeyboardFocus_SelectsARememberedValue_SoTypingReplacesIt() => Sta.RunOnApp(() =>
+    {
+        StartApp();
+        var settings = new AppSettings();
+        settings.PlaceholderValues["number"] = "5";
+        var vm = new FillInViewModel("Plan {number} days", settings, new Tokens());
+        var panel = new FillInPanel { DataContext = vm };
+        var window = new Window { Content = panel, Width = 560, Height = 480, Left = -10000, Top = 0, WindowStyle = WindowStyle.None };
+        window.Show();
+        window.Activate();
+        Sta.DoEvents();
+        var box = Descendants<TextBox>(panel).First(t => t.IsVisible);
+        Assert.Equal("5", box.Text);
+
+        Keyboard.Focus(box);
+        Sta.DoEvents();
+        Assert.Equal("5", box.SelectedText);
+        Type(box, '7');
+        Assert.Equal("7", box.Text);
+        window.Close();
+    });
 
     [Fact]
     public void TypingAChoiceValue_KeepsEveryLetter_AndDoesNotHang() => Sta.RunOnApp(() =>

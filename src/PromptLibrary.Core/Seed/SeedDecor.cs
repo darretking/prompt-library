@@ -11,8 +11,8 @@ internal static class SeedDecor
         ["Kids & family"] = "\U0001F9F8",       // teddy bear
         ["Recipes & cooking"] = "\U0001F373",   // cooking
         ["Business"] = "\U0001F4BC",            // briefcase
-        ["Writing & email"] = "✉️",   // envelope
-        ["Learning"] = "\U0001F393",            // graduation cap
+        ["Writing & email"] = "✍️",   // writing hand (the white envelope faded into light tiles)
+        ["Learning"] = "\U0001F4DA",            // books (the black cap faded into dark tiles)
         ["Health & fitness"] = "\U0001F4AA",    // flexed biceps
         ["Travel"] = "✈️",            // aeroplane
         ["Money"] = "\U0001F4B0",               // money bag

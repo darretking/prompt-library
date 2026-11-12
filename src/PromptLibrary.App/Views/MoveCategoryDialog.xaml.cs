@@ -78,7 +78,7 @@ public partial class MoveCategoryDialog : Window
         TargetBox.IsEnabled = !delete;
         MovePanel.Visibility = _canMove && !delete ? Visibility.Visible : Visibility.Collapsed;
         HintText.Visibility = _canMove || delete ? Visibility.Visible : Visibility.Collapsed;
-        HintText.Text = delete ? "These prompts will be deleted. This can't be undone." : "Prompts move to the category you pick.";
+        HintText.Text = delete ? "This can't be undone." : "Prompts move to the category you pick.";
         HintText.SetResourceReference(StyleProperty, delete ? "ErrorText" : "MutedText");
 
         var text = delete ? $"Delete category and {Plural(_promptCount)}" : "Move and delete";

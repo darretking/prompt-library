@@ -84,3 +84,17 @@ boots or kills a real App (OnStartup is cancelled in tests). Bugs it found, all 
 
 Memory, measured in Release with the sandbox at true idle (no window open, 30 s): private bytes 110 MB, working set
 12 MB after the idle trim. The reviewer's 134 MB came from a run where the onboarding window was still open.
+
+## Round 5 (2026-11-11), same reviewer as round 4: 88.3 %, FAIL (+3.0)
+
+F1 9 · F2 9 · F3 9 · F4 9 · F5 9.5 · F6 9 · F7 9 · F8 9 · U1 8 · U2 9 · U3 9 · U4 7 · U5 9.5 · U6 8.5 · U7 8.5 · U8 7.5.
+All round 4 fixes confirmed. New: a remembered fill-in value kept the caret before it, so typing added to it. Fixed for
+round 6:
+- tabbing into (or opening on) a fill-in field selects its text, so typing replaces a remembered value (test included)
+- the delete-category warning no longer repeats the question; it says only "This can't be undone."
+- seed emoji that faded into their tiles were swapped: Writing & email ✉️ → ✍️, Learning 🎓 → 📚 (new libraries only);
+  the tile ring is stronger
+- the gallery adds 200 % shots of history, fill-in and delete-category dialogs (142 PNGs)
+
+Memory: GC gen0 budget and JIT variants moved idle private bytes only within run-to-run noise (108–123 MB); the rest is
+WPF/Direct3D native memory. U8 stays open.

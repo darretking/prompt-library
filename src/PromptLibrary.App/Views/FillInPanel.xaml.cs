@@ -16,6 +16,9 @@ public partial class FillInPanel : UserControl
     {
         InitializeComponent();
         PreviewKeyDown += OnPreviewKeyDown;
+        // Tabbing into (or opening on) a field selects its text, so typing replaces a remembered value instead of adding to it.
+        // A mouse click places the caret as usual.
+        AddHandler(Keyboard.GotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(SelectOnKeyboardFocus), true);
         DataContextChanged += (_, _) =>
         {
             FocusFirstField();
@@ -35,6 +38,11 @@ public partial class FillInPanel : UserControl
     /// <summary>Moves the keyboard to the first field.</summary>
     public void FocusFirstField()
         => Dispatcher.BeginInvoke(DispatcherPriority.Input, () => MoveFocus(new TraversalRequest(FocusNavigationDirection.First)));
+
+    private static void SelectOnKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (e.NewFocus is TextBox box && Mouse.LeftButton != MouseButtonState.Pressed) box.SelectAll();
+    }
 
     private void Complete_Click(object sender, RoutedEventArgs e) => ViewModel?.Complete();
 

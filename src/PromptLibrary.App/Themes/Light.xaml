@@ -37,7 +37,7 @@
     <!-- A faint rounded tile behind category emoji so dark ones stay visible in dark mode. -->
     <SolidColorBrush x:Key="Brush.EmojiTile" Color="#0C000000" />
     <!-- A hairline around emoji tiles, so white and pale emoji (envelope, palette) keep an edge. -->
-    <SolidColorBrush x:Key="Brush.EmojiTileRing" Color="#1F000000" />
+    <SolidColorBrush x:Key="Brush.EmojiTileRing" Color="#2B000000" />
     <SolidColorBrush x:Key="Brush.DiffAdded" Color="#E3F4E8" />
     <SolidColorBrush x:Key="Brush.DiffAddedText" Color="#14532D" />
     <SolidColorBrush x:Key="Brush.DiffRemoved" Color="#FCE8E6" />

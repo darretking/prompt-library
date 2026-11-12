@@ -33,7 +33,7 @@ public sealed class ScreenshotGallery
     private static readonly (string Name, double Scale)[] Scales = [("100", 1), ("150", 1.5), ("200", 2)];
 
     /// <summary>The screens also drawn at 200 % (light-200, dark-200); the others only at 100 % and 150 %.</summary>
-    private static readonly string[] AtTwoHundred = ["01-main", "14-search-empty", "17-search-fill-in", "18-settings"];
+    private static readonly string[] AtTwoHundred = ["01-main", "10-history", "11-fill-in-dialog", "12-delete-category-dialog", "14-search-empty", "17-search-fill-in", "18-settings"];
 
     private string _out = "";
     private string _theme = "";
@@ -206,6 +206,7 @@ public sealed class ScreenshotGallery
         settings.PlaceholderValues["destination"] = "Lisbon";
         settings.PlaceholderValues["who's going"] = "two adults";
         settings.PlaceholderValues["budget"] = "mid-range";
+        settings.PlaceholderValues["relaxed / packed"] = "relaxed";
     }
 
     private void FillIn(string name)
@@ -233,7 +234,7 @@ public sealed class ScreenshotGallery
         {
             dialog.DeleteTickBox.IsChecked = true;
             Assert.False(dialog.IsMoveChoiceShown);
-            Assert.Equal("These prompts will be deleted. This can't be undone.", dialog.HintMessage);
+            Assert.Equal("This can't be undone.", dialog.HintMessage);
         }
         Window(name, dialog, null, null);
     }
