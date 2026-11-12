@@ -263,6 +263,8 @@
             <MenuItem Style="{StaticResource MenuBarHeader}" Header="_Help" AutomationProperties.Name="Help">
                 <MenuItem Style="{StaticResource FlyoutItem}" Header="_Setup guide…" Command="{Binding SetupGuideCommand}" />
                 <MenuItem Style="{StaticResource FlyoutItem}" Header="Check for _updates…" Command="{Binding CheckForUpdatesCommand}" />
+                <MenuItem Style="{StaticResource FlyoutItem}" Header="_What's new" Command="{Binding ChangelogCommand}"
+                          ToolTip="Opens the changelog on GitHub" />
                 <MenuItem Style="{StaticResource FlyoutItem}" Header="_About Prompt Library" Command="{Binding AboutCommand}" />
             </MenuItem>
             </Menu>
@@ -760,7 +762,7 @@
                     </Grid>
                 </Border>
 
-                <!-- Right: the editor, a card on the window layer (Surface, 1 px Line, 8 px radius, 12 px from the edges, a very
+                <!-- Right: the editor, a card on the window layer (Surface, 1 px Line, 8 px radius, 12 px from every edge, the list's included, a very
                      soft shadow that MainWindow switches off on low-tier graphics). -->
                 <Grid Grid.Column="2">
                     <!-- Nothing open: only a faint hint (empty when the library is empty, the list says that). -->
@@ -769,7 +771,7 @@
                                Text="{Binding NoEditorText}"
                                Visibility="{Binding HasNoEditor, Converter={StaticResource BoolToVisibility}}" />
 
-                    <Border x:Name="EditorCard" Margin="0,12,12,12" Padding="20,16" VerticalAlignment="Top"
+                    <Border x:Name="EditorCard" Margin="12" Padding="20,16" VerticalAlignment="Top"
                             Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Line}"
                             BorderThickness="1" CornerRadius="8"
                             Visibility="{Binding HasEditor, Converter={StaticResource BoolToVisibility}}">

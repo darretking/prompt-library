@@ -51,6 +51,11 @@ public sealed class ReleaseSafetyTests : IDisposable
             ReleaseUrls.LatestPage("darretking", "prompt-library"));
 
     [Fact]
+    public void ChangelogPage_IsTheChangelogOnMain()
+        => Assert.Equal("https://github.com/darretking/prompt-library/blob/main/CHANGELOG.md",
+            ReleaseUrls.ChangelogPage("darretking", "prompt-library"));
+
+    [Fact]
     public async Task CheckAsync_UnsafePageUrl_UsesTheRepositoryReleasesPage()
     {
         var json = FakeHandler.ReleaseJson("v1.0.1").Replace(

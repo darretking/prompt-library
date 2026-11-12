@@ -134,6 +134,7 @@ public sealed class MainViewModel : ObservableObject
         ExitCommand = new RelayCommand(() => _host.ExitApp());
         SetupGuideCommand = new RelayCommand(_host.OpenOnboarding);
         AboutCommand = new RelayCommand(_host.ShowAbout);
+        ChangelogCommand = new RelayCommand(() => _openUrl(AppRepository.ChangelogUrl));
         OpenUpdateCommand = new RelayCommand(() => _host.Updates?.OpenDialog());
         CheckForUpdatesCommand = new AsyncRelayCommand(CheckForUpdatesAsync, () => _host.Updates is not null);
         ShowYoursCommand = new RelayCommand(() => SwitchSide(LibrarySide.Yours));
@@ -495,6 +496,9 @@ public sealed class MainViewModel : ObservableObject
     public IRelayCommand ExitCommand { get; }
     public IRelayCommand SetupGuideCommand { get; }
     public IRelayCommand AboutCommand { get; }
+
+    /// <summary><c>Help → What's new</c>: opens the changelog in the repository.</summary>
+    public IRelayCommand ChangelogCommand { get; }
 
     /// <summary>The rail's "Update available: v1.0.2" link: opens the update dialog.</summary>
     public IRelayCommand OpenUpdateCommand { get; }

@@ -22,3 +22,10 @@ public class CategoryItemTests
         Assert.Equal("Coding", item.DisplayName);
     }
 }
+
+public class AppRepositoryTests
+{
+    [Fact]
+    public void ChangelogUrl_PointsAtThisRepositorysChangelog()
+        => Assert.Equal("https://github.com/darretking/prompt-library/blob/main/CHANGELOG.md", AppRepository.ChangelogUrl);
+}

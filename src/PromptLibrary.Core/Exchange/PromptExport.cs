@@ -7,7 +7,8 @@ namespace PromptLibrary.Core.Exchange;
 /// <summary>
 /// Writes a library out so nothing is locked in: one <c>.json</c> file (the library.json schema plus a
 /// <c>"format": "prompt-library-export/1"</c> marker) or a folder of Markdown files, one per prompt, in a subfolder per
-/// category. Each <c>.md</c> starts with YAML front matter (title, description, category, tags); the rest of the file is
+/// category. Each <c>.md</c> starts with YAML front matter (title, description, category, the category's emoji when it has
+/// one, tags, the Send to target when set); the rest of the file is
 /// the exact prompt text.
 /// </summary>
 public static class PromptExport
@@ -70,21 +71,28 @@ public static class PromptExport
             var file = UniqueName(SafeName(prompt.Title), used,
                 existsOnDisk: n => File.Exists(Path.Combine(directory, n + ".md")));
 
-            File.WriteAllText(Path.Combine(directory, file + ".md"), ToMarkdown(prompt, categoryName), utf8);
+            File.WriteAllText(Path.Combine(directory, file + ".md"), ToMarkdown(prompt, categoryName, category?.Emoji), utf8);
             count++;
         }
         return count;
     }
 
-    /// <summary>One prompt as a Markdown file: front matter, then the exact text.</summary>
-    public static string ToMarkdown(Prompt prompt, string categoryName)
+    /// <summary>
+    /// One prompt as a Markdown file: front matter, then the exact text. The category's emoji (optional) is written as
+    /// <c>emoji:</c> so an import gives the category the same icon.
+    /// </summary>
+    public static string ToMarkdown(Prompt prompt, string categoryName, string? categoryEmoji = null)
     {
         var sb = new StringBuilder();
         sb.Append("---\r\n");
         sb.Append("title: ").Append(Quote(prompt.Title)).Append("\r\n");
         sb.Append("description: ").Append(Quote(prompt.Description)).Append("\r\n");
         sb.Append("category: ").Append(Quote(categoryName)).Append("\r\n");
+        if (!string.IsNullOrWhiteSpace(categoryEmoji))
+            sb.Append("emoji: ").Append(Quote(categoryEmoji.Trim())).Append("\r\n");
         sb.Append("tags: [").Append(string.Join(", ", (prompt.Tags ?? []).Select(Quote))).Append("]\r\n");
+        if (!string.IsNullOrWhiteSpace(prompt.SendTo))
+            sb.Append("sendTo: ").Append(Quote(prompt.SendTo)).Append("\r\n");
         sb.Append("---\r\n");
         sb.Append(prompt.Text);
         return sb.ToString();

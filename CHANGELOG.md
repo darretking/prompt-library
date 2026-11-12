@@ -7,6 +7,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
+- **Help → What's new** opens this changelog.
+- Markdown export and import keep each category's emoji (`emoji:`, or `icon:`, in the front matter) and the prompt's Send to target (`sendTo:`). An imported emoji is also given to an existing category that has none. JSON export already kept both, and tags were already kept in both formats.
 - 18 emoji for business departments and functions in the category emoji picker: people and HR, finance, growth, operations, IT, security, compliance, projects, records, product, logistics, manufacturing, the company, customer support, communications, wins, strategy, and research and testing.
 
 ### Changed
@@ -14,6 +16,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 - The title bar is one even strip: the menu, the title and the window buttons line up, with no lighter band underneath, restored or maximised.
+- The editor card has the same 12 px margin on its left, next to the prompt list, as on its top and right.
+- Menus, drop-downs and the emoji picker open from their left edge even when Windows is set to right-handed (they used to open to the left, past the window edge).
 
 ## [1.2.0] - 2026-11-12
 

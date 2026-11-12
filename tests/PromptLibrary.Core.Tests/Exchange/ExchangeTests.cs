@@ -139,6 +139,71 @@ public sealed class ExchangeTests : IDisposable
         Assert.Equal("Plain \"English\"", explain.Description);
         Assert.Equal(["review", "learning"], explain.Tags);
         Assert.Equal("Coding", target.Categories.Single(c => c.Id == explain.CategoryId).Name);
+        Assert.Equal("\U0001F4BB", target.Categories.Single(c => c.Name == "Coding").Emoji);
+        Assert.Null(target.Categories.Single(c => c.Name == "Email").Emoji);
+        Assert.Equal("claude", explain.SendTo);
+        Assert.Null(target.Prompts.Single(p => p.Title == "Follow-up").SendTo);
+    }
+
+    [Fact]
+    public void Folder_UnknownSendTo_IsIgnored()
+    {
+        var folder = Path.Combine(_dir, "in", "Email");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "Hi.md"), "---\nsendTo: \"somewhere-else\"\ntags: [a, b]\n---\nHi {name}");
+
+        var target = Empty();
+        AssertCounts(1, 0, 0, PromptImport.FromFolder(target, Path.Combine(_dir, "in"), () => T));
+        var hi = target.Prompts.Single();
+        Assert.Null(hi.SendTo);
+        Assert.Equal(["a", "b"], hi.Tags);
+    }
+
+    [Fact]
+    public void Markdown_WritesTheCategoryEmoji_OnlyWhenThereIsOne()
+    {
+        var lib = Sample();
+        var code = PromptExport.ToMarkdown(lib.Prompts[0], "Coding", "\U0001F4BB");
+        var mail = PromptExport.ToMarkdown(lib.Prompts[1], "Email", null);
+        Assert.Contains("category: \"Coding\"\r\nemoji: \"\U0001F4BB\"\r\n", code);
+        Assert.DoesNotContain("emoji:", mail);
+    }
+
+    [Theory]
+    [InlineData("emoji: \"\U0001F9EE\"", "\U0001F9EE")]
+    [InlineData("icon: ⚙️", "⚙️")]
+    [InlineData("emoji: \"Finance\"", null)]
+    [InlineData("emoji: \"\U0001F9EE\U0001F4B0\"", null)]
+    public void Folder_EmojiOrIconInFrontMatter_SetsTheCategoryIcon_WhenItIsOneEmoji(string line, string? expected)
+    {
+        var folder = Path.Combine(_dir, "in", "Finance");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "Budget.md"), $"---\n{line}\n---\nMake a budget for {{team}}.");
+
+        var target = Empty();
+        AssertCounts(1, 0, 0, PromptImport.FromFolder(target, Path.Combine(_dir, "in"), () => T));
+        Assert.Equal(expected, target.Categories.Single(c => c.Name == "Finance").Emoji);
+    }
+
+    [Fact]
+    public void Import_GivesAnExistingCategoryTheEmoji_OnlyWhenItHasNone()
+    {
+        var target = Empty();
+        var plain = new Category { Id = Guid.NewGuid(), Name = "Coding" };
+        var own = new Category { Id = Guid.NewGuid(), Name = "Email", Emoji = "\U0001F4E7" };
+        target.Categories.AddRange([plain, own]);
+        // The same prompts are already there, so both count as duplicates; the empty category still gets its emoji.
+        target.Prompts.Add(new Prompt { Id = Guid.NewGuid(), Title = "Explain this code", CategoryId = plain.Id, Text = "x" });
+
+        var source = Sample();
+        source.Categories[1].Emoji = "\U0001F4AC";
+        var path = Path.Combine(_dir, "lib.json");
+        PromptExport.WriteJson(path, source);
+        var result = PromptImport.FromJsonFile(target, path, () => T);
+
+        AssertCounts(1, 1, 0, result);
+        Assert.Equal("\U0001F4BB", plain.Emoji);
+        Assert.Equal("\U0001F4E7", own.Emoji);
     }
 
     // ---- Import ----------------------------------------------------------------------------------
