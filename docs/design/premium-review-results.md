@@ -54,3 +54,16 @@ This reviewer was new and viewed only about 16 of 28 screens, so its calibration
 reviewer is reused every round so scores are comparable. Its verdict: the search window meets launcher expectations; the
 main window "looks like a good internal tool": flat, no depth, a huge empty editor, Save and "…" drifting along the bottom,
 dim muted text, plain rail rows, generic empty states. Idle memory (~190 MB) is too high.
+
+## Round 3 (2026-11-11), same reviewer as round 2: 84.0 %, FAIL (+6.8)
+
+F1 9 · F2 9 · F3 8 · F4 9 · F5 9 · F6 8 · F7 8 · F8 8 · U1 8 · U2 8 · U3 9 · U4 7 · U5 9 · U6 8 · U7 8 · U8 7.
+The reviewer viewed only 15 screens and read no code. Two of its fix items already exist: a per-prompt default send
+target (Send menu → Set as default) and the "Couldn't paste" toast. Real bugs it found:
+- the fill-in preview doesn't update while typing
+- clipping at the minimum window size
+- the empty-library card isn't centred
+- dim dark-mode emoji
+
+Ruling R18: integrate the File/Help menu into a custom Windows 11 title bar (as Notepad and Paint do), with native
+caption buttons kept. It came up in three reviews.
