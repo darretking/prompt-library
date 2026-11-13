@@ -322,6 +322,12 @@ public partial class MainWindow : Window, IDialogs
         return window.ShowDialog() == true;
     }
 
+    public void ShowChanges(string title, string caption, PromptLibrary.Core.Team.TeamChangeModel change)
+    {
+        if (!_host.AsksNothing)
+            new ChangesWindow(_host, new ChangesViewModel(title, caption, change)) { Owner = this }.ShowDialog();
+    }
+
     // ---- Category rail -------------------------------------------------------------------------
 
     private void RailList_KeyDown(object sender, KeyEventArgs e)

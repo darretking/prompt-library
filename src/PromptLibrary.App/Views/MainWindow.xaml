@@ -890,6 +890,31 @@
 
                             <!-- Title and description are edited in place: flat fields, no labels (the automation names stay). -->
                             <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                                <!-- A personal copy whose team prompt changed: one quiet line with its three ways out. -->
+                                <Border Background="{DynamicResource Brush.BrandSoft}" CornerRadius="{StaticResource Radius}"
+                                        Padding="12,0" MinHeight="40" Margin="0,0,0,8"
+                                        Visibility="{Binding ShowTeamUpdateBanner, Converter={StaticResource BoolToVisibility}}">
+                                    <DockPanel VerticalAlignment="Center">
+                                        <Button DockPanel.Dock="Right" Style="{StaticResource SubtleButton}" Width="32" MinWidth="32"
+                                                Padding="0" Content="&#xE711;" FontFamily="{StaticResource Font.Icons}"
+                                                Command="{Binding KeepMineCommand}" ToolTip="Keep mine"
+                                                AutomationProperties.Name="Keep mine" />
+                                        <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="Update my copy"
+                                                Margin="12,0,4,0" Command="{Binding UpdateMyCopyCommand}"
+                                                ToolTip="Replace your copy with the team's current version"
+                                                AutomationProperties.Name="Update my copy" />
+                                        <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="See changes"
+                                                Margin="12,0,0,0" Command="{Binding SeeCopyChangesCommand}"
+                                                AutomationProperties.Name="See changes" />
+                                        <TextBlock Text="The team updated this prompt." TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" />
+                                    </DockPanel>
+                                </Border>
+                                <!-- Updated since this PC last saw it: the way to see exactly what. -->
+                                <Button Style="{StaticResource LinkButton}" Content="What changed" HorizontalAlignment="Left"
+                                        Margin="0,0,0,8" Command="{Binding WhatChangedCommand}"
+                                        Visibility="{Binding ShowWhatChanged, Converter={StaticResource BoolToVisibility}}"
+                                        ToolTip="See what the team changed in this prompt" AutomationProperties.Name="What changed" />
                                 <!-- A team prompt while the team library isn't being edited: one lock line, the fields
                                      below are normal, selectable text that can't be changed. -->
                                 <DockPanel Margin="0,0,0,8">

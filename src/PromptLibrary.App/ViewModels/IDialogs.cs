@@ -1,6 +1,7 @@
 using PromptLibrary.App.Team;
 using PromptLibrary.Core.Exchange;
 using PromptLibrary.Core.Models;
+using PromptLibrary.Core.Team;
 
 namespace PromptLibrary.App.ViewModels;
 
@@ -47,4 +48,7 @@ public interface IDialogs
     /// left beside it). True when a version was restored.
     /// </summary>
     bool ShowTeamHistory(TeamLibraryService service, bool review);
+
+    /// <summary>Shows what changed in a prompt (the changed fields, then a line diff of the text) with a Close button.</summary>
+    void ShowChanges(string title, string caption, TeamChangeModel change) { }
 }

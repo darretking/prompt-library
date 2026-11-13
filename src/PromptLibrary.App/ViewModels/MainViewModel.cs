@@ -149,6 +149,10 @@ public sealed class MainViewModel : ObservableObject
         HideCommand = new RelayCommand<PromptRow?>(ToggleHide);
         FeatureCommand = new RelayCommand<PromptRow?>(ToggleFeature);
         MarkAllSeenCommand = new RelayCommand(MarkAllSeen);
+        WhatChangedCommand = new RelayCommand(WhatChanged);
+        SeeCopyChangesCommand = new RelayCommand(SeeCopyChanges);
+        UpdateMyCopyCommand = new RelayCommand(UpdateMyCopy);
+        KeepMineCommand = new RelayCommand(KeepMine);
         RetryTeamCommand = new AsyncRelayCommand(() => _team?.Service.RefreshAsync() ?? Task.CompletedTask);
         EditTeamCommand = new RelayCommand(StartEditingTeam);
         DoneEditingTeamCommand = new RelayCommand(() => StopEditingTeam());
@@ -1669,6 +1673,12 @@ public sealed class MainViewModel : ObservableObject
         var editor = PromptEditorViewModel.ForPrompt(prompt);
         editor.Uses = UsesOf(prompt.Id);
         editor.IsReadOnly = CurrentDocument.IsReadOnly;
+        // What changed since this PC last saw the prompt: taken before opening clears the marker, kept while it is open.
+        _openChange = null;
+        if (CurrentDocument.IsTeam && _team is { } teamDoc
+            && TeamUserState.MarkerFor(_host.Settings, prompt) == TeamMarker.Updated
+            && teamDoc.Service.TryGetChange(prompt.Id, out var change) && !change.IsEmpty)
+            _openChange = change;
         Editor = editor;
         _selectedPrompt = Prompts.FirstOrDefault(r => ReferenceEquals(r.Prompt, prompt));
         OnPropertyChanged(nameof(SelectedPrompt));
@@ -1872,6 +1882,8 @@ public sealed class MainViewModel : ObservableObject
                            string.Equals(c.Name.Trim(), categoryName, StringComparison.OrdinalIgnoreCase))
                        ?? editor.AddCategory(categoryName);
             copy = editor.AddPrompt(category.Id, source.Title, source.Description, source.Text, source.Tags, null);
+            copy.SourceTeamPromptId = source.Id; // lets the copy offer an update when the team version changes
+            copy.SourceFingerprint = TeamUserState.Fingerprint(source);
         }
         catch (ArgumentException ex)
         {
@@ -2017,10 +2029,80 @@ public sealed class MainViewModel : ObservableObject
         RaiseSideState();
     }
 
+    private TeamChangeModel? _openChange;
+
+    /// <summary>An Updated team prompt that is open and has a kept copy of what was seen: the "What changed" link shows.</summary>
+    public bool ShowWhatChanged => IsTeamSide && _editor is not null && _openChange is not null;
+
+    public IRelayCommand WhatChangedCommand { get; }
+    public IRelayCommand SeeCopyChangesCommand { get; }
+    public IRelayCommand UpdateMyCopyCommand { get; }
+    public IRelayCommand KeepMineCommand { get; }
+
+    /// <summary>The team prompt the open personal copy came from, when the team has changed it since the copy (or the
+    /// last Keep mine / update); otherwise null.</summary>
+    private Prompt? OutOfDateSource(out Prompt? mine)
+    {
+        mine = null;
+        if (!IsYoursSide || _editor?.PromptId is not { } id) return null;
+        mine = _personal.Library.Prompts.FirstOrDefault(p => p.Id == id);
+        if (mine?.SourceTeamPromptId is not { } sourceId || mine.SourceFingerprint is null) return null;
+        var source = TeamContent?.Prompts.FirstOrDefault(p => p.Id == sourceId);
+        return source is not null && TeamUserState.Fingerprint(source) != mine.SourceFingerprint ? source : null;
+    }
+
+    /// <summary>The quiet line in a personal copy's editor: the team changed the prompt it was copied from.</summary>
+    public bool ShowTeamUpdateBanner => OutOfDateSource(out _) is not null;
+
+    private void WhatChanged()
+    {
+        if (_openChange is not { } change || _editor is null || !IsTeamSide) return;
+        _dialogs.ShowChanges(_editor.Title, "Since you last looked", change);
+        if (CurrentDocument.Library.Prompts.FirstOrDefault(p => p.Id == _editor.PromptId) is { } prompt)
+            MarkOpenedSeen(prompt); // opening the changes counts as seeing them
+    }
+
+    private void SeeCopyChanges()
+    {
+        if (OutOfDateSource(out var mine) is not { } source || mine is null) return;
+        var change = TeamChange.Between(mine, TeamChange.CategoryName(_personal.Library, mine),
+            source, TeamChange.CategoryName(TeamContent!, source));
+        _dialogs.ShowChanges(source.Title, "Your copy to the team version", change);
+    }
+
+    private void UpdateMyCopy()
+    {
+        if (OutOfDateSource(out var mine) is not { } source || mine is null || _editor is not { } editor) return;
+        var changed = editor.IsDirty || (mine.UpdatedAt > mine.CreatedAt
+            && (mine.Title != source.Title || mine.Description != source.Description || mine.Text != source.Text
+                || !(mine.Tags ?? []).SequenceEqual(source.Tags ?? [])));
+        if (changed && !_dialogs.ConfirmDestructive("Replace your changes with the team's version?", "Replace")) return;
+
+        editor.Title = source.Title;
+        editor.Description = source.Description;
+        editor.Text = source.Text;
+        editor.Tags.Clear();
+        foreach (var tag in source.Tags ?? []) editor.Tags.Add(tag);
+        if (!Save()) return; // the editor keeps the team's version as an unsaved change
+        mine.SourceFingerprint = TeamUserState.Fingerprint(source);
+        _personal.SaveLibraryChange();
+        RaiseEditorState();
+        ShowStatus("Updated from the team.", FeedbackDuration);
+    }
+
+    private void KeepMine()
+    {
+        if (OutOfDateSource(out var mine) is not { } source || mine is null) return;
+        mine.SourceFingerprint = TeamUserState.Fingerprint(source);
+        _personal.SaveLibraryChange();
+        RaiseEditorState();
+    }
+
     private void MarkAllSeen()
     {
         if (TeamContent is not { } team) return;
         TeamUserState.MarkAllSeen(_host.Settings, team);
+        foreach (var teamPrompt in team.Prompts) _team?.Service.MarkSeen(teamPrompt.Id);
         SaveTeamState();
         foreach (var row in Prompts.Where(r => r.IsTeam)) row.Marker = TeamMarker.None;
         RaiseMarkerState();
@@ -2032,6 +2114,7 @@ public sealed class MainViewModel : ObservableObject
         var settings = _host.Settings;
         if (TeamUserState.MarkerFor(settings, prompt) == TeamMarker.None) return;
         TeamUserState.MarkSeen(settings, prompt);
+        _team?.Service.MarkSeen(prompt.Id);
         SaveTeamState();
         foreach (var row in Prompts.Where(r => r.Id == prompt.Id)) row.Marker = TeamMarker.None;
         RaiseMarkerState();
@@ -2309,6 +2392,8 @@ public sealed class MainViewModel : ObservableObject
 
     private void RaiseEditorState()
     {
+        OnPropertyChanged(nameof(ShowWhatChanged));
+        OnPropertyChanged(nameof(ShowTeamUpdateBanner));
         OnPropertyChanged(nameof(LockLineText));
         OnPropertyChanged(nameof(PinLabel));
         OnPropertyChanged(nameof(CanPin));

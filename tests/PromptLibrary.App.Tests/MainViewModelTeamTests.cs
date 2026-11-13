@@ -4,6 +4,7 @@ using PromptLibrary.App.Team;
 using PromptLibrary.App.Updates;
 using PromptLibrary.App.ViewModels;
 using PromptLibrary.Core.Backup;
+using PromptLibrary.Core.History;
 using PromptLibrary.Core.Models;
 using PromptLibrary.Core.Team;
 
@@ -526,7 +527,8 @@ public sealed class MainViewModelTeamTests : IDisposable
 
     private TeamLibraryService NewService(FakeHost host)
         => new(_http, "1.0.0", Path.Combine(_root, "cache", "team-cache.json"), host.Settings, () => host.Library,
-            host.SaveSettings, () => DateTimeOffset.Now, _ => { }, TimeSpan.FromMilliseconds(50));
+            host.SaveSettings, () => DateTimeOffset.Now, _ => { }, TimeSpan.FromMilliseconds(50),
+            seenStore: _seenStore = new TeamSeenStore(Path.Combine(_root, "cache", "team-seen.json")));
 
     private static Prompt NewPrompt(Category category, string title, string description, string text) => new()
     {
@@ -559,6 +561,185 @@ public sealed class MainViewModelTeamTests : IDisposable
         Assert.Equal(title, vm.Editor?.Title);
     }
 
+    // ---- What changed and out-of-date copies ---------------------------------------------------
+
+    [Fact]
+    public void WhatChanged_ShownForUpdatedPromptWithSnapshot_OpeningClearsMarkerAndMarksSeen() => Sta.Run(() =>
+    {
+        var host = NewHost(withTeam: true);
+        var dialogs = new FakeDialogs();
+        var vm = new MainViewModel(host, dialogs);
+        var teamPrompt = TeamPrompt(host, "Follow-up email");
+        teamPrompt.Text = "Write a much better follow-up email about {topic}.";
+        Assert.Equal(TeamMarker.Updated, TeamUserState.MarkerFor(host.Settings, teamPrompt));
+        Assert.True(host.Team!.TryGetChange(teamPrompt.Id, out var before) && !before.IsEmpty);
+
+        OpenTeamPrompt(vm, "Follow-up email");
+
+        Assert.True(vm.ShowWhatChanged);
+        Assert.Equal(TeamMarker.None, TeamUserState.MarkerFor(host.Settings, teamPrompt)); // opening cleared it
+        Assert.True(!host.Team.TryGetChange(teamPrompt.Id, out var after) || after.IsEmpty); // and called MarkSeen
+
+        vm.WhatChangedCommand.Execute(null);
+
+        Assert.True(Assert.Single(dialogs.Changes).TextChanged);
+    });
+
+    [Fact]
+    public void WhatChanged_HiddenForUnchangedPromptAndWithoutSnapshot() => Sta.Run(() =>
+    {
+        var host = NewHost(withTeam: true);
+        var vm = new MainViewModel(host, new FakeDialogs());
+        OpenTeamPrompt(vm, "Follow-up email");
+        Assert.False(vm.ShowWhatChanged); // not Updated
+
+        // Updated, but no copy of what was seen (as for a library joined before 1.3).
+        var other = TeamPrompt(host, "Complaint reply");
+        other.Text = "Changed";
+        _seenStore!.Remove(other.Id);
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Title == "Complaint reply");
+        Assert.False(vm.ShowWhatChanged);
+    });
+
+    [Fact]
+    public void MarkAllSeen_MarksEveryPromptSeenInTheService() => Sta.Run(() =>
+    {
+        var host = NewHost(withTeam: true);
+        var vm = new MainViewModel(host, new FakeDialogs());
+        var a = TeamPrompt(host, "Follow-up email");
+        var b = TeamPrompt(host, "Complaint reply");
+        a.Text = "A changed";
+        b.Text = "B changed";
+        Assert.True(host.Team!.TryGetChange(a.Id, out var ca) && !ca.IsEmpty);
+        vm.ShowTeamCommand.Execute(null);
+
+        vm.MarkAllSeenCommand.Execute(null);
+
+        Assert.True(!host.Team.TryGetChange(a.Id, out var da) || da.IsEmpty);
+        Assert.True(!host.Team.TryGetChange(b.Id, out var db) || db.IsEmpty);
+    });
+
+    [Fact]
+    public void CopyToYours_RemembersTheTeamPromptAndItsFingerprint() => Sta.Run(() =>
+    {
+        var (_, vm, copy, teamPrompt, _) = CopyAndOpen();
+
+        Assert.Equal(teamPrompt.Id, copy.SourceTeamPromptId);
+        Assert.Equal(TeamUserState.Fingerprint(teamPrompt), copy.SourceFingerprint);
+        Assert.False(vm.ShowTeamUpdateBanner); // team unchanged
+    });
+
+    [Fact]
+    public void Banner_ShownOnlyWhileTheTeamVersionDiffers() => Sta.Run(() =>
+    {
+        var (host, vm, copy, teamPrompt, _) = CopyAndOpen();
+        Assert.False(vm.ShowTeamUpdateBanner);
+
+        teamPrompt.Text = "Newer team text";
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Id == copy.Id); // reopen
+        Assert.True(vm.ShowTeamUpdateBanner);
+
+        host.Team!.Team!.Content.Prompts.Remove(teamPrompt); // source deleted
+        Assert.False(vm.ShowTeamUpdateBanner);
+
+        // A personal prompt that is not a copy never shows it.
+        var plain = AddPrompt(host.Library, host.Library.Categories[0], "Plain");
+        vm.ShowTeamCommand.Execute(null);
+        vm.ShowYoursCommand.Execute(null); // rebuilds the list
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Id == plain.Id);
+        Assert.False(vm.ShowTeamUpdateBanner);
+    });
+
+    [Fact]
+    public void UpdateMyCopy_UntouchedCopy_UpdatesWithoutAskingAndKeepsOldVersion() => Sta.Run(() =>
+    {
+        var (_, vm, copy, teamPrompt, dialogs) = CopyAndOpen();
+        var oldText = copy.Text;
+        teamPrompt.Text = "Newer team text";
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Id == copy.Id);
+
+        vm.UpdateMyCopyCommand.Execute(null);
+
+        Assert.Equal(0, dialogs.Confirms);
+        Assert.Equal("Newer team text", copy.Text);
+        Assert.Equal(TeamUserState.Fingerprint(teamPrompt), copy.SourceFingerprint);
+        Assert.False(vm.ShowTeamUpdateBanner);
+        Assert.Equal("Updated from the team.", vm.StatusText);
+        Assert.Contains(_history!.List(copy.Id), v => v.Text == oldText);
+    });
+
+    [Fact]
+    public void UpdateMyCopy_ChangedCopy_AsksFirst() => Sta.Run(() =>
+    {
+        var (_, vm, copy, teamPrompt, dialogs) = CopyAndOpen();
+        vm.Editor!.Text = "My own wording";
+        Assert.True(vm.Save());
+        teamPrompt.Text = "Newer team text";
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Id == copy.Id);
+
+        dialogs.ConfirmAnswer = false;
+        vm.UpdateMyCopyCommand.Execute(null);
+        Assert.Equal(1, dialogs.Confirms);
+        Assert.Equal("Replace your changes with the team's version?", dialogs.LastConfirm);
+        Assert.Equal("My own wording", copy.Text);
+        Assert.True(vm.ShowTeamUpdateBanner);
+
+        dialogs.ConfirmAnswer = true;
+        vm.UpdateMyCopyCommand.Execute(null);
+        Assert.Equal("Newer team text", copy.Text);
+        Assert.Contains(_history!.List(copy.Id), v => v.Text == "My own wording");
+    });
+
+    [Fact]
+    public void KeepMine_StoresTheFingerprintAndHidesTheBanner() => Sta.Run(() =>
+    {
+        var (host, vm, copy, teamPrompt, _) = CopyAndOpen();
+        teamPrompt.Text = "Newer team text";
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Id == copy.Id);
+        Assert.True(vm.ShowTeamUpdateBanner);
+        var saves = host.LibrarySaves;
+
+        vm.KeepMineCommand.Execute(null);
+
+        Assert.Equal(TeamUserState.Fingerprint(teamPrompt), copy.SourceFingerprint);
+        Assert.True(host.LibrarySaves > saves);
+        Assert.False(vm.ShowTeamUpdateBanner);
+        Assert.NotEqual("Newer team text", copy.Text);
+
+        teamPrompt.Text = "Newer still"; // the team changes it again
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Id == copy.Id);
+        Assert.True(vm.ShowTeamUpdateBanner);
+    });
+
+    [Fact]
+    public void SeeChanges_ShowsYourCopyAgainstTheTeamVersion() => Sta.Run(() =>
+    {
+        var (_, vm, copy, teamPrompt, dialogs) = CopyAndOpen();
+        teamPrompt.Text = "Newer team text";
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Id == copy.Id);
+
+        vm.SeeCopyChangesCommand.Execute(null);
+
+        Assert.True(Assert.Single(dialogs.Changes).TextChanged);
+    });
+
+    private PromptHistoryStore? _history;
+    private TeamSeenStore? _seenStore;
+
+    private (FakeHost Host, MainViewModel Vm, Prompt Copy, Prompt TeamPrompt, FakeDialogs Dialogs) CopyAndOpen()
+    {
+        var host = NewHost(withTeam: true);
+        var dialogs = new FakeDialogs();
+        _history = new PromptHistoryStore(Path.Combine(_root, "history"));
+        var vm = new MainViewModel(host, dialogs, _history);
+        OpenTeamPrompt(vm, "Follow-up email");
+        var teamPrompt = TeamPrompt(host, "Follow-up email");
+        vm.CopyToYoursCommand.Execute(null);
+        var copy = Assert.Single(host.Library.Prompts, p => p.Title == "Follow-up email");
+        copy.CreatedAt = copy.UpdatedAt = DateTimeOffset.Now.AddDays(-1); // copied a while ago, not edited since
+        return (host, vm, copy, teamPrompt, dialogs);
+    }
+
     private sealed class FakeHost : IMainHost
     {
         public UpdateCoordinator? Updates => null;
@@ -589,8 +770,14 @@ public sealed class MainViewModelTeamTests : IDisposable
 
     private sealed class FakeDialogs : IDialogs
     {
+        public List<TeamChangeModel> Changes { get; } = [];
+        public int Confirms { get; private set; }
+        public string? LastConfirm { get; private set; }
+        public bool ConfirmAnswer { get; set; } = true;
+
         public bool? AskSaveChanges(string question) => null;
-        public bool ConfirmDestructive(string message, string action) => true;
+        public bool ConfirmDestructive(string message, string action) { Confirms++; LastConfirm = message; return ConfirmAnswer; }
+        public void ShowChanges(string title, string caption, TeamChangeModel change) => Changes.Add(change);
         public void ShowMessage(string message) { }
         public bool ShowTeamHistory(TeamLibraryService service, bool review) => false;
     }
