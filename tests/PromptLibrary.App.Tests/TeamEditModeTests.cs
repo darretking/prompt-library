@@ -6,6 +6,7 @@ using PromptLibrary.App.ViewModels;
 using PromptLibrary.Core.Backup;
 using PromptLibrary.Core.Models;
 using PromptLibrary.Core.Team;
+using PromptLibrary.Core.Usage;
 
 namespace PromptLibrary.App.Tests;
 
@@ -168,9 +169,12 @@ public sealed class TeamEditModeTests : IDisposable
         var sales = vm.Categories.Single(c => c.Name == "Sales");
         var salesIds = host.Team!.Team!.Content.Prompts.Where(p => p.CategoryId == sales.Id).Select(p => p.Id).ToList();
         Assert.Equal(2, salesIds.Count);
+        var other = host.Team.Team.Content.Prompts.First(p => p.CategoryId != sales.Id).Id;
+        foreach (var id in salesIds.Append(other)) UsageTracker.Record(host.Settings, id, DateTimeOffset.Now);
 
         vm.DeleteCategoryCommand.Execute(sales);
 
+        Assert.Equal([other], host.Settings.Usage.Keys); // usage of the deleted prompts is gone, the rest stays
         Assert.Equal(("Sales", 2), dialogs.LastDeletionAsked);
         Assert.Equal("Deleted \"Sales\" and 2 prompts.", vm.StatusText);
         Until(() => ReadTeamFile() is { Length: > 0 } text && !text.Contains("Follow-up email"));
