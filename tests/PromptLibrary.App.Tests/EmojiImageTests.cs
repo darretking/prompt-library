@@ -28,7 +28,7 @@ public class EmojiImageTests
     public void EveryPickerAndSeedEmoji_HasBothBundledImages()
     {
         var all = Needed().ToList();
-        Assert.True(all.Count >= 54);
+        Assert.True(all.Count >= 60);
         foreach (var e in all)
         {
             var name = EmojiImage.AssetName(e);
