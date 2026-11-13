@@ -19,7 +19,13 @@ public partial class TeamJoinDialog : Window
         InitializeComponent();
         DataContext = viewModel;
         viewModel.Joined += (_, _) => DialogResult = true;
-        Loaded += (_, _) => InputBox.Focus();
+        Loaded += (_, _) =>
+        {
+            InputBox.Focus();
+            InputBox.CaretIndex = InputBox.Text.Length;
+            _ = viewModel.FindAsync();
+        };
+        Closed += (_, _) => viewModel.CancelFind();
     }
 
     private void Browse_Click(object sender, RoutedEventArgs e)

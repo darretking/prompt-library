@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net.Http;
 using System.Windows.Threading;
+using PromptLibrary.Core.Backup;
 using PromptLibrary.Core.Models;
 using PromptLibrary.Core.Team;
 
@@ -65,11 +66,15 @@ public sealed class TeamLibraryService : IDisposable
 
     public TeamLibraryService(HttpClient http, string appVersion, string cachePath, AppSettings settings,
         Func<Library> personal, Func<bool> saveSettings, Func<DateTimeOffset> now, Action<Exception> log,
-        TimeSpan? debounce = null, Func<string, TeamSource?>? parseInput = null, TeamSeenStore? seenStore = null)
+        TimeSpan? debounce = null, Func<string, TeamSource?>? parseInput = null, TeamSeenStore? seenStore = null,
+        Func<IReadOnlyList<CloudFolder>>? cloudFolders = null)
     {
         _seen = seenStore ?? new TeamSeenStore(Path.Combine(Path.GetDirectoryName(cachePath) ?? "", "team-seen.json"));
         _seen.Load();
-        _parse = parseInput ?? (input => TeamSource.FromInput(input));
+        // Typed input may be relative to a cloud folder (OneDrive - Acme\Shared\Prompts); the list is read on each join
+        // because it is slow-ish and only this background parse needs it.
+        var clouds = cloudFolders ?? AppHost.DetectCloudFolders;
+        _parse = parseInput ?? (text => TeamSource.FromInput(text, clouds()));
         _reader = new TeamReader(http, appVersion);
         _cachePath = cachePath;
         _settings = settings;
