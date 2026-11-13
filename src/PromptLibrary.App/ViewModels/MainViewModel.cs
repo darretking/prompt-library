@@ -452,6 +452,11 @@ public sealed class MainViewModel : ObservableObject
         ? CurrentDocument.Library.Categories.FirstOrDefault(c => c.Id == id)?.Name
         : null;
 
+    /// <summary>The open prompt's category emoji (beside the name while the editor is read only), or null.</summary>
+    public string? EditorCategoryEmoji => _editor?.CategoryId is { } id
+        ? CurrentDocument.Library.Categories.FirstOrDefault(c => c.Id == id)?.Emoji
+        : null;
+
     private bool TeamConnected => _team?.Service.Source is not null;
 
     private bool TeamLoaded => _team?.Service.Team is not null;
@@ -2692,6 +2697,7 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowFeatureToggle));
         OnPropertyChanged(nameof(FeatureLabel));
         OnPropertyChanged(nameof(EditorCategoryName));
+        OnPropertyChanged(nameof(EditorCategoryEmoji));
         OnPropertyChanged(nameof(CanShowHistory));
         OnPropertyChanged(nameof(SendChoices));
         OnPropertyChanged(nameof(SendDefaultName));

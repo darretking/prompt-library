@@ -9,8 +9,10 @@
         ResizeMode="NoResize" ShowInTaskbar="False">
     <!-- The prompt's title, a team category, an optional note with a count, your name; Send suggestion / Cancel. -->
     <StackPanel Margin="16">
-        <TextBlock Text="{Binding PromptTitle}" FontWeight="SemiBold" TextWrapping="Wrap"
+        <TextBlock Text="{Binding PromptTitle}" FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap"
                    AutomationProperties.Name="{Binding PromptTitle}" />
+        <TextBlock Text="Sends this prompt to the team's editors. They decide whether to add it."
+                   Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,4,0,0" />
 
         <TextBlock Text="Team category" Style="{StaticResource FieldLabel}" Margin="0,16,0,0" />
         <ComboBox ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}"

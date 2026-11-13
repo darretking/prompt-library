@@ -333,10 +333,6 @@
                             <TextBlock Text="Read only" Style="{StaticResource MutedText}" Margin="8,0,0,0"
                                        ToolTip="{Binding TeamReadOnlyReason}"
                                        Visibility="{Binding ShowTeamReadOnlyNote, Converter={StaticResource BoolToVisibility}}" />
-                            <Button Style="{StaticResource LinkButton}" Content="Mark all as seen" Margin="8,0,0,0"
-                                    Command="{Binding MarkAllSeenCommand}"
-                                    Visibility="{Binding ShowMarkAllSeen, Converter={StaticResource BoolToVisibility}}"
-                                    AutomationProperties.Name="Mark all as seen" />
                             <!-- The negative margin keeps the 24 px icon button from making the line taller. -->
                             <Button Style="{StaticResource IconButton}" Content="&#xE712;" Margin="4,-5,-6,-5"
                                     Click="TeamMore_Click" ToolTip="More"
@@ -344,19 +340,22 @@
                                     AutomationProperties.Name="More team library actions">
                                 <Button.ContextMenu>
                                     <ContextMenu Style="{StaticResource FlyoutMenu}">
+                                        <MenuItem Style="{StaticResource FlyoutItem}" Header="_Mark all as seen"
+                                                  Command="{Binding MarkAllSeenCommand}"
+                                                  Visibility="{Binding ShowMarkAllSeen, Converter={StaticResource BoolToVisibility}}" />
                                         <MenuItem Style="{StaticResource FlyoutItem}" Header="Copy _invite"
                                                   Command="{Binding CopyInviteCommand}" />
-                                        <Separator Visibility="{Binding ShowTeamEditorItems, Converter={StaticResource BoolToVisibility}}" />
+                                        <Separator Style="{StaticResource FlyoutSeparator}" Visibility="{Binding ShowTeamEditorItems, Converter={StaticResource BoolToVisibility}}" />
                                         <MenuItem Style="{StaticResource FlyoutItem}" Header="_Note for everyone…"
                                                   Command="{Binding TeamNoteCommand}"
                                                   Visibility="{Binding ShowTeamEditorItems, Converter={StaticResource BoolToVisibility}}" />
                                         <MenuItem Style="{StaticResource FlyoutItem}" Header="_Fill-in values for everyone…"
                                                   Command="{Binding TeamFillInValuesCommand}"
                                                   Visibility="{Binding ShowTeamEditorItems, Converter={StaticResource BoolToVisibility}}" />
-                                        <MenuItem Style="{StaticResource FlyoutItem}" Header="_Check the team library"
+                                        <MenuItem Style="{StaticResource FlyoutItem}" Header="_Check the team library…"
                                                   Command="{Binding TeamCheckCommand}"
                                                   Visibility="{Binding ShowTeamEditorItems, Converter={StaticResource BoolToVisibility}}" />
-                                        <Separator Visibility="{Binding ShowTeamEditorItems, Converter={StaticResource BoolToVisibility}}" />
+                                        <Separator Style="{StaticResource FlyoutSeparator}" Visibility="{Binding ShowTeamEditorItems, Converter={StaticResource BoolToVisibility}}" />
                                         <MenuItem Style="{StaticResource FlyoutItem}" Header="_Restore an older version…"
                                                   Command="{Binding TeamHistoryCommand}"
                                                   Visibility="{Binding ShowTeamEditorItems, Converter={StaticResource BoolToVisibility}}" />
@@ -929,16 +928,16 @@
                                         Padding="12,0" MinHeight="40" Margin="0,0,0,8"
                                         Visibility="{Binding ShowTeamUpdateBanner, Converter={StaticResource BoolToVisibility}}">
                                     <DockPanel VerticalAlignment="Center">
-                                        <Button DockPanel.Dock="Right" Style="{StaticResource SubtleButton}" Width="32" MinWidth="32"
-                                                Padding="0" Content="&#xE711;" FontFamily="{StaticResource Font.Icons}"
-                                                Command="{Binding KeepMineCommand}" ToolTip="Keep mine"
+                                        <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="Keep mine"
+                                                Margin="12,0,0,0" VerticalAlignment="Center" Command="{Binding KeepMineCommand}"
+                                                ToolTip="Keep your copy as it is and hide this line"
                                                 AutomationProperties.Name="Keep mine" />
                                         <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="Update my copy"
-                                                Margin="12,0,4,0" Command="{Binding UpdateMyCopyCommand}"
+                                                Margin="12,0,0,0" VerticalAlignment="Center" Command="{Binding UpdateMyCopyCommand}"
                                                 ToolTip="Replace your copy with the team's current version"
                                                 AutomationProperties.Name="Update my copy" />
                                         <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="See changes"
-                                                Margin="12,0,0,0" Command="{Binding SeeCopyChangesCommand}"
+                                                Margin="12,0,0,0" VerticalAlignment="Center" Command="{Binding SeeCopyChangesCommand}"
                                                 AutomationProperties.Name="See changes" />
                                         <TextBlock Text="The team updated this prompt." TextTrimming="CharacterEllipsis"
                                                    VerticalAlignment="Center" />
@@ -1052,9 +1051,22 @@
                                     </ComboBox.ItemContainerStyle>
                                 </ComboBox>
                                 <!-- Read only: the category as plain text. -->
-                                <TextBlock Text="{Binding EditorCategoryName}" Padding="6,7" Margin="0,0,8,0"
-                                           AutomationProperties.Name="{Binding EditorCategoryName, StringFormat=Category {0}}"
-                                           Visibility="{Binding Editor.IsReadOnly, Converter={StaticResource BoolToVisibility}}" />
+                                <StackPanel Orientation="Horizontal" Margin="9,7,8,7" VerticalAlignment="Center"
+                                            AutomationProperties.Name="{Binding EditorCategoryName, StringFormat=Category {0}}"
+                                            Visibility="{Binding Editor.IsReadOnly, Converter={StaticResource BoolToVisibility}}">
+                                    <emoji:EmojiImage Text="{Binding EditorCategoryEmoji}" Margin="0,0,6,0">
+                                        <emoji:EmojiImage.Style>
+                                            <Style TargetType="emoji:EmojiImage">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding EditorCategoryEmoji}" Value="{x:Null}">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </emoji:EmojiImage.Style>
+                                    </emoji:EmojiImage>
+                                    <TextBlock Text="{Binding EditorCategoryName}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
                                 <controls:TagBox Grid.Column="1" Tags="{Binding Editor.Tags}"
                                                  IsReadOnly="{Binding Editor.IsReadOnly}" />
                                 <!-- Never moves anything: laid over the row's right end. -->

@@ -88,7 +88,7 @@
         </Border>
 
         <Button Grid.Row="3" Content="Close" IsCancel="True" IsDefault="True" HorizontalAlignment="Right"
-                Margin="0,16,0,0" Style="{StaticResource PrimaryButton}" Click="Close_Click"
+                Margin="0,16,0,0" Click="Close_Click"
                 AutomationProperties.Name="Close" />
     </Grid>
 </Window>

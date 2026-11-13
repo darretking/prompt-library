@@ -9,11 +9,21 @@
         ShowInTaskbar="False">
     <!-- The list at the left (title, then "from · age"), styled like the main prompt list; the selected suggestion at the
          right with its actions at the bottom. Esc or the title bar closes the window. -->
-    <DockPanel Margin="16">
-        <Grid>
-        <TextBlock Text="No suggestions right now." Margin="0,8,0,0" VerticalAlignment="Top"
-                   Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}"
-                   AutomationProperties.LiveSetting="Polite" />
+    <Grid Margin="16">
+        <!-- Nothing waiting: a centred glyph, a line and a Close button. -->
+        <DockPanel Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
+            <Button DockPanel.Dock="Bottom" Content="Close" IsDefault="True" HorizontalAlignment="Right"
+                    Click="Close_Click" AutomationProperties.Name="Close" />
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock Text="&#xE8F2;" FontFamily="{StaticResource Font.Icons}" FontSize="48"
+                           Foreground="{DynamicResource Brush.Muted}" HorizontalAlignment="Center" />
+                <TextBlock Text="No suggestions right now" FontWeight="SemiBold" FontSize="14"
+                           HorizontalAlignment="Center" Margin="0,12,0,0" AutomationProperties.LiveSetting="Polite" />
+                <TextBlock Text="Prompts that members suggest show up here." Style="{StaticResource MutedText}"
+                           HorizontalAlignment="Center" Margin="0,4,0,0" />
+            </StackPanel>
+        </DockPanel>
+
         <Grid Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="240" />
@@ -35,35 +45,35 @@
                 </ListBox.ItemTemplate>
             </ListBox>
 
+            <!-- The selected suggestion top to bottom: title, description, the prompt, the note, then where it goes. -->
             <DockPanel Grid.Column="2">
-                <StackPanel DockPanel.Dock="Bottom" Margin="0,16,0,0">
-                    <TextBlock Text="Team category" Style="{StaticResource FieldLabel}" />
-                    <ComboBox ItemsSource="{Binding CategoryOptions}" SelectedItem="{Binding Category}"
-                              DisplayMemberPath="Display" AutomationProperties.Name="Team category" />
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-                        <Button Content="Dismiss" Margin="0,0,8,0" Command="{Binding DismissCommand}"
-                                AutomationProperties.Name="Dismiss" />
-                        <Button Style="{StaticResource PrimaryButton}" Content="Add to team prompts"
-                                Command="{Binding AddCommand}" AutomationProperties.Name="Add to team prompts" />
-                    </StackPanel>
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                    <Button Content="Dismiss" Margin="0,0,8,0" Command="{Binding DismissCommand}"
+                            AutomationProperties.Name="Dismiss" />
+                    <Button Style="{StaticResource PrimaryButton}" Content="Add to team prompts"
+                            Command="{Binding AddCommand}" AutomationProperties.Name="Add to team prompts" />
                 </StackPanel>
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
-                    <StackPanel DataContext="{Binding Selected}">
-                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                        <TextBox Text="{Binding Suggestion.Text, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"
-                                 Margin="0,8,0,0" MaxHeight="200" VerticalScrollBarVisibility="Auto"
-                                 FontFamily="{StaticResource Font.Prompt}" FontSize="13"
-                                 AutomationProperties.Name="Prompt text" />
-                        <TextBlock Text="{Binding Suggestion.Description}" TextWrapping="Wrap" Margin="0,8,0,0"
-                                   Visibility="{Binding HasDescription, Converter={StaticResource BoolToVisibility}}" />
-                        <TextBlock Text="{Binding Suggestion.Note, StringFormat=Note: {0}}" Style="{StaticResource MutedText}"
-                                   TextWrapping="Wrap" Margin="0,8,0,0"
-                                   Visibility="{Binding HasNote, Converter={StaticResource BoolToVisibility}}" />
+                    <StackPanel>
+                        <StackPanel DataContext="{Binding Selected}">
+                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding Suggestion.Description}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                       Style="{StaticResource MutedText}"
+                                       Visibility="{Binding HasDescription, Converter={StaticResource BoolToVisibility}}" />
+                            <TextBox Text="{Binding Suggestion.Text, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"
+                                     Margin="0,12,0,0" Padding="8" MaxHeight="200" VerticalScrollBarVisibility="Auto"
+                                     FontFamily="{StaticResource Font.Prompt}" FontSize="13"
+                                     AutomationProperties.Name="Prompt text" />
+                            <TextBlock Text="{Binding Suggestion.Note, StringFormat=Note: {0}}" Style="{StaticResource MutedText}"
+                                       TextWrapping="Wrap" Margin="0,8,0,0"
+                                       Visibility="{Binding HasNote, Converter={StaticResource BoolToVisibility}}" />
+                        </StackPanel>
+                        <TextBlock Text="Team category" Style="{StaticResource FieldLabel}" Margin="0,16,0,4" />
+                        <ComboBox ItemsSource="{Binding CategoryOptions}" SelectedItem="{Binding Category}"
+                                  DisplayMemberPath="Display" AutomationProperties.Name="Team category" />
                     </StackPanel>
                 </ScrollViewer>
             </DockPanel>
         </Grid>
-
-        </Grid>
-    </DockPanel>
+    </Grid>
 </Window>
