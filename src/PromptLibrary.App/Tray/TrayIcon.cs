@@ -139,6 +139,13 @@ public sealed class TrayIcon : IDisposable
             menu.Pinned.Select(p => (Forms.ToolStripItem)PromptItem(p, pinned: true)).ToList(),
         };
 
+        if (menu.Featured.Count > 0)
+        {
+            var featured = new List<Forms.ToolStripItem> { Heading("Featured") };
+            featured.AddRange(menu.Featured.Select(p => (Forms.ToolStripItem)PromptItem(p, pinned: false)));
+            sections.Add(featured);
+        }
+
         if (hasTeam)
         {
             var team = new List<Forms.ToolStripItem>();

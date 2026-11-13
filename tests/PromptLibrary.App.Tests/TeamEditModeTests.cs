@@ -628,6 +628,79 @@ public sealed class TeamEditModeTests : IDisposable
         Assert.Equal("Typed into my own prompt", vm.Editor!.Text);
     });
 
+    [Fact]
+    public void Feature_EditorTogglesInEditMode_SavesAndRailItemFollows() => Sta.Run(() =>
+    {
+        var host = NewHost();
+        var vm = new MainViewModel(host, new FakeDialogs());
+        vm.ShowTeamCommand.Execute(null);
+        Assert.DoesNotContain(vm.Categories, c => c.IsFeatured);
+        Assert.False(vm.ShowFeatureToggle); // a member's view, or not editing yet
+
+        vm.EditTeamCommand.Execute(null);
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Title == "Follow-up email");
+        var id = vm.Editor!.PromptId!.Value;
+        Assert.True(vm.ShowFeatureToggle);
+        Assert.Equal("Feature for everyone", vm.FeatureLabel);
+
+        vm.FeatureCommand.Execute(null);
+
+        Until(() => ReadTeamFile().Contains("\"featured\": true", StringComparison.OrdinalIgnoreCase));
+        Until(() => vm.StatusText == "Saved for everyone");
+        Assert.Equal("Stop featuring", vm.FeatureLabel);
+        Assert.Equal(CategoryItem.FeaturedId, vm.Categories[1].Id); // under All prompts
+        Assert.True(vm.Prompts.First(r => r.Id == id).IsFeatured);
+
+        vm.SelectedCategory = vm.Categories[1];
+        Assert.Equal(["Follow-up email"], vm.Prompts.Select(r => r.Title));
+
+        vm.FeatureCommand.Execute(null);
+        Until(() => vm.StatusText == "Saved for everyone");
+        Assert.DoesNotContain(vm.Categories, c => c.IsFeatured);
+        Assert.Equal(3, vm.Prompts.Count); // back on All prompts
+    });
+
+    [Fact]
+    public void Feature_EleventhIsRefused() => Sta.Run(() =>
+    {
+        var host = NewHost();
+        var content = host.Team!.Team!.Content;
+        var cat = content.Categories[0];
+        for (var i = 0; i < 7; i++) content.Prompts.Add(NewPrompt(cat, "Extra " + i, "x"));
+        foreach (var p in content.Prompts) p.Featured = true; // 10 featured
+        var eleventh = NewPrompt(cat, "Eleventh", "x");
+        content.Prompts.Add(eleventh);
+        var vm = new MainViewModel(host, new FakeDialogs());
+        vm.ShowTeamCommand.Execute(null);
+        vm.EditTeamCommand.Execute(null);
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Title == "Eleventh");
+
+        vm.FeatureCommand.Execute(null);
+
+        Assert.Equal("Up to 10 prompts can be featured.", vm.StatusText);
+        Assert.False(eleventh.Featured);
+        Assert.False(vm.CurrentDocument.LibraryUnwritten);
+    });
+
+    [Fact]
+    public void Feature_MemberCannotToggle_ButCanHide() => Sta.Run(() =>
+    {
+        var host = NewHost();
+        host.Team!.Team!.Content.Prompts[0].Featured = true;
+        var vm = new MainViewModel(host, new FakeDialogs());
+        vm.ShowTeamCommand.Execute(null);
+        var id = host.Team.Team.Content.Prompts[0].Id;
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Id == id);
+
+        Assert.False(vm.ShowFeatureToggle);
+        vm.FeatureCommand.Execute(null);
+        Assert.True(host.Team.Team.Content.Prompts[0].Featured); // unchanged
+        Assert.Contains(vm.Categories, c => c.IsFeatured);
+
+        vm.HideCommand.Execute(null);
+        Assert.DoesNotContain(vm.Categories, c => c.IsFeatured); // hidden: leaves their Featured block
+    });
+
     // ---- Helpers -------------------------------------------------------------------------------
 
     private FakeHost NewHost(int schemaVersion = 1)

@@ -492,6 +492,10 @@ public sealed class SearchViewModel : ObservableObject
         if (pins.Count > 0) groups.Add(("Pinned", pins));
         shown.UnionWith(pins.Select(e => e.Prompt.Id));
 
+        var featured = entries.Values.Where(e => e.IsTeam && e.Prompt.Featured && !shown.Contains(e.Prompt.Id)).ToList();
+        if (featured.Count > 0) groups.Add(("Featured", featured));
+        shown.UnionWith(featured.Select(e => e.Prompt.Id));
+
         var recent = UsageTracker.Recent(_host.Settings, int.MaxValue)
             .Where(id => entries.ContainsKey(id) && !shown.Contains(id)).Take(RecentCount).Select(id => entries[id]).ToList();
         if (recent.Count > 0) groups.Add(("Recent", recent));

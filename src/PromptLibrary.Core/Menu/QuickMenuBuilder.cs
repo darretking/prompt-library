@@ -12,7 +12,11 @@ public record QuickMenu(
     IReadOnlyList<QuickMenuPrompt> Pinned,
     IReadOnlyList<QuickMenuCategory> Team,
     IReadOnlyList<QuickMenuCategory> Yours,
-    bool TeamCollapsed);
+    bool TeamCollapsed)
+{
+    /// <summary>Team prompts the editors feature, shown right after Pinned (a pinned one shows only in Pinned).</summary>
+    public IReadOnlyList<QuickMenuPrompt> Featured { get; init; } = [];
+}
 
 public static class QuickMenuBuilder
 {
@@ -33,8 +37,14 @@ public static class QuickMenuBuilder
                 pinned.Add(new QuickMenuPrompt(t.Id, t.Title, true));
         }
 
+        var pinnedIds = pinned.Select(p => p.Id).ToHashSet();
+        var featured = team is null ? [] : team.Prompts
+            .Where(p => p.Featured && !hidden.Contains(p.Id) && !pinnedIds.Contains(p.Id))
+            .Select(p => new QuickMenuPrompt(p.Id, p.Title, true))
+            .ToList();
+
         return new QuickMenu(pinned, teamCats, Categories(personal, false, null),
-            teamCats.Count > TeamCollapseThreshold);
+            teamCats.Count > TeamCollapseThreshold) { Featured = featured };
     }
 
     public static IReadOnlyList<QuickMenuCategory> Build(Library lib)

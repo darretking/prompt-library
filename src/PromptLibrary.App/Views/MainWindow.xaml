@@ -439,8 +439,14 @@
                                                  categories without one get a default) on a faint rounded tile, so dark emoji stay visible in dark mode. -->
                                             <Border Width="22" Height="22" CornerRadius="{StaticResource Radius}"
                                                     Background="{DynamicResource Brush.EmojiTile}" BorderBrush="{DynamicResource Brush.EmojiTileRing}" BorderThickness="1">
-                                                <emoji:EmojiImage Text="{Binding RailEmoji}" FontSize="14" HorizontalAlignment="Center"
-                                                                 VerticalAlignment="Center" />
+                                                <Grid>
+                                                    <emoji:EmojiImage Text="{Binding RailEmoji}" FontSize="14" HorizontalAlignment="Center"
+                                                                     VerticalAlignment="Center"
+                                                                     Visibility="{Binding ShowEmoji, Converter={StaticResource BoolToVisibility}}" />
+                                                    <TextBlock Style="{StaticResource InlineGlyph}" Text="&#xE734;" HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center" Foreground="{DynamicResource Brush.Brand}"
+                                                               Visibility="{Binding IsFeatured, Converter={StaticResource BoolToVisibility}}" />
+                                                </Grid>
                                             </Border>
                                             <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis"
                                                        ToolTip="{Binding Name}" Margin="8,0,0,0"
@@ -705,6 +711,9 @@
                                                 <TextBlock Text="{Binding MarkerText}" FontSize="11" FontWeight="SemiBold"
                                                            Foreground="{DynamicResource Brush.Brand}" />
                                             </Border>
+                                            <TextBlock Style="{StaticResource InlineGlyph}" Text="&#xE734;"
+                                                       Margin="6,0,0,0" ToolTip="Featured"
+                                                       Visibility="{Binding IsFeatured, Converter={StaticResource BoolToVisibility}}" />
                                             <TextBlock Style="{StaticResource InlineGlyph}" Text="&#xE718;"
                                                        Margin="6,0,0,0" ToolTip="Pinned"
                                                        Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}" />
@@ -824,6 +833,9 @@
                                                 <MenuItem Style="{StaticResource FlyoutItem}" Header="{Binding HideLabel}"
                                                           Command="{Binding HideCommand}"
                                                           Visibility="{Binding ShowTeamButtons, Converter={StaticResource BoolToVisibility}}" />
+                                                <MenuItem Style="{StaticResource FlyoutItem}" Header="{Binding FeatureLabel}"
+                                                          Command="{Binding FeatureCommand}"
+                                                          Visibility="{Binding ShowFeatureToggle, Converter={StaticResource BoolToVisibility}}" />
                                                 <MenuItem Style="{StaticResource FlyoutItem}" Header="Make my copy"
                                                           Command="{Binding CopyToYoursCommand}"
                                                           Visibility="{Binding ShowTeamButtons, Converter={StaticResource BoolToVisibility}}" />
