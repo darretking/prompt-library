@@ -8,7 +8,7 @@ namespace PromptLibrary.App.Views.Controls;
 
 /// <summary>
 /// The category emoji picker: a 32 px button showing <see cref="SelectedEmoji"/> (a muted smiley when none) that opens a
-/// 6 x 9 grid of curated emoji (<see cref="EmojiChoices"/>) and <c>No emoji</c>. <see cref="Picked"/> is raised when the
+/// 6 x 10 grid of curated emoji (<see cref="EmojiChoices"/>) and <c>No emoji</c>. <see cref="Picked"/> is raised when the
 /// user chooses.
 /// </summary>
 public partial class EmojiButton : UserControl
