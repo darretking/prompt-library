@@ -6,6 +6,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-13
+
+### Added
+- **Copy to team prompts**: editors can copy one of their own prompts into the team library in one click, and **Import prompts…** works on the Team side while editing.
+- **Easier joining**: Team ⋯ → **Invite…** gives a short message with the team folder (as a path inside the cloud folder, never your own user folder). The Join dialog lists team libraries **Found on this PC** in your OneDrive, Google Drive and Dropbox folders, and Explorer's **Open with → Prompt Library** on a team file offers to join it. Joining always takes your click.
+- **Suggestions**: members choose **Suggest for the team…** on one of their prompts. Editors see **Suggestions (n)** on the Team side and add or dismiss each one. When the team folder can't be written to, the suggestion is copied to the clipboard to send by hand.
+- **What changed**: an Updated team prompt has a **What changed** link that shows exactly what the team changed since you last looked.
+- **Team note**: editors can leave one short note for the whole team library, shown under the Team header until a member dismisses it.
+- **Team fill-in values**: editors can set shared values for fields such as `{company}`. They fill in for everyone and show "Team value"; your own value always wins and a team value you keep is not saved as yours.
+- **Featured prompts**: editors can feature up to 10 team prompts. They get their own Featured category, a star and a Featured block in the shortcut menu and search. Members can hide a featured prompt but not unfeature it.
+- **Check the team library**: editors get a list of things to look at, such as duplicate titles or text, broken fields, empty categories and near-identical choice lists. A click opens the prompt.
+- **Out-of-date copies**: a copy made with **Make my copy** says when the team has changed the original, with **See changes**, **Update my copy** (it asks first if you edited your copy) and **Keep mine**.
+- **For IT**: the installer's `TEAMSOURCE` joins the team library once. If someone leaves the team afterwards, that is respected.
+
+### Changed
+- Team files stay at schema version 1. The new fields are optional, so older versions still open the file.
+
 ## [1.2.4] - 2026-11-13
 
 ### Fixed

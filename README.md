@@ -18,7 +18,7 @@ Your prompt is pasted right where you were typing.
   <img src="https://img.shields.io/badge/no%20account-F5A524" alt="No account needed" />
   <img src="https://img.shields.io/badge/no%20tracking-F5A524" alt="No tracking" />
   <img src="https://img.shields.io/badge/installs%20without-admin%20rights-1B2230" alt="Installs without admin rights" />
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.4-4338CA" alt="Version 1.2.4, see the changelog" /></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.0-4338CA" alt="Version 1.3.0, see the changelog" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/free%20%26%20open%20source-GPL--3.0-4338CA" alt="Free and open source, GPL-3.0 licence" /></a>
 </p>
 
@@ -36,6 +36,8 @@ Your prompt is pasted right where you were typing.
 
 <br/>
 
+> **New in 1.3.0:** more for teams: suggest prompts to the team, see what changed, featured prompts, shared fill-in values, a team note, easier joining and a check of the team library.
+>
 > **New in 1.2.4:** with the shortcut set to open the menu, prompts with fields open the fill-in form and dynamic tokens fill, just as in the search window.
 >
 > **New in 1.2.3:** the prompt box now fills the editor down to the bottom of the window, and long prompts scroll inside it.
@@ -248,6 +250,12 @@ One person keeps the team's proven prompts in a shared folder (a network drive, 
   One person chooses Settings → Team prompts → <b>Start a team library</b>, picks a folder the team can open and names it. They can begin with 24 example business prompts or copy in their own categories. Everyone else chooses <b>Join a team library</b> and picks the same folder. A direct link to the file also works (a GitHub raw link or a Dropbox link); OneDrive and Google Drive share pages aren't direct links, so use the synced folder for those.<br/><br/>
   Switch between <b>Your prompts</b> and <b>Team prompts</b> with <kbd>Ctrl</kbd> + <kbd>1</kbd> / <kbd>Ctrl</kbd> + <kbd>2</kbd>. Team prompts open read only. <b>Make my copy</b> gives you your own version to change, <b>Pin</b> keeps favourites at the top, and <b>Hide</b> tidies away the ones you don't use.<br/><br/>
   Whoever can change files in the shared folder sees <b>Edit team library</b>: every save goes to everyone. If someone else saved first, your change is kept and you save again. Every save keeps a copy, so <b>Restore an older version</b> undoes anything.
+</details>
+
+<details>
+  <summary><b>Suggestions, featured prompts and other team tools</b></summary>
+  <br/>
+  Members choose <b>Suggest for the team…</b> on one of their own prompts; editors review them under <b>Suggestions</b> on the Team side. Editors can also <b>Copy to team prompts</b>, feature up to 10 prompts (they get a star and their own category), set shared fill-in values, leave a team note, invite people and run <b>Check the team library</b>, all from the Team <b>⋯</b> menu. When the team changes a prompt you have seen, <b>What changed</b> shows exactly what; when it changes a prompt you copied, your copy offers to update.
 </details>
 
 <details>
