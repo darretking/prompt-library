@@ -103,6 +103,21 @@ public class SearchNoFieldAndNamesTests
         Assert.StartsWith("send:plain:", host.Calls[0]);
     });
 
+    [Theory]
+    [InlineData("public string Name { get; set; }")]
+    [InlineData("{\"a\": 1}")]
+    public void CodeLikePrompt_EnterPastes_CtrlEnterSends_NoForm_TextUnchanged(string code) => Sta.Run(() =>
+    {
+        var (vm, host) = Make(code);
+        vm.HandleKey(Key.Enter, ModifierKeys.None);
+        Assert.Null(vm.Form);
+        vm.HandleKey(Key.Enter, ModifierKeys.Control);
+        Assert.Null(vm.Form);
+        Assert.Equal(2, host.Calls.Count);
+        Assert.Equal($"paste:{code}:", host.Calls[0]);
+        Assert.StartsWith($"send:{code}:", host.Calls[1]);
+    });
+
     [Fact]
     public void RowAutomationName_HasTitleCategoryAndState() => Sta.Run(() =>
     {

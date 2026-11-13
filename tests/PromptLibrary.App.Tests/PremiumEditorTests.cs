@@ -228,6 +228,53 @@ public sealed class PremiumEditorTests : IDisposable
     });
 
     [Fact]
+    public void Copy_NoFields_NeverCallsTheFillInResolver_AndCopiesTheText() => Sta.Run(() =>
+    {
+        var (vm, host, _, _) = Open();
+        vm.Editor!.Text = "Just plain text";
+        vm.FillInResolver = _ => throw new InvalidOperationException("the form must not open");
+
+        vm.CopyCommand.Execute(null);
+
+        Assert.Equal("Just plain text", host.Copied.Single());
+    });
+
+    [Fact]
+    public void Copy_OnlyADateToken_NoForm_TokenFilled() => Sta.Run(() =>
+    {
+        var (vm, host, _, _) = Open();
+        vm.Editor!.Text = "Today is {date}";
+        vm.FillInResolver = _ => throw new InvalidOperationException("the form must not open");
+        vm.TokenSource = _ => new FixedTokens();
+
+        vm.CopyCommand.Execute(null);
+
+        Assert.Equal("Today is 11/03/2026", host.Copied.Single());
+    });
+
+    [Theory]
+    [InlineData("public string Name { get; set; }")]
+    [InlineData("{\"a\": 1, \"b\": [1, 2]}")]
+    [InlineData("function f() { return { x: 1 }; }\nconst r = /^\\d{3}-\\d{4}$/;")]
+    public void Copy_CodeLikeText_NoForm_CopiedUnchanged(string code) => Sta.Run(() =>
+    {
+        var (vm, host, _, _) = Open();
+        vm.Editor!.Text = code;
+        vm.FillInResolver = _ => throw new InvalidOperationException("the form must not open");
+
+        vm.CopyCommand.Execute(null);
+
+        Assert.Equal(code, host.Copied.Single());
+    });
+
+    private sealed class FixedTokens : PromptLibrary.Core.Templates.ITokenValues
+    {
+        public string? Clipboard => null;
+        public DateTime Now => new(2026, 11, 3, 9, 7, 0);
+        public System.Globalization.CultureInfo Culture => System.Globalization.CultureInfo.InvariantCulture;
+    }
+
+    [Fact]
     public void Copy_CancelledFillIn_CopiesNothing() => Sta.Run(() =>
     {
         var (vm, host, _, _) = Open();
