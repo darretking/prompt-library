@@ -763,7 +763,7 @@
                                Text="{Binding NoEditorText}"
                                Visibility="{Binding HasNoEditor, Converter={StaticResource BoolToVisibility}}" />
 
-                    <Border x:Name="EditorCard" Margin="12" Padding="20,16" VerticalAlignment="Top"
+                    <Border x:Name="EditorCard" Margin="12" Padding="20,16" VerticalAlignment="Stretch"
                             Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Line}"
                             BorderThickness="1" CornerRadius="8"
                             Visibility="{Binding HasEditor, Converter={StaticResource BoolToVisibility}}">
@@ -1004,9 +1004,9 @@
                                            MinHeight="24" />
                             </DockPanel>
 
-                            <!-- The prompt slip: a page-toned inset with a 1 px Line frame and 8 px corners. It is as tall as its
-                                 text (at least about eight lines) and takes the room left over only when the text is longer. -->
-                            <controls:SlipFrame MinContentHeight="176" VerticalAlignment="Top">
+                            <!-- The prompt slip: a page-toned inset with a 1 px Line frame and 8 px corners. It fills the card down to its
+                                 footer (at least about eight lines) and scrolls inside when the text is longer. -->
+                            <controls:SlipFrame MinContentHeight="176" VerticalAlignment="Stretch">
                                 <DockPanel>
                                     <Grid>
                                         <Border Background="{DynamicResource Brush.Window}" BorderBrush="{DynamicResource Brush.Line}"
