@@ -7,6 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
+- **Settings → Start fresh → Delete all my prompts…** empties Your prompts (every prompt and category), for example to drop the starter prompts. You type DELETE to confirm. Team prompts, and your team pins and hidden team prompts, are not touched. A safety copy is saved first, so Restore from backup brings everything back, and the starter prompts are not added again at the next start.
 - **Help → What's new** opens this changelog.
 - Markdown export and import keep each category's emoji (`emoji:`, or `icon:`, in the front matter) and the prompt's Send to target (`sendTo:`). An imported emoji is also given to an existing category that has none. JSON export already kept both, and tags were already kept in both formats.
 - **Turn off backups** in Settings, and a first line there that says whether backups are on and where they go.
@@ -31,6 +32,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Every row in the category rail shows a colour emoji: All prompts has a house, Recent a clock, and a category without its own emoji a memo. The search window uses the same memo instead of a grey icon.
 
 ### Fixed
+- In an empty library, choosing New prompt no longer leaves the "Your library is empty" card on top of the new prompt.
 - The title bar is one even strip: the menu, the title and the window buttons line up, with no lighter band underneath, restored or maximised.
 - The editor card has the same 12 px margin on its left, next to the prompt list, as on its top and right.
 - "Move to category" left the ⋯ menu (the category box on the card does it).

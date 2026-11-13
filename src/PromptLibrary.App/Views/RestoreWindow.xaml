@@ -102,9 +102,9 @@
              Only shown when there are some. -->
         <ToggleButton x:Name="SafetyToggle" Style="{StaticResource DisclosureToggle}" Margin="0,16,0,0"
                       HorizontalAlignment="Left" Visibility="Collapsed"
-                      Content="Safety copies (made before a restore)"
+                      Content="Safety copies (made before a restore or a delete)"
                       ToolTip="Your library as it was just before each earlier restore"
-                      AutomationProperties.Name="Safety copies (made before a restore)" />
+                      AutomationProperties.Name="Safety copies (made before a restore or a delete)" />
         <Border x:Name="SafetyFrame" Margin="0,8,0,0" Height="120" Background="{DynamicResource Brush.Surface}"
                 BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1" CornerRadius="{StaticResource Radius}"
                 Visibility="{Binding IsChecked, ElementName=SafetyToggle, Converter={StaticResource BoolToVisibility}}">

@@ -58,7 +58,7 @@ public sealed class ScreenshotGallery
             foreach (var (name, scene) in Scenes())
             {
                 try { scene(name); }
-                catch (Exception ex) { _failures.Add($"{theme} {name}: " + string.Join(" <- ", Chain(ex))); }
+                catch (Exception ex) { _failures.Add($"{theme} {name}: " + string.Join(" <- ", Chain(ex)) + Environment.NewLine + ex.StackTrace); }
             }
         }
 
@@ -108,6 +108,14 @@ public sealed class ScreenshotGallery
             w.Vm.SearchText = "zzqxv";
         }));
         yield return ("05-main-empty-library", n => Main(n, w => { }, populated: false));
+        // An empty library, a new category, then New prompt: the empty card must give way to the editor.
+        yield return ("05b-main-empty-new-prompt", n => Main(n, w =>
+        {
+            w.Vm.NewCategoryCommand.Execute(null);
+            w.Vm.NewCategoryName = "Claude";
+            w.Vm.CommitNewCategory();
+            w.Vm.NewPromptCommand.Execute(null);
+        }, populated: false));
         yield return ("06-main-unsaved-and-error", n => Main(n, w =>
         {
             w.Vm.Editor!.Title = "";
@@ -127,6 +135,8 @@ public sealed class ScreenshotGallery
         yield return ("24-delete-category-move", n => DeleteCategory(n, deletePrompts: false));
         yield return ("13-export-dialog", n => Window(n, new ChooseKindDialog("Export prompts",
             "Export your prompts so you can keep a copy or use them elsewhere.", "One backup file, to import into Prompt Library later (.json)", "A folder of Markdown files, readable in any app", "Choose where to save…"), null, null));
+        yield return ("31-delete-all-dialog", n => Window(n, new DeleteAllDialog(39, 13), null, null));
+        yield return ("31b-delete-all-typed", n => { var d = new DeleteAllDialog(39, 13); d.Box.Text = "DELETE"; Window(n, d, null, null); });
         yield return ("14-search-empty", n => Search(n, vm => { }));
         yield return ("15-search-budg", n => Search(n, vm => vm.Query = "budg"));
         yield return ("16-search-actions", n => Search(n, vm => { vm.Query = "budg"; vm.Move(0); vm.OpenActions(); }));

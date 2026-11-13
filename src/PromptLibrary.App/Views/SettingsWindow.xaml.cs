@@ -75,6 +75,38 @@ public partial class SettingsWindow : Window
         _team = new TeamConnectionViewModel(host.Team);
         TeamSection.DataContext = _team;
         Closed += (_, _) => _team.Dispose();
+
+        // Start fresh: the button follows the library (it may change while Settings is open).
+        UpdateDeleteAll();
+        host.LibraryChanged += OnLibraryChanged;
+        Closed += (_, _) => host.LibraryChanged -= OnLibraryChanged;
+    }
+
+    private void OnLibraryChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(UpdateDeleteAll);
+
+    /// <summary>Disabled, with a short reason, when there is nothing to delete.</summary>
+    private void UpdateDeleteAll()
+    {
+        var any = PromptLibrary.Core.Editing.LibraryReset.HasAnything(_host.Library);
+        DeleteAllButton.IsEnabled = any;
+        if (!any && string.IsNullOrEmpty(DeleteAllStatus.Text))
+            DeleteAllStatus.Text = "Your prompts are already empty.";
+    }
+
+    /// <summary>Settings → Delete all my prompts…: asks (type DELETE), then empties Your prompts. Team prompts stay.</summary>
+    private async void DeleteAll_Click(object sender, RoutedEventArgs e)
+    {
+        var library = _host.Library;
+        var dialog = new DeleteAllDialog(library.Prompts.Count, library.Categories.Count) { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+
+        DeleteAllButton.IsEnabled = false;
+        DeleteAllStatus.Text = "Deleting…";
+        DeleteAllStatus.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Muted");
+        var error = await _host.DeleteAllPromptsAsync();
+        DeleteAllStatus.Text = error ?? "All your prompts were deleted. Restore from backup brings them back.";
+        DeleteAllStatus.SetResourceReference(TextBlock.ForegroundProperty, error is null ? "Brush.Muted" : "Brush.Danger");
+        UpdateDeleteAll();
     }
 
     private void JoinTeam_Click(object sender, RoutedEventArgs e) => TeamDialogs.Join(this, _host);

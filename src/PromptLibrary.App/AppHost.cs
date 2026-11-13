@@ -14,6 +14,7 @@ using PromptLibrary.App.Views;
 using PromptLibrary.Core.Backup;
 using PromptLibrary.Core.Clipboard;
 using PromptLibrary.Core.Editing;
+using PromptLibrary.Core.History;
 using PromptLibrary.Core.Hotkeys;
 using PromptLibrary.Core.Menu;
 using PromptLibrary.Core.Models;
@@ -346,6 +347,7 @@ public sealed class AppHost : IMainHost, IDisposable
     /// <summary>Rebuilds the quick menu from the in-memory library (e.g. after an unsaved change was rolled back).</summary>
     public void RefreshQuickMenu()
     {
+        if (Tray is null) return; // not started yet (no tray icon until startup has run)
         // With the search window as the shortcut's target the tray's right-click menu is just Open, Settings, Exit.
         var reduced = Settings.ShortcutOpens == "search";
         Tray.Rebuild(reduced ? new QuickMenu([], [], [], false) : QuickMenuBuilder.Build(Library, Team?.Team?.Content, Settings),
@@ -739,6 +741,78 @@ public sealed class AppHost : IMainHost, IDisposable
             // Created if need be (shown after the Restore window closes), so it can say so too.
             (_mainWindow ??= new MainWindow(this)).ViewModel.ReloadAfterRestore(restored);
             Tray.ShowMessage(AppName, restored);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Settings → Delete all my prompts (after the user typed DELETE): empties the personal library so they can start
+    /// fresh. Team prompts are never touched. In order, and stopping at the first failure with nothing deleted:
+    /// the current library (unsaved-to-disk changes included) is written, a safety copy of it is made (in the backup
+    /// folder when set and available, else <c>Safety backups</c>, the same as a restore, so Restore can bring it back),
+    /// and an empty library is written. Then memory follows, the pins and usage of the removed prompts go, their
+    /// version history is deleted, and the main window shows the empty library. Returns null on success, else the
+    /// error to show.
+    /// </summary>
+    public async Task<string?> DeleteAllPromptsAsync()
+    {
+        if (!LibraryReset.HasAnything(Library))
+            return null;
+
+        // Memory first, so the safety copy has everything (even a change library.json is still behind on).
+        try
+        {
+            JsonStore.SaveLibrary(Paths.LibraryFile, Library);
+            LibraryUnwritten = false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return $"Nothing was deleted: your library couldn't be saved first ({WithoutFinalPeriod(ex.Message)}).";
+        }
+
+        var configured = Settings.BackupFolder;
+        var keepConfigured = Settings.BackupsToKeep;
+        await _backupGate.WaitAsync(); // not while a backup is copying library.json
+        BackupResult safety;
+        try
+        {
+            safety = await Task.Run(() =>
+            {
+                var safetyFolder = BackupLocation.SafetyFolder(configured, Paths.SafetyBackupsFolder, Directory.Exists);
+                var keep = safetyFolder == Paths.SafetyBackupsFolder ? BackupLocation.SafetyBackupsToKeep : keepConfigured;
+                var copy = _backups.BackupNow(Paths.LibraryFile, safetyFolder, keep);
+                if (copy.Success)
+                    JsonStore.SaveLibrary(Paths.LibraryFile, new Library());
+                return copy;
+            });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return $"Nothing was deleted: {WithoutFinalPeriod(ex.Message)}.";
+        }
+        finally
+        {
+            _backupGate.Release();
+        }
+        if (!safety.Success)
+            return $"Nothing was deleted: a safety copy couldn't be made first ({WithoutFinalPeriod(safety.Error ?? "unknown error")}).";
+
+        var removed = LibraryReset.ClearPersonal(Library, Settings);
+        LibraryUnwritten = false;
+        if (safety.BackupPath is { } copyPath)
+            BackupLocation.RememberPreRestoreCopy(Settings, copyPath); // labelled in the Restore window
+        SaveSettings();
+        var history = new PromptHistoryStore(Paths.HistoryFolder, Paths.CrashLogFile);
+        foreach (var id in removed)
+            history.Delete(id);
+
+        if (_started)
+        {
+            const string done = "All your prompts were deleted. Restore from backup brings them back.";
+            LibraryChanged?.Invoke(this, EventArgs.Empty);
+            RefreshQuickMenu();
+            _mainWindow?.ViewModel.ReloadAfterRestore(done);
+            Tray.ShowMessage(AppName, done);
         }
         return null;
     }

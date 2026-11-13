@@ -115,6 +115,16 @@
                                 Click="LeaveTeam_Click" AutomationProperties.Name="Leave team library" />
                     </StackPanel>
                 </StackPanel>
+
+                <!-- Start fresh: empties Your prompts (e.g. to drop the starter prompts) after a typed DELETE. Team prompts stay. -->
+                <TextBlock Text="Start fresh" Style="{StaticResource FieldLabel}" Margin="0,24,0,4" />
+                <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,8"
+                           Text="Delete every prompt and category in Your prompts, for example to remove the starter prompts. Team prompts stay." />
+                <Button x:Name="DeleteAllButton" Content="Delete all my prompts…" HorizontalAlignment="Left"
+                        Foreground="{DynamicResource Brush.Danger}" Click="DeleteAll_Click"
+                        AutomationProperties.Name="Delete all my prompts" />
+                <TextBlock x:Name="DeleteAllStatus" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,4,0,0"
+                           AutomationProperties.LiveSetting="Polite" />
             </StackPanel>
         </ScrollViewer>
 

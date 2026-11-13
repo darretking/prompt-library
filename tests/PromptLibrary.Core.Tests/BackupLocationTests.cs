@@ -135,7 +135,7 @@ public sealed class BackupLocationTests
     [Fact]
     public void BackupRowNote_MarksPreRestoreCopies()
     {
-        Assert.Equal("Made automatically before a restore", BackupLocation.BackupRowNote(isPreRestoreCopy: true));
+        Assert.Equal("Safety copy, made automatically before a restore or a delete", BackupLocation.BackupRowNote(isPreRestoreCopy: true));
         Assert.Null(BackupLocation.BackupRowNote(isPreRestoreCopy: false));
     }
 

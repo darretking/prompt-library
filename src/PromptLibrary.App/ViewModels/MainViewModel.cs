@@ -602,6 +602,8 @@ public sealed class MainViewModel : ObservableObject
             OnPropertyChanged();
             OnPropertyChanged(nameof(HasEditor));
             OnPropertyChanged(nameof(HasNoEditor));
+            OnPropertyChanged(nameof(ShowNoPromptsYet));
+            OnPropertyChanged(nameof(ShowNewPromptFooter));
             OnPropertyChanged(nameof(WindowTitle));
             RaiseEditorState();
         }
@@ -613,7 +615,11 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>"Prompt Library", with a "• " prefix while the editor has unsaved changes.</summary>
     public string WindowTitle => _editor is { IsDirty: true } ? "• " + AppTitle : AppTitle;
 
-    public bool ShowNoPromptsYet => !IsTeamSide && Prompts.Count == 0 && string.IsNullOrWhiteSpace(_searchText);
+    /// <summary>
+    /// The empty-library card (it spans the list and editor columns): only while nothing is open in the editor, so a
+    /// new first prompt being written is never covered by it.
+    /// </summary>
+    public bool ShowNoPromptsYet => !IsTeamSide && Prompts.Count == 0 && string.IsNullOrWhiteSpace(_searchText) && _editor is null;
 
     /// <summary>The list's "+ New prompt" footer; hidden while the empty state shows its own New prompt button.</summary>
     public bool ShowNewPromptFooter => !CurrentDocument.IsReadOnly && !ShowNoPromptsYet;
