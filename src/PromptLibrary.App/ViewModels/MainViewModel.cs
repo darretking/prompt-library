@@ -335,7 +335,8 @@ public sealed class MainViewModel : ObservableObject
     private void ShowToast(string text) => ToastRequested?.Invoke(this, text);
 
     /// <summary>The remembered placeholder values, shown in the preview's chips.</summary>
-    public IDictionary<string, string> PlaceholderValues => _host.Settings.PlaceholderValues;
+    public IDictionary<string, string> PlaceholderValues
+        => new FillInDefaults(_host.Settings.PlaceholderValues, _team?.Service.Team?.FillInValues).Merge();
 
     /// <summary>Version history is for saved personal prompts (team libraries keep their own history).</summary>
     public bool CanShowHistory => _history is not null && !CurrentDocument.IsTeam && EditorPromptId is not null;

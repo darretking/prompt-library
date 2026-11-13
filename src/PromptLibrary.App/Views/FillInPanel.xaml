@@ -117,6 +117,8 @@
                                     </Border>
                                 </Popup>
                             </Grid>
+                            <TextBlock Text="{Binding TeamHint}" Style="{StaticResource MutedText}" FontSize="12" Margin="0,2,0,0"
+                                       Visibility="{Binding FromTeam, Converter={StaticResource BoolToVisibility}}" />
                         </StackPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>

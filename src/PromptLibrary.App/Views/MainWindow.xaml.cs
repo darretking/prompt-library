@@ -44,7 +44,8 @@ public partial class MainWindow : Window, IDialogs
         ViewModel.FillInResolver = text =>
         {
             var model = new FillInViewModel(text, _host.Settings, TokenValues.For(text), ViewModel.FillInPrimaryLabel,
-                ViewModel.FillInTitle, cancelLabel: "Cancel");
+                ViewModel.FillInTitle, cancelLabel: "Cancel",
+                teamValues: _host.Team?.Team?.FillInValues);
             var filled = FillInDialog.Ask(this, model);
             if (filled is not null) _host.SaveSettings();
             return filled;
