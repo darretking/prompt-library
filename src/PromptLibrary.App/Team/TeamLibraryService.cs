@@ -53,6 +53,7 @@ public sealed class TeamLibraryService : IDisposable
     private readonly DispatcherTimer _hourly;
     private readonly DispatcherTimer _debounce;
 
+    private readonly TeamSeenStore _seen;
     private FileSystemWatcher? _watcher;
     private string? _json;
     private bool _held;
@@ -64,8 +65,10 @@ public sealed class TeamLibraryService : IDisposable
 
     public TeamLibraryService(HttpClient http, string appVersion, string cachePath, AppSettings settings,
         Func<Library> personal, Func<bool> saveSettings, Func<DateTimeOffset> now, Action<Exception> log,
-        TimeSpan? debounce = null, Func<string, TeamSource?>? parseInput = null)
+        TimeSpan? debounce = null, Func<string, TeamSource?>? parseInput = null, TeamSeenStore? seenStore = null)
     {
+        _seen = seenStore ?? new TeamSeenStore(Path.Combine(Path.GetDirectoryName(cachePath) ?? "", "team-seen.json"));
+        _seen.Load();
         _parse = parseInput ?? TeamSource.FromInput;
         _reader = new TeamReader(http, appVersion);
         _cachePath = cachePath;
@@ -213,6 +216,7 @@ public sealed class TeamLibraryService : IDisposable
             var team = Team?.Content ?? new Library();
             TeamUserState.Prune(_settings, _personal(), team);
             TeamUserState.ClearTeam(_settings, team);
+            ClearSeen();
             _settings.TeamSource = null;
             TeamCache.Delete(_cachePath);
             Team = null;
@@ -491,6 +495,7 @@ public sealed class TeamLibraryService : IDisposable
             var old = Team?.Content ?? new Library();
             TeamUserState.Prune(_settings, _personal(), old);
             TeamUserState.ClearTeam(_settings, old);
+            ClearSeen();
             TeamCache.Delete(_cachePath);
             Team = null;
             _json = null;
@@ -502,6 +507,40 @@ public sealed class TeamLibraryService : IDisposable
         StopWatching();
         Apply(source, snap, generation, force: true); // caches, takes the baseline, prunes, saves settings, raises Changed
         return new TeamJoinResult(true, null);
+    }
+
+    /// <summary>What changed in a team prompt since this PC last saw it. False when no copy was kept (for example
+    /// joined before 1.3) or the prompt is not in the loaded team library.</summary>
+    public bool TryGetChange(Guid id, out TeamChangeModel change)
+    {
+        change = null!;
+        var prompt = Team?.Content.Prompts.FirstOrDefault(p => p.Id == id);
+        var old = _seen.Get(id);
+        if (prompt is null || old is null) return false;
+        change = TeamChange.Between(old, prompt, TeamChange.CategoryName(Team!.Content, prompt));
+        return true;
+    }
+
+    /// <summary>Stores the current copy of a team prompt as seen. Must be called wherever its New / Updated marker is
+    /// cleared (opened, Mark all as seen).</summary>
+    public void MarkSeen(Guid promptId)
+    {
+        var prompt = Team?.Content.Prompts.FirstOrDefault(p => p.Id == promptId);
+        if (prompt is null) return;
+        _seen.Set(promptId, TeamChange.Snapshot(prompt, Team!.Content));
+        SaveSeen();
+    }
+
+    private void ClearSeen()
+    {
+        _seen.Clear();
+        SaveSeen();
+    }
+
+    private void SaveSeen()
+    {
+        try { _seen.Save(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { _log(ex); }
     }
 
     private void AfterOwnSave(TeamSource source, TeamLibrary edited, string? json, string? newHash)
@@ -520,7 +559,13 @@ public sealed class TeamLibraryService : IDisposable
         }
         foreach (var p in edited.Content.Prompts)
             if (before is null || !before.TryGetValue(p.Id, out var fp) || fp != TeamUserState.Fingerprint(p))
+            {
                 TeamUserState.MarkSeen(_settings, p);
+                _seen.Set(p.Id, TeamChange.Snapshot(p, edited.Content));
+            }
+        var kept = edited.Content.Prompts.Select(p => p.Id).ToHashSet();
+        foreach (var id in (before?.Keys.Where(id => !kept.Contains(id)) ?? []).ToList()) _seen.Remove(id);
+        SaveSeen();
 
         if (json is null || TeamFile.Hash(json) != newHash) json = TeamFile.Serialize(edited);
 
@@ -578,6 +623,8 @@ public sealed class TeamLibraryService : IDisposable
             if (!_settings.TeamBaselineTaken)
             {
                 TeamUserState.TakeBaseline(_settings, result.Team.Content);
+                _seen.SnapshotAll(result.Team.Content);
+                SaveSeen();
                 settingsChanged = true;
             }
             settingsChanged |= TeamUserState.Prune(_settings, _personal(), result.Team.Content);
