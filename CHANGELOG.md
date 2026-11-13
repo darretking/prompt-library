@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-11-13
+
+### Fixed
+- The prompt box now fills the editor down to the bottom of the window, with the "Updated…" line staying at the bottom of the card, and long prompts scroll inside the box.
+
 ## [1.2.2] - 2026-11-13
 
 ### Added
@@ -98,7 +103,8 @@ A redesigned, faster Prompt Library with templates, search and history.
 ### Added
 - First release: a global shortcut (Ctrl + Alt + P) that pastes a prompt into any app, a categorised library with search and an editor, automatic backups to OneDrive, Google Drive, Dropbox, iCloud Drive or any folder, and a short first-run setup.
 
-[Unreleased]: https://github.com/darretking/prompt-library/compare/v1.2.2...HEAD
+[Unreleased]: https://github.com/darretking/prompt-library/compare/v1.2.3...HEAD
+[1.2.3]: https://github.com/darretking/prompt-library/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/darretking/prompt-library/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/darretking/prompt-library/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/darretking/prompt-library/compare/v1.1.0...v1.2.0
