@@ -99,6 +99,15 @@ Publishes the exe, builds `installer/PromptLibrary.Installer.wixproj` and writes
 
 The MSI installs per user (no admin prompt) to `%LOCALAPPDATA%\Programs\Prompt Library`, closes a running copy on upgrade or uninstall, and never touches the user's data in `%APPDATA%\PromptLibrary`. It isn't code-signed yet, so SmartScreen shows an "unknown publisher" warning on download.
 
+**Roll-outs.** The public property `TEAMSOURCE` presets the team library:
+
+```
+msiexec /i PromptLibrary-Setup.msi TEAMSOURCE="\\server\share\Prompts"
+msiexec /i PromptLibrary-Setup.msi TEAMSOURCE="OneDrive - Acme\Shared\Prompts"
+```
+
+A non-empty value is written to `HKCU\Software\Prompt Library\TeamSource` (the second form is relative to the user's profile folder; the app resolves it). An empty or missing value writes nothing and never clears an existing one. Uninstall removes the value. The MSI also registers `HKCU\Software\Classes\Applications\PromptLibrary.exe` (open command with `"%1"`, `SupportedTypes` `.json`, friendly name), so Prompt Library appears under Explorer's **Open with** for `.json` files. It sets no default handler and no `OpenWithProgids`. Uninstall removes it.
+
 ## Where data lives
 
 `%APPDATA%\PromptLibrary\`
