@@ -320,7 +320,7 @@
                                    AutomationProperties.Name="{Binding TeamEditBlockedText}"
                                    Visibility="{Binding ShowTeamEditBlocked, Converter={StaticResource BoolToVisibility}}" />
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
-                            <Button Content="{Binding SuggestionsLabel}" Margin="8,-3,0,-3" Padding="10,2"
+                            <Button Style="{StaticResource LinkButton}" Content="{Binding SuggestionsLabel}" Margin="8,0,0,0"
                                     Command="{Binding SuggestionsCommand}"
                                     Visibility="{Binding ShowSuggestionsButton, Converter={StaticResource BoolToVisibility}}"
                                     ToolTip="Review prompts members suggested"
@@ -740,8 +740,10 @@
                                                 <TextBlock Text="{Binding MarkerText}" FontSize="11" FontWeight="SemiBold"
                                                            Foreground="{DynamicResource Brush.Brand}" />
                                             </Border>
-                                            <TextBlock Style="{StaticResource InlineGlyph}" Text="&#xE734;"
-                                                       Margin="6,0,0,0" ToolTip="Featured"
+                                            <TextBlock Style="{StaticResource InlineGlyph}" Text="&#xE735;"
+                                                       Foreground="{DynamicResource Brush.Muted}"
+                                                       Margin="6,0,0,0" ToolTip="Featured by the team"
+                                                       AutomationProperties.Name="Featured by the team"
                                                        Visibility="{Binding IsFeatured, Converter={StaticResource BoolToVisibility}}" />
                                             <TextBlock Style="{StaticResource InlineGlyph}" Text="&#xE718;"
                                                        Margin="6,0,0,0" ToolTip="Pinned"
@@ -868,7 +870,7 @@
                                                 <MenuItem Style="{StaticResource FlyoutItem}" Header="Make my copy"
                                                           Command="{Binding CopyToYoursCommand}"
                                                           Visibility="{Binding ShowTeamButtons, Converter={StaticResource BoolToVisibility}}" />
-                                                <MenuItem Style="{StaticResource FlyoutItem}" Header="Copy to team library"
+                                                <MenuItem Style="{StaticResource FlyoutItem}" Header="Copy to team prompts"
                                                           Command="{Binding CopyToTeamCommand}"
                                                           Visibility="{Binding ShowCopyToTeam, Converter={StaticResource BoolToVisibility}}" />
                                                 <MenuItem Style="{StaticResource FlyoutItem}" Header="Suggest for the team…"
@@ -942,10 +944,11 @@
                                                    VerticalAlignment="Center" />
                                     </DockPanel>
                                 </Border>
-                                <!-- Updated since this PC last saw it: the way to see exactly what. -->
+                                <!-- Updated since this PC last saw it: the way to see exactly what. At the end of the lock line
+                                     when there is one; here on its own while the team library is being edited. -->
                                 <Button Style="{StaticResource LinkButton}" Content="What changed" HorizontalAlignment="Left"
                                         Margin="0,0,0,8" Command="{Binding WhatChangedCommand}"
-                                        Visibility="{Binding ShowWhatChanged, Converter={StaticResource BoolToVisibility}}"
+                                        Visibility="{Binding ShowWhatChangedAlone, Converter={StaticResource BoolToVisibility}}"
                                         ToolTip="See what the team changed in this prompt" AutomationProperties.Name="What changed" />
                                 <!-- A team prompt while the team library isn't being edited: one lock line, the fields
                                      below are normal, selectable text that can't be changed. -->
@@ -967,6 +970,11 @@
                                             Visibility="{Binding ShowTeamButtons, Converter={StaticResource BoolToVisibility}}"
                                             ToolTip="Copy this prompt into Your prompts, where you can change it"
                                             AutomationProperties.Name="Make my copy" />
+                                    <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" Content="What changed" Margin="12,0,0,0"
+                                            VerticalAlignment="Top" Command="{Binding WhatChangedCommand}"
+                                            Visibility="{Binding ShowWhatChangedInLockLine, Converter={StaticResource BoolToVisibility}}"
+                                            ToolTip="See what the team changed in this prompt"
+                                            AutomationProperties.Name="What changed" />
                                     <TextBlock Text="{Binding LockLineText}" Style="{StaticResource MutedText}"
                                                TextWrapping="Wrap" AutomationProperties.Name="{Binding LockLineText}" />
                                 </DockPanel>

@@ -35,7 +35,9 @@ public sealed class TeamSuggestionsFlowTests : IDisposable
     {
         var (host, dialogs) = NewHost();
         var vm = new MainViewModel(host, dialogs);
-        Assert.True(vm.ShowSuggest);
+        // The file is writable, so this member is an editor: "Copy to team prompts" shows instead of Suggest.
+        Assert.False(vm.ShowSuggest);
+        Assert.True(vm.ShowCopyToTeam);
         dialogs.Suggest = d => { d.Note = "Handy for renewals"; d.YourName = "Ana"; };
 
         vm.SuggestCommand.Execute(null);

@@ -27,6 +27,9 @@ public sealed class TeamCheckViewModel(IReadOnlyList<HealthIssue> issues)
 
     public bool HasRows => Rows.Count > 0;
 
+    /// <summary>The heading over the list: "1 thing to look at" / "3 things to look at".</summary>
+    public string Heading => Rows.Count == 1 ? "1 thing to look at" : $"{Rows.Count} things to look at";
+
     public string EmptyText => "Everything looks good.";
 
     /// <summary>The issue the user chose to go to; null when the dialog was just closed.</summary>

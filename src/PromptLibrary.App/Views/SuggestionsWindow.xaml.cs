@@ -10,5 +10,11 @@ public partial class SuggestionsWindow : Window
     {
         InitializeComponent();
         DataContext = viewModel;
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key != System.Windows.Input.Key.Escape) return;
+            e.Handled = true;
+            Close();
+        };
     }
 }

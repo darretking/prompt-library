@@ -296,8 +296,9 @@ public sealed class MainViewModel : ObservableObject
     public IRelayCommand SuggestCommand { get; }
     public IRelayCommand SuggestionsCommand { get; }
 
-    /// <summary>"Suggest for the team…" in a personal prompt's menu: Your prompts side, a team joined (editors too).</summary>
-    public bool ShowSuggest => IsYoursSide && TeamLoaded;
+    /// <summary>"Suggest for the team…" in a personal prompt's menu: Your prompts side, a team joined that you can't edit
+    /// (editors get "Copy to team prompts" instead).</summary>
+    public bool ShowSuggest => IsYoursSide && TeamLoaded && !_team!.Service.CanEdit;
 
     private int _suggestionCount;
     private int _suggestionRefresh;
@@ -310,7 +311,7 @@ public sealed class MainViewModel : ObservableObject
 
     public string SuggestionsLabel => $"Suggestions ({_suggestionCount})";
 
-    /// <summary>"Copy to team library" in a personal prompt's menu: Your prompts side, a team joined that you can edit.</summary>
+    /// <summary>"Copy to team prompts" in a personal prompt's menu: Your prompts side, a team joined that you can edit.</summary>
     public bool ShowCopyToTeam => IsYoursSide && TeamLoaded && _team!.Service.CanEdit;
 
     /// <summary>Copies the prompt and opens an AI app with it; the parameter is a <c>SendTargets</c> id, null = the prompt's default.</summary>
@@ -1959,7 +1960,7 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Copy to team library: one click on a personal prompt. Adds a copy (new id, no source) to the team category of the
+    /// Copy to team prompts: one click on a personal prompt. Adds a copy (new id, no source) to the team category of the
     /// same name (created when missing) and saves it guarded, without edit mode. When someone else changed the file the
     /// team library is reloaded and the add is applied once more; a second refusal shows the conflict text.
     /// </summary>
@@ -2314,6 +2315,12 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>An Updated team prompt that is open and has a kept copy of what was seen: the "What changed" link shows.</summary>
     public bool ShowWhatChanged => IsTeamSide && _editor is not null && _openChange is not null;
+
+    /// <summary>"What changed" sits at the end of the lock line when there is one…</summary>
+    public bool ShowWhatChangedInLockLine => ShowWhatChanged && LockLineText is not null;
+
+    /// <summary>…and on its own line while the team library is being edited (no lock line).</summary>
+    public bool ShowWhatChangedAlone => ShowWhatChanged && LockLineText is null;
 
     public IRelayCommand WhatChangedCommand { get; }
     public IRelayCommand SeeCopyChangesCommand { get; }
@@ -2675,6 +2682,8 @@ public sealed class MainViewModel : ObservableObject
     private void RaiseEditorState()
     {
         OnPropertyChanged(nameof(ShowWhatChanged));
+        OnPropertyChanged(nameof(ShowWhatChangedInLockLine));
+        OnPropertyChanged(nameof(ShowWhatChangedAlone));
         OnPropertyChanged(nameof(ShowTeamUpdateBanner));
         OnPropertyChanged(nameof(LockLineText));
         OnPropertyChanged(nameof(PinLabel));

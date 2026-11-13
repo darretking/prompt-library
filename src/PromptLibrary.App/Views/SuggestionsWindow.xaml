@@ -7,10 +7,9 @@
         Icon="/Assets/app.ico"
         Width="760" Height="480" MinWidth="560" MinHeight="360"
         ShowInTaskbar="False">
-    <!-- The list at the left (title, then "from · age"); the selected suggestion at the right. -->
+    <!-- The list at the left (title, then "from · age"), styled like the main prompt list; the selected suggestion at the
+         right with its actions at the bottom. Esc or the title bar closes the window. -->
     <DockPanel Margin="16">
-        <Button DockPanel.Dock="Bottom" Content="Close" IsCancel="True" HorizontalAlignment="Right" Margin="0,16,0,0"
-                AutomationProperties.Name="Close" />
         <Grid>
         <TextBlock Text="No suggestions right now." Margin="0,8,0,0" VerticalAlignment="Top"
                    Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}"
@@ -23,10 +22,11 @@
             </Grid.ColumnDefinitions>
 
             <ListBox Grid.Column="0" ItemsSource="{Binding Items}" SelectedItem="{Binding Selected}"
-                     AutomationProperties.Name="Suggestions">
+                     Style="{StaticResource PlainList}" ItemContainerStyle="{StaticResource RowItem}"
+                     Margin="-4,0,0,0" AutomationProperties.Name="Suggestions">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <StackPanel Margin="0,4">
+                        <StackPanel>
                             <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                             <TextBlock Text="{Binding Subtitle}" Style="{StaticResource MutedText}"
                                        TextTrimming="CharacterEllipsis" />

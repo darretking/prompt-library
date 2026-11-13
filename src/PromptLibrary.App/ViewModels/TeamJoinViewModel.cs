@@ -85,8 +85,8 @@ public sealed class TeamJoinViewModel : ObservableObject
         finally
         {
             cts.Cancel();
-            IsLooking = false;
             await slow;
+            IsLooking = false;
         }
     }
 
@@ -100,6 +100,8 @@ public sealed class TeamJoinViewModel : ObservableObject
         {
             return;
         }
+        // The delay can finish just as the search does; a cancelled token means the search is over.
+        if (token.IsCancellationRequested) return;
         IsLooking = true;
     }
 
