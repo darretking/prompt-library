@@ -29,9 +29,15 @@ public partial class ImportResultsDialog : Window
         _ => "",
     };
 
-    public ImportResultsDialog(ImportResult result)
+    public ImportResultsDialog(ImportResult result, bool intoTeam = false)
     {
         InitializeComponent();
+        if (intoTeam)
+        {
+            Title = "Import into team prompts";
+            System.Windows.Automation.AutomationProperties.SetName(this, Title);
+            HeadingText.Text = Title;
+        }
         ImportedCount.Text = result.Imported.ToString();
         DuplicateCount.Text = result.Duplicates.ToString();
         FailedCount.Text = result.Unusable.ToString();

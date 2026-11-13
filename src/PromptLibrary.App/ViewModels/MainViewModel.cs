@@ -126,8 +126,8 @@ public sealed class MainViewModel : ObservableObject
         ClearSearchCommand = new RelayCommand(() => SearchText = "");
         BackupNowCommand = new RelayCommand(() => _ = _host.RunBackupAsync(BackupTrigger.Manual));
         RestoreCommand = new RelayCommand(_host.OpenRestore);
-        ImportCommand = new RelayCommand(ImportPrompts, () => !IsTeamSide);
-        ExportCommand = new RelayCommand(ExportPrompts, () => !IsTeamSide);
+        ImportCommand = new RelayCommand(ImportPrompts, () => !IsTeamSide || IsEditingTeam);
+        ExportCommand = new RelayCommand(ExportPrompts);
         AddStarterPromptsCommand = new RelayCommand(AddStarterPrompts, () => !IsTeamSide);
         OpenSettingsCommand = new RelayCommand(() => _host.OpenSettings());
         SetUpBackupsCommand = new RelayCommand(() => _host.OpenSettings(focusBackups: true));
@@ -144,6 +144,7 @@ public sealed class MainViewModel : ObservableObject
         ShowHistoryCommand = new RelayCommand(ShowHistory);
         MoveToCategoryCommand = new RelayCommand<Category?>(MoveToCategory);
         CopyToYoursCommand = new RelayCommand(CopyToYours);
+        CopyToTeamCommand = new RelayCommand(CopyToTeam);
         PinCommand = new RelayCommand<PromptRow?>(TogglePin);
         HideCommand = new RelayCommand<PromptRow?>(ToggleHide);
         MarkAllSeenCommand = new RelayCommand(MarkAllSeen);
@@ -276,6 +277,10 @@ public sealed class MainViewModel : ObservableObject
     /// opens the copy on Your prompts.
     /// </summary>
     public IRelayCommand CopyToYoursCommand { get; }
+    public IRelayCommand CopyToTeamCommand { get; }
+
+    /// <summary>"Copy to team library" in a personal prompt's menu: Your prompts side, a team joined that you can edit.</summary>
+    public bool ShowCopyToTeam => IsYoursSide && TeamLoaded && _team!.Service.CanEdit;
 
     /// <summary>Copies the prompt and opens an AI app with it; the parameter is a <c>SendTargets</c> id, null = the prompt's default.</summary>
     public IRelayCommand<string?> SendCommand { get; }
@@ -1046,10 +1051,10 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     private void ImportPrompts()
     {
-        if (IsTeamSide || _teamSaving) return;
+        if (_teamSaving || (IsTeamSide && !IsEditingTeam)) return;
         if (_dialogs.ChooseImportSource() is not { } pick) return;
 
-        var library = _personal.Library;
+        var library = CurrentDocument.Library;
         ImportResult result;
         try
         {
@@ -1065,12 +1070,12 @@ public sealed class MainViewModel : ObservableObject
 
         if (result.Imported > 0)
         {
-            _personal.SaveLibraryChange(); // on failure the prompts stay and are written later (the host says so)
+            SaveChange(); // yours: on failure the prompts stay and are written later; team: one guarded save
             RebuildCategories(_selectedCategory?.Id);
             RefreshPrompts();
             OpenFirstPromptIfNone();
         }
-        _dialogs.ShowImportResults(result);
+        _dialogs.ShowImportResults(result, IsTeamSide);
     }
 
     /// <summary>
@@ -1097,8 +1102,7 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Export prompts…: one .json file, or a folder of .md files (one per prompt, a subfolder per category).</summary>
     private void ExportPrompts()
     {
-        if (IsTeamSide) return;
-        var library = _personal.Library;
+        var library = CurrentDocument.Library;
         if (library.Prompts.Count == 0)
         {
             _dialogs.ShowMessage("There are no prompts to export yet.");
@@ -1833,6 +1837,84 @@ public sealed class MainViewModel : ObservableObject
         ShowStatus($"Copied to your prompts · {category.Name}", FeedbackDuration);
     }
 
+    /// <summary>
+    /// Copy to team library: one click on a personal prompt. Adds a copy (new id, no source) to the team category of the
+    /// same name (created when missing) and saves it guarded, without edit mode. When someone else changed the file the
+    /// team library is reloaded and the add is applied once more; a second refusal shows the conflict text.
+    /// </summary>
+    private void CopyToTeam()
+    {
+        if (!IsYoursSide || _teamSaving || _team is not { } team || !TeamLoaded || !team.Service.CanEdit
+            || EditorPromptId is not { } id
+            || _personal.Library.Prompts.FirstOrDefault(p => p.Id == id) is not { } source) return;
+
+        var categoryName = (_personal.Library.Categories.FirstOrDefault(c => c.Id == source.CategoryId)?.Name
+                            ?? "Prompts").Trim();
+        string? added = null;
+
+        bool Apply()
+        {
+            var library = team.Library;
+            var editor = new LibraryEditor(library, () => DateTimeOffset.Now);
+            try
+            {
+                var category = library.Categories.FirstOrDefault(c =>
+                                   string.Equals(c.Name.Trim(), categoryName, StringComparison.OrdinalIgnoreCase))
+                               ?? editor.AddCategory(categoryName);
+                editor.AddPrompt(category.Id, source.Title, source.Description, source.Text, source.Tags, source.SendTo);
+                added = category.Name;
+                return true;
+            }
+            catch (ArgumentException ex)
+            {
+                team.Service.RevertToLoaded();
+                _dialogs.ShowMessage(ex.Message);
+                return false;
+            }
+        }
+
+        void Save(bool retry)
+        {
+            if (!Apply()) return;
+            var baseHash = team.IsEditing ? team.BaseHash : team.Service.CurrentHash;
+            team.SaveWithoutEditing();
+            if (team.PendingSave is not { } pending) return;
+            _teamSaving = true;
+            pending.ContinueWith(task =>
+            {
+                var result = task.IsCompletedSuccessfully
+                    ? task.Result
+                    : new TeamSaveResult(TeamSaveStatus.Failed, null, "Couldn't save the team library.");
+                _dispatcher.BeginInvoke(() =>
+                {
+                    _teamSaving = false;
+                    if (_team is not { } current) return;
+                    switch (result.Status)
+                    {
+                        case TeamSaveStatus.Saved:
+                            current.Rebase();
+                            _host.RefreshQuickMenu();
+                            ShowStatus($"Copied to team prompts · {added}", FeedbackDuration);
+                            break;
+                        case TeamSaveStatus.ChangedByOther when current.Service.CurrentHash != baseHash:
+                            current.Rebase(); // the service has re-read the file
+                            if (!retry)
+                                Save(retry: true);
+                            else
+                                _dialogs.ShowMessage(ChangeRedoMessage);
+                            break;
+                        default:
+                            current.Service.RevertToLoaded();
+                            _dialogs.ShowMessage(result.Message ?? "Couldn't save the team library.");
+                            break;
+                    }
+                });
+            }, TaskScheduler.Default);
+        }
+
+        Save(retry: false);
+    }
+
     /// <summary>Pins or unpins <paramref name="row"/>'s prompt (the editor's when null). Pins are capped at 10.</summary>
     private void TogglePin(PromptRow? row)
     {
@@ -2214,6 +2296,7 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(TeamReadOnlyReason));
         OnPropertyChanged(nameof(IsEditingTeam));
         OnPropertyChanged(nameof(ShowEditTeamButton));
+        OnPropertyChanged(nameof(ShowCopyToTeam));
         OnPropertyChanged(nameof(ShowTeamEditBar));
         OnPropertyChanged(nameof(TeamEditBlockedText));
         OnPropertyChanged(nameof(ShowTeamEditBlocked));

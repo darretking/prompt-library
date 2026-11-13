@@ -827,6 +827,9 @@
                                                 <MenuItem Style="{StaticResource FlyoutItem}" Header="Make my copy"
                                                           Command="{Binding CopyToYoursCommand}"
                                                           Visibility="{Binding ShowTeamButtons, Converter={StaticResource BoolToVisibility}}" />
+                                                <MenuItem Style="{StaticResource FlyoutItem}" Header="Copy to team library"
+                                                          Command="{Binding CopyToTeamCommand}"
+                                                          Visibility="{Binding ShowCopyToTeam, Converter={StaticResource BoolToVisibility}}" />
                                                 <MenuItem Style="{StaticResource FlyoutItem}" Header="Version history…"
                                                           Command="{Binding ShowHistoryCommand}"
                                                           Visibility="{Binding CanShowHistory, Converter={StaticResource BoolToVisibility}}" />

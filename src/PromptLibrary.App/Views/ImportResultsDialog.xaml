@@ -9,7 +9,7 @@
         ResizeMode="NoResize" ShowInTaskbar="False">
     <!-- What an import did: three counts, and, when some files failed, a scrollable "file — reason" list. -->
     <StackPanel Margin="16">
-        <TextBlock Text="Import finished" FontSize="18" FontWeight="SemiBold" />
+        <TextBlock x:Name="HeadingText" Text="Import finished" FontSize="18" FontWeight="SemiBold" />
 
         <UniformGrid Columns="3" Margin="0,16,0,0">
             <StackPanel>
