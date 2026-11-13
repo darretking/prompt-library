@@ -22,6 +22,9 @@ public interface ISearchActions
 
     AppSettings Settings { get; }
 
+    /// <summary>The team's shared fill-in values (keys lower-cased), or null without a team library.</summary>
+    IReadOnlyDictionary<string, string>? TeamFillInValues => null;
+
     /// <summary>Values for <c>{clipboard}</c>, <c>{date}</c> and <c>{time}</c>, captured when the window opened.</summary>
     ITokenValues Tokens { get; }
 
@@ -346,7 +349,7 @@ public sealed class SearchViewModel : ObservableObject
         }
 
         var label = intent switch { Intent.Send => "Send", Intent.Copy => "Copy", _ => "Paste" };
-        var form = new FillInViewModel(prompt.Text, _host.Settings, _host.Tokens, label, prompt.Title);
+        var form = new FillInViewModel(prompt.Text, _host.Settings, _host.Tokens, label, prompt.Title, teamValues: _host.TeamFillInValues);
         form.Completed += (text, caret) =>
         {
             Form = null;

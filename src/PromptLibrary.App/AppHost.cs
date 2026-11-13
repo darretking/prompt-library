@@ -431,7 +431,8 @@ public sealed class AppHost : IMainHost, IDisposable
         var willPaste = Settings.PasteAfterCopy && pick.ReturnTo != IntPtr.Zero;
         var filled = PasteFlow.Resolve(prompt.Text, tokens, text =>
         {
-            var model = new FillInViewModel(text, Settings, tokens, willPaste ? "Paste" : "Copy", prompt.Title, cancelLabel: "Cancel");
+            var model = new FillInViewModel(text, Settings, tokens, willPaste ? "Paste" : "Copy", prompt.Title, cancelLabel: "Cancel",
+                teamValues: Team?.Team?.FillInValues);
             var result = FillInDialog.AskForResult(_mainWindow, model);
             if (result is not null) SaveSettings(); // the typed values are remembered
             return result;

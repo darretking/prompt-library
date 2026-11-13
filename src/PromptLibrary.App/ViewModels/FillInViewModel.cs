@@ -12,11 +12,18 @@ public sealed class FillField : ObservableObject
     private bool _listOpen;
     private string? _highlighted;
 
-    public FillField(TemplateField field, string value)
+    public FillField(TemplateField field, string value, bool fromTeam = false)
     {
         Field = field;
         _value = value;
+        FromTeam = fromTeam;
     }
+
+    /// <summary>True when the starting value came from the team's shared fill-in values (shows the muted "Team value" hint).</summary>
+    public bool FromTeam { get; }
+
+    /// <summary>The muted line under a team-prefilled field.</summary>
+    public string TeamHint => "Team value";
 
     public TemplateField Field { get; }
 
@@ -113,7 +120,8 @@ public sealed class FillInViewModel : ObservableObject
     private readonly ITokenValues _tokens;
 
     public FillInViewModel(string promptText, AppSettings settings, ITokenValues tokens,
-        string primaryLabel = "Paste", string title = "", string cancelLabel = "Back")
+        string primaryLabel = "Paste", string title = "", string cancelLabel = "Back",
+        IReadOnlyDictionary<string, string>? teamValues = null)
     {
         _text = promptText ?? "";
         _settings = settings;
@@ -122,10 +130,11 @@ public sealed class FillInViewModel : ObservableObject
         Title = title;
         CancelLabel = cancelLabel;
 
+        var defaults = new FillInDefaults(settings.PlaceholderValues, teamValues);
         foreach (var field in PromptTemplate.Parse(_text))
         {
-            var remembered = settings.PlaceholderValues.TryGetValue(field.Name.ToLowerInvariant(), out var v) ? v : "";
-            var item = new FillField(field, remembered ?? "");
+            var found = defaults.TryGet(field.Name, out var start, out var fromTeam);
+            var item = new FillField(field, found ? start : "", found && fromTeam);
             item.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName != nameof(FillField.Value)) return;
