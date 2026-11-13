@@ -1944,7 +1944,7 @@ public sealed class MainViewModel : ObservableObject
                        ?? editor.AddCategory(categoryName);
             copy = editor.AddPrompt(category.Id, source.Title, source.Description, source.Text, source.Tags, null);
             copy.SourceTeamPromptId = source.Id; // lets the copy offer an update when the team version changes
-            copy.SourceFingerprint = TeamUserState.Fingerprint(source);
+            copy.SourceFingerprint = TeamUserState.ContentFingerprint(source);
         }
         catch (ArgumentException ex)
         {
@@ -2329,7 +2329,7 @@ public sealed class MainViewModel : ObservableObject
         mine = _personal.Library.Prompts.FirstOrDefault(p => p.Id == id);
         if (mine?.SourceTeamPromptId is not { } sourceId || mine.SourceFingerprint is null) return null;
         var source = TeamContent?.Prompts.FirstOrDefault(p => p.Id == sourceId);
-        return source is not null && TeamUserState.Fingerprint(source) != mine.SourceFingerprint ? source : null;
+        return source is not null && TeamUserState.ContentFingerprint(source) != mine.SourceFingerprint ? source : null;
     }
 
     /// <summary>The quiet line in a personal copy's editor: the team changed the prompt it was copied from.</summary>
@@ -2354,9 +2354,8 @@ public sealed class MainViewModel : ObservableObject
     private void UpdateMyCopy()
     {
         if (OutOfDateSource(out var mine) is not { } source || mine is null || _editor is not { } editor) return;
-        var changed = editor.IsDirty || (mine.UpdatedAt > mine.CreatedAt
-            && (mine.Title != source.Title || mine.Description != source.Description || mine.Text != source.Text
-                || !(mine.Tags ?? []).SequenceEqual(source.Tags ?? [])));
+        // Edited = the copy's saved content no longer matches what it was copied (or last updated) from, or unsaved edits.
+        var changed = editor.IsDirty || TeamUserState.ContentFingerprint(mine) != mine.SourceFingerprint;
         if (changed && !_dialogs.ConfirmDestructive("Replace your changes with the team's version?", "Replace")) return;
 
         editor.Title = source.Title;
@@ -2365,7 +2364,7 @@ public sealed class MainViewModel : ObservableObject
         editor.Tags.Clear();
         foreach (var tag in source.Tags ?? []) editor.Tags.Add(tag);
         if (!Save()) return; // the editor keeps the team's version as an unsaved change
-        mine.SourceFingerprint = TeamUserState.Fingerprint(source);
+        mine.SourceFingerprint = TeamUserState.ContentFingerprint(source);
         _personal.SaveLibraryChange();
         RaiseEditorState();
         ShowStatus("Updated from the team.", FeedbackDuration);
@@ -2374,7 +2373,7 @@ public sealed class MainViewModel : ObservableObject
     private void KeepMine()
     {
         if (OutOfDateSource(out var mine) is not { } source || mine is null) return;
-        mine.SourceFingerprint = TeamUserState.Fingerprint(source);
+        mine.SourceFingerprint = TeamUserState.ContentFingerprint(source);
         _personal.SaveLibraryChange();
         RaiseEditorState();
     }
@@ -2602,6 +2601,7 @@ public sealed class MainViewModel : ObservableObject
 
         UpdateSearchingBoth();
         RefreshSuggestionCount();
+        OnPropertyChanged(nameof(PlaceholderValues)); // the team's fill-in values may have changed
         if (IsTeamSide)
         {
             ReloadTeamSide();

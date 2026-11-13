@@ -36,9 +36,15 @@ public static class TeamPreset
     public static async Task<bool> ApplyAsync(ITeamPresetSource source, AppSettings settings, bool hasTeam,
         Func<string, Task<TeamJoinResult>> join, Func<bool> saveSettings)
     {
-        if (hasTeam) return false;
         var value = source.Read()?.Trim();
         if (string.IsNullOrEmpty(value) || value == settings.PresetTeamSourceApplied) return false;
+        if (hasTeam)
+        {
+            // Already in a team: the preset counts as applied, so leaving that team later does not join the preset.
+            settings.PresetTeamSourceApplied = value;
+            saveSettings();
+            return false;
+        }
         try
         {
             if (!(await join(value)).Success) return false;

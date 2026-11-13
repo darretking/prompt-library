@@ -90,6 +90,21 @@ public sealed class JoinStartupTests : IDisposable
     }
 
     [Fact]
+    public async Task Preset_already_in_a_team_is_recorded_so_leaving_does_not_join_it()
+    {
+        var settings = new AppSettings();
+        var saved = 0;
+        var (join, calls) = FakeJoin(true);
+        Assert.False(await TeamPreset.ApplyAsync(new FakePreset("p"), settings, true, join, () => { saved++; return true; }));
+        Assert.Equal("p", settings.PresetTeamSourceApplied);
+        Assert.Equal(1, saved);
+
+        // The member leaves the team: the next start does not join the preset.
+        Assert.False(await TeamPreset.ApplyAsync(new FakePreset("p"), settings, false, join, () => true));
+        Assert.Empty(calls);
+    }
+
+    [Fact]
     public async Task Preset_failure_leaves_applied_unchanged()
     {
         var settings = new AppSettings { PresetTeamSourceApplied = "old" };

@@ -47,5 +47,14 @@ public sealed class TeamSeenStore(string path)
 
     public void Clear() => _items.Clear();
 
+    /// <summary>Drops snapshots of prompts the team no longer has. Returns true when any were dropped.</summary>
+    public bool PruneTo(Library team)
+    {
+        var ids = team.Prompts.Select(p => p.Id).ToHashSet();
+        var gone = _items.Keys.Where(id => !ids.Contains(id)).ToList();
+        foreach (var id in gone) _items.Remove(id);
+        return gone.Count > 0;
+    }
+
     public void Save() => AtomicFile.WriteAllText(path, JsonSerializer.Serialize(_items, Options));
 }

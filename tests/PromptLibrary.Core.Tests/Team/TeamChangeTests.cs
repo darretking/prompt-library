@@ -72,4 +72,21 @@ public class TeamChangeTests
 
         Assert.Equal(new TeamSeenSnapshot("T", "D", "a\nb", "Email"), store.Get(p.Id));
     }
+
+    [Fact]
+    public void PruneTo_DropsSnapshotsOfPromptsTheTeamNoLongerHas()
+    {
+        var lib = new Library();
+        var kept = P();
+        lib.Prompts.Add(kept);
+        var store = new TeamSeenStore(Path.Combine(Path.GetTempPath(), "pl-seen-" + Guid.NewGuid().ToString("N") + ".json"));
+        var gone = Guid.NewGuid();
+        store.Set(kept.Id, new TeamSeenSnapshot("T", "D", "x", ""));
+        store.Set(gone, new TeamSeenSnapshot("Old", "", "", ""));
+
+        Assert.True(store.PruneTo(lib));
+        Assert.NotNull(store.Get(kept.Id));
+        Assert.Null(store.Get(gone));
+        Assert.False(store.PruneTo(lib));
+    }
 }

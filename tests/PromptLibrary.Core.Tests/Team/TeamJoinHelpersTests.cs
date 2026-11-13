@@ -87,6 +87,15 @@ public sealed class TeamJoinHelpersTests : IDisposable
         Assert.Equal(["Good"], found.Select(f => f.LibraryName).ToArray());
     }
 
+    [Theory]
+    [InlineData(FileAttributes.Offline, true)]
+    [InlineData((FileAttributes)0x40000, true)]  // recall on open
+    [InlineData((FileAttributes)0x400000, true)] // recall on data access (OneDrive online-only)
+    [InlineData(FileAttributes.Normal, false)]
+    [InlineData(FileAttributes.Directory | FileAttributes.ReadOnly, false)]
+    public void Finder_TreatsCloudPlaceholdersAsNotOnThisPc(FileAttributes attributes, bool cloudOnly)
+        => Assert.Equal(cloudOnly, TeamFileFinder.IsCloudOnly(attributes));
+
     private static readonly CloudFolder Biz = new(CloudProvider.OneDriveBusiness, "OneDrive – Acme", @"C:\Users\x\OneDrive - Acme");
 
     [Fact]

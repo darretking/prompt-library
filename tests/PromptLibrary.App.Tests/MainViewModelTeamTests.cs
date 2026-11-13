@@ -625,7 +625,7 @@ public sealed class MainViewModelTeamTests : IDisposable
         var (_, vm, copy, teamPrompt, _) = CopyAndOpen();
 
         Assert.Equal(teamPrompt.Id, copy.SourceTeamPromptId);
-        Assert.Equal(TeamUserState.Fingerprint(teamPrompt), copy.SourceFingerprint);
+        Assert.Equal(TeamUserState.ContentFingerprint(teamPrompt), copy.SourceFingerprint);
         Assert.False(vm.ShowTeamUpdateBanner); // team unchanged
     });
 
@@ -651,6 +651,35 @@ public sealed class MainViewModelTeamTests : IDisposable
     });
 
     [Fact]
+    public void Banner_NotShownWhenTheTeamPromptOnlyMovesCategory() => Sta.Run(() =>
+    {
+        var (host, vm, copy, teamPrompt, _) = CopyAndOpen();
+        var team = host.Team!.Team!.Content;
+        var other = team.Categories.First(c => c.Id != teamPrompt.CategoryId);
+        teamPrompt.CategoryId = other.Id;
+
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Id == copy.Id);
+        Assert.False(vm.ShowTeamUpdateBanner);
+    });
+
+    [Fact]
+    public void UpdateMyCopy_CopySavedWithoutContentChange_DoesNotAsk() => Sta.Run(() =>
+    {
+        // A save that leaves title, description and text as copied (for example a tag) is not "edited".
+        var (_, vm, copy, teamPrompt, dialogs) = CopyAndOpen();
+        vm.Editor!.Tags.Add("mine");
+        Assert.True(vm.Save());
+        Assert.True(copy.UpdatedAt > copy.CreatedAt);
+        teamPrompt.Text = "Newer team text";
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Id == copy.Id);
+
+        vm.UpdateMyCopyCommand.Execute(null);
+
+        Assert.Equal(0, dialogs.Confirms);
+        Assert.Equal("Newer team text", copy.Text);
+    });
+
+    [Fact]
     public void UpdateMyCopy_UntouchedCopy_UpdatesWithoutAskingAndKeepsOldVersion() => Sta.Run(() =>
     {
         var (_, vm, copy, teamPrompt, dialogs) = CopyAndOpen();
@@ -662,7 +691,7 @@ public sealed class MainViewModelTeamTests : IDisposable
 
         Assert.Equal(0, dialogs.Confirms);
         Assert.Equal("Newer team text", copy.Text);
-        Assert.Equal(TeamUserState.Fingerprint(teamPrompt), copy.SourceFingerprint);
+        Assert.Equal(TeamUserState.ContentFingerprint(teamPrompt), copy.SourceFingerprint);
         Assert.False(vm.ShowTeamUpdateBanner);
         Assert.Equal("Updated from the team.", vm.StatusText);
         Assert.Contains(_history!.List(copy.Id), v => v.Text == oldText);
@@ -701,7 +730,7 @@ public sealed class MainViewModelTeamTests : IDisposable
 
         vm.KeepMineCommand.Execute(null);
 
-        Assert.Equal(TeamUserState.Fingerprint(teamPrompt), copy.SourceFingerprint);
+        Assert.Equal(TeamUserState.ContentFingerprint(teamPrompt), copy.SourceFingerprint);
         Assert.True(host.LibrarySaves > saves);
         Assert.False(vm.ShowTeamUpdateBanner);
         Assert.NotEqual("Newer team text", copy.Text);

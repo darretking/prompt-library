@@ -48,7 +48,8 @@ public static class TeamFileFinder
                 var file = System.IO.Path.Combine(dir, TeamFile.FileName);
                 try
                 {
-                    if (!Stop() && File.Exists(file) && new FileInfo(file).Length <= TeamReader.MaxBytes
+                    if (!Stop() && File.Exists(file) && !IsCloudOnly(File.GetAttributes(file))
+                        && new FileInfo(file).Length <= TeamReader.MaxBytes
                         && TeamFile.Parse(File.ReadAllText(file)) is { } lib)
                         hits.Add(new FoundTeamFile(file, lib.Name, ShortLocation(root, dir)));
                 }
@@ -76,6 +77,14 @@ public static class TeamFileFinder
         }, CancellationToken.None);
     }
 
+    // Offline, FILE_ATTRIBUTE_RECALL_ON_OPEN and FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS: a cloud placeholder whose
+    // content is not on this PC. Reading it would start a download, so the search skips it.
+    private const FileAttributes RecallOnOpen = (FileAttributes)0x40000;
+    private const FileAttributes RecallOnDataAccess = (FileAttributes)0x400000;
+
+    public static bool IsCloudOnly(FileAttributes a)
+        => (a & (FileAttributes.Offline | RecallOnOpen | RecallOnDataAccess)) != 0;
+
     private static bool Descend(string dir)
     {
         var name = System.IO.Path.GetFileName(dir);
@@ -84,7 +93,7 @@ public static class TeamFileFinder
         try
         {
             var a = File.GetAttributes(dir);
-            return (a & (FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReparsePoint)) == 0;
+            return (a & (FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReparsePoint)) == 0 && !IsCloudOnly(a);
         }
         catch (Exception)
         {

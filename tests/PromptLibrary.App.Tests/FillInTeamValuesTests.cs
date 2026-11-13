@@ -72,6 +72,28 @@ public class FillInTeamValuesTests
     }
 
     [Fact]
+    public void Complete_UntouchedTeamValue_IsNotSavedAsOwn()
+    {
+        var settings = new AppSettings();
+        var vm = new FillInViewModel("{city}", settings, new Tokens(), teamValues: Team);
+        Assert.True(vm.Fields[0].FromTeam);
+        vm.Complete();
+
+        Assert.False(settings.PlaceholderValues.ContainsKey("city"));
+    }
+
+    [Fact]
+    public void Complete_EditedTeamValue_IsSavedAsOwn()
+    {
+        var settings = new AppSettings();
+        var vm = new FillInViewModel("{city}", settings, new Tokens(), teamValues: Team);
+        vm.Fields[0].Value = "Bergen";
+        vm.Complete();
+
+        Assert.Equal("Bergen", settings.PlaceholderValues["city"]);
+    }
+
+    [Fact]
     public void Merge_OwnOverTeam_ForPreview()
     {
         var own = new Dictionary<string, string> { ["name"] = "Mine" };

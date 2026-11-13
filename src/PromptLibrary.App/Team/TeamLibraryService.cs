@@ -633,6 +633,7 @@ public sealed class TeamLibraryService : IDisposable
                 settingsChanged = true;
             }
             settingsChanged |= TeamUserState.Prune(_settings, _personal(), result.Team.Content);
+            if (_seen.PruneTo(result.Team.Content)) SaveSeen();
             if (_settings.TeamSource != source.Location)
             {
                 _settings.TeamSource = source.Location;
