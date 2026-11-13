@@ -20,7 +20,6 @@ using PromptLibrary.Core.Menu;
 using PromptLibrary.Core.Models;
 using PromptLibrary.Core.Seed;
 using PromptLibrary.Core.Storage;
-using PromptLibrary.Core.Team;
 using PromptLibrary.Core.Updates;
 using PromptLibrary.Core.Usage;
 
@@ -292,8 +291,9 @@ public sealed class AppHost : IMainHost, IDisposable
                 SaveSettings, () => DateTimeOffset.Now, ex => CrashLog.Append(Paths.CrashLogFile, ex, DateTime.Now));
             Team.Changed += (_, _) => RefreshQuickMenu();
             Team.Start();
-            // With a team library joined its first good read prunes (an old offline copy must not); with none, prune now.
-            if (Team.Source is null && TeamUserState.Prune(Settings, Library, new Library()))
+            // With a team library joined its first good read prunes (an old offline copy must not); with none, drop the
+            // usage of prompts that are gone now. Only usage: team pins, hides and seen entries stay for a later re-join.
+            if (Team.Source is null && UsageTracker.Prune(Settings, Library.Prompts.Select(p => p.Id)) > 0)
                 SaveSettings();
         }
         catch (Exception ex)
