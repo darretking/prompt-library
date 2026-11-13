@@ -66,7 +66,7 @@ public sealed class TeamLibraryService : IDisposable
         Func<Library> personal, Func<bool> saveSettings, Func<DateTimeOffset> now, Action<Exception> log,
         TimeSpan? debounce = null, Func<string, TeamSource?>? parseInput = null)
     {
-        _parse = parseInput ?? TeamSource.FromInput;
+        _parse = parseInput ?? (input => TeamSource.FromInput(input));
         _reader = new TeamReader(http, appVersion);
         _cachePath = cachePath;
         _settings = settings;

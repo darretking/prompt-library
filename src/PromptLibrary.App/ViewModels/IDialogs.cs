@@ -40,7 +40,7 @@ public interface IDialogs
     void ShowMessage(string message);
 
     /// <summary>Says what an import did: counts and, for files that failed, a list of file and reason.</summary>
-    void ShowImportResults(ImportResult result) => ShowMessage(result.Summary);
+    void ShowImportResults(ImportResult result, bool intoTeam = false) => ShowMessage(result.Summary);
 
     /// <summary>
     /// Restore an older version of the team library (or, with <paramref name="review"/>, review the other versions sync

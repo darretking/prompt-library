@@ -4,6 +4,7 @@ using PromptLibrary.App.Team;
 using PromptLibrary.App.Updates;
 using PromptLibrary.App.ViewModels;
 using PromptLibrary.Core.Backup;
+using PromptLibrary.Core.Exchange;
 using PromptLibrary.Core.Models;
 using PromptLibrary.Core.Team;
 using PromptLibrary.Core.Usage;
@@ -188,16 +189,132 @@ public sealed class TeamEditModeTests : IDisposable
     });
 
     [Fact]
-    public void ImportAndExport_AreForYourPromptsOnly() => Sta.Run(() =>
+    public void Import_OnTeamSide_OnlyWhileEditing_ExportAlways() => Sta.Run(() =>
     {
         var vm = new MainViewModel(NewHost(), new FakeDialogs());
         Assert.True(vm.ImportCommand.CanExecute(null));
         Assert.True(vm.ExportCommand.CanExecute(null));
 
         vm.ShowTeamCommand.Execute(null);
-
         Assert.False(vm.ImportCommand.CanExecute(null));
-        Assert.False(vm.ExportCommand.CanExecute(null));
+        Assert.True(vm.ExportCommand.CanExecute(null));
+
+        vm.EditTeamCommand.Execute(null);
+        Assert.True(vm.ImportCommand.CanExecute(null));
+    });
+
+    [Fact]
+    public void Export_OnTeamSide_WritesTeamPrompts() => Sta.Run(() =>
+    {
+        var dialogs = new FakeDialogs { ExportPick = new ExchangePick(Path.Combine(_root, "out.json"), false) };
+        var vm = new MainViewModel(NewHost(), dialogs);
+        vm.ShowTeamCommand.Execute(null);
+
+        vm.ExportCommand.Execute(null);
+
+        Assert.Contains("Follow-up email", File.ReadAllText(Path.Combine(_root, "out.json")));
+    });
+
+    [Fact]
+    public void Import_OnTeamSide_InEditMode_AddsPromptsAndSavesOnce() => Sta.Run(() =>
+    {
+        var file = Path.Combine(_root, "in.json");
+        var source = new Library();
+        var cat = new Category { Id = Guid.NewGuid(), Name = "Sales" };
+        source.Categories.Add(cat);
+        source.Prompts.Add(NewPrompt(cat, "Imported one", "one"));
+        source.Prompts.Add(NewPrompt(cat, "Imported two", "two"));
+        PromptExport.WriteJson(file, source);
+
+        var host = NewHost();
+        var dialogs = new FakeDialogs { ImportPick = new ExchangePick(file, false) };
+        var vm = new MainViewModel(host, dialogs);
+        vm.ShowTeamCommand.Execute(null);
+        vm.EditTeamCommand.Execute(null);
+
+        vm.ImportCommand.Execute(null);
+
+        Until(() => ReadTeamFile().Contains("Imported two"));
+        Assert.Equal(2, dialogs.ImportResults.Single().Imported);
+        Assert.True(dialogs.ImportIntoTeam);
+        Assert.Equal(2, host.Team!.Team!.Content.Prompts.Count(p => p.Title.StartsWith("Imported")));
+        Assert.Empty(host.Library.Prompts);
+        Assert.Equal(0, host.LibrarySaves);
+    });
+
+    [Fact]
+    public void CopyToTeam_VisibleOnlyWhenCanEdit() => Sta.Run(() =>
+    {
+        var vm = new MainViewModel(NewHost(), new FakeDialogs());
+        Assert.True(vm.ShowCopyToTeam);
+        vm.ShowTeamCommand.Execute(null);
+        Assert.False(vm.ShowCopyToTeam);
+
+        var newer = new MainViewModel(NewHost(schemaVersion: 2), new FakeDialogs());
+        Assert.False(newer.ShowCopyToTeam);
+    });
+
+    [Fact]
+    public void CopyToTeam_UsesSameNamedCategory_WithoutEditMode() => Sta.Run(() =>
+    {
+        var host = NewHost();
+        var dialogs = new FakeDialogs();
+        var mine = new Category { Id = Guid.NewGuid(), Name = "sales" };
+        host.Library.Categories.Add(mine);
+        host.Library.Prompts.Add(NewPrompt(mine, "My pitch", "Pitch {thing}"));
+        var vm = new MainViewModel(host, dialogs);
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Title == "My pitch");
+
+        vm.CopyToTeamCommand.Execute(null);
+
+        Until(() => ReadTeamFile().Contains("My pitch"));
+        Until(() => vm.StatusText == "Copied to team prompts · Sales");
+        var team = host.Team!.Team!.Content;
+        var copy = Assert.Single(team.Prompts, p => p.Title == "My pitch");
+        Assert.Equal(team.Categories.Single(c => c.Name == "Sales").Id, copy.CategoryId);
+        Assert.Equal(2, team.Categories.Count);
+        Assert.NotEqual(host.Library.Prompts[0].Id, copy.Id);
+        Assert.Equal("Copied to team prompts · Sales", vm.StatusText);
+        Assert.Equal(LibrarySide.Yours, vm.Side);
+        Assert.False(vm.IsEditingTeam);
+    });
+
+    [Fact]
+    public void CopyToTeam_CreatesMissingCategory() => Sta.Run(() =>
+    {
+        var host = NewHost();
+        var mine = new Category { Id = Guid.NewGuid(), Name = "Legal" };
+        host.Library.Categories.Add(mine);
+        host.Library.Prompts.Add(NewPrompt(mine, "Clause", "text"));
+        var vm = new MainViewModel(host, new FakeDialogs());
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Title == "Clause");
+
+        vm.CopyToTeamCommand.Execute(null);
+
+        Until(() => vm.StatusText == "Copied to team prompts · Legal");
+        var team = host.Team!.Team!.Content;
+        Assert.Equal(team.Categories.Single(c => c.Name == "Legal").Id, team.Prompts.Single(p => p.Title == "Clause").CategoryId);
+    });
+
+    [Fact]
+    public void CopyToTeam_ChangedByOther_RetriesOnceAndSucceeds() => Sta.Run(() =>
+    {
+        var host = NewHost();
+        var dialogs = new FakeDialogs();
+        var mine = new Category { Id = Guid.NewGuid(), Name = "Sales" };
+        host.Library.Categories.Add(mine);
+        host.Library.Prompts.Add(NewPrompt(mine, "My pitch", "Pitch"));
+        var vm = new MainViewModel(host, dialogs);
+        vm.SelectedPrompt = vm.Prompts.First(r => r.Title == "My pitch");
+
+        ChangeFileElsewhere("Discovery questions", "Discovery questions (v2)");
+        vm.CopyToTeamCommand.Execute(null);
+
+        Until(() => vm.StatusText == "Copied to team prompts · Sales");
+        Assert.Empty(dialogs.Messages);
+        var text = ReadTeamFile();
+        Assert.Contains("My pitch", text);
+        Assert.Contains("Discovery questions (v2)", text); // the other change is kept
     });
 
     [Fact]
@@ -624,6 +741,20 @@ public sealed class TeamEditModeTests : IDisposable
         {
             LastDeletionAsked = (categoryName, promptCount);
             return Deletion;
+        }
+
+        public ExchangePick? ImportPick { get; set; }
+        public ExchangePick? ExportPick { get; set; }
+        public List<ImportResult> ImportResults { get; } = [];
+        public bool ImportIntoTeam { get; private set; }
+
+        public ExchangePick? ChooseImportSource() => ImportPick;
+        public ExchangePick? ChooseExportTarget() => ExportPick;
+
+        public void ShowImportResults(ImportResult result, bool intoTeam = false)
+        {
+            ImportResults.Add(result);
+            ImportIntoTeam = intoTeam;
         }
 
         public bool? LastHistoryReview { get; private set; }

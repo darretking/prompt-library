@@ -310,10 +310,10 @@ public partial class MainWindow : Window, IDialogs
             ConfirmDialog.Inform(this, message);
     }
 
-    public void ShowImportResults(ImportResult result)
+    public void ShowImportResults(ImportResult result, bool intoTeam = false)
     {
         if (!_host.AsksNothing)
-            new ImportResultsDialog(result) { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog();
+            new ImportResultsDialog(result, intoTeam) { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog();
     }
 
     public bool ShowTeamHistory(TeamLibraryService service, bool review)

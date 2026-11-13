@@ -71,6 +71,13 @@ public sealed class TeamDocument(TeamLibraryService service) : ILibraryDocument
         if (_isEditing) BaseHash = service.CurrentHash;
     }
 
+    /// <summary>
+    /// Starts a guarded save of the loaded copy without edit mode (a prompt copied in from Your prompts): it must still
+    /// find the version being edited (<see cref="BaseHash"/>) or, when not editing, the one loaded now.
+    /// </summary>
+    public void SaveWithoutEditing()
+        => PendingSave = service.Team is { } team ? service.SaveAsync(team, _isEditing ? BaseHash : service.CurrentHash) : null;
+
     private bool Start()
     {
         PendingSave = _isEditing && service.Team is { } team ? service.SaveAsync(team, BaseHash) : null;
