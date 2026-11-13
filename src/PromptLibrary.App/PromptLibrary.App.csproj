@@ -17,7 +17,7 @@
     <Product>Prompt Library</Product>
     <Company>Prompt Library</Company>
     <!-- The installer takes its version from this exe's file version; bump it for every release. -->
-    <Version>1.2.3</Version>
+    <Version>1.2.4</Version>
     <Copyright>Copyright © 2026 Darret King. Licensed under GPL-3.0-or-later.</Copyright>
     <!-- The GitHub repository whose releases the update checker asks about. A fork changes these two lines;
          leaving either empty turns the checker off. -->
