@@ -305,6 +305,16 @@
                          edited on a line below. -->
                     <DockPanel Margin="24,0,0,0" VerticalAlignment="Center" TextElement.FontSize="12"
                                Visibility="{Binding ShowTeamHeader, Converter={StaticResource BoolToVisibility}}">
+                        <!-- The team note (editors write it): muted, one line, with a × that hides it until the text changes. -->
+                        <DockPanel DockPanel.Dock="Bottom" Margin="0,4,0,0"
+                                   Visibility="{Binding ShowTeamNoteLine, Converter={StaticResource BoolToVisibility}}">
+                            <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE711;"
+                                    Margin="4,-5,-6,-5" Command="{Binding DismissTeamNoteCommand}"
+                                    ToolTip="Hide this note" AutomationProperties.Name="Hide this note" />
+                            <TextBlock Text="{Binding TeamNoteLine}" Style="{StaticResource MutedText}"
+                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding TeamNoteLine}"
+                                       AutomationProperties.Name="{Binding TeamNoteLine}" />
+                        </DockPanel>
                         <TextBlock DockPanel.Dock="Bottom" Text="{Binding TeamEditBlockedText}"
                                    Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,4,0,0"
                                    AutomationProperties.Name="{Binding TeamEditBlockedText}"
@@ -329,8 +339,22 @@
                                     AutomationProperties.Name="More team library actions">
                                 <Button.ContextMenu>
                                     <ContextMenu Style="{StaticResource FlyoutMenu}">
+                                        <MenuItem Style="{StaticResource FlyoutItem}" Header="Copy _invite"
+                                                  Command="{Binding CopyInviteCommand}" />
+                                        <Separator Visibility="{Binding ShowTeamEditorItems, Converter={StaticResource BoolToVisibility}}" />
+                                        <MenuItem Style="{StaticResource FlyoutItem}" Header="_Note for everyone…"
+                                                  Command="{Binding TeamNoteCommand}"
+                                                  Visibility="{Binding ShowTeamEditorItems, Converter={StaticResource BoolToVisibility}}" />
+                                        <MenuItem Style="{StaticResource FlyoutItem}" Header="_Fill-in values for everyone…"
+                                                  Command="{Binding TeamFillInValuesCommand}"
+                                                  Visibility="{Binding ShowTeamEditorItems, Converter={StaticResource BoolToVisibility}}" />
+                                        <MenuItem Style="{StaticResource FlyoutItem}" Header="_Check the team library"
+                                                  Command="{Binding TeamCheckCommand}"
+                                                  Visibility="{Binding ShowTeamEditorItems, Converter={StaticResource BoolToVisibility}}" />
+                                        <Separator Visibility="{Binding ShowTeamEditorItems, Converter={StaticResource BoolToVisibility}}" />
                                         <MenuItem Style="{StaticResource FlyoutItem}" Header="_Restore an older version…"
-                                                  Command="{Binding TeamHistoryCommand}" />
+                                                  Command="{Binding TeamHistoryCommand}"
+                                                  Visibility="{Binding ShowTeamEditorItems, Converter={StaticResource BoolToVisibility}}" />
                                     </ContextMenu>
                                 </Button.ContextMenu>
                             </Button>

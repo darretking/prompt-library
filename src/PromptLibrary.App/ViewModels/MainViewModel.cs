@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -153,6 +155,11 @@ public sealed class MainViewModel : ObservableObject
         EditTeamCommand = new RelayCommand(StartEditingTeam);
         DoneEditingTeamCommand = new RelayCommand(() => StopEditingTeam());
         TeamHistoryCommand = new RelayCommand(() => OpenTeamHistory(review: false));
+        CopyInviteCommand = new RelayCommand(CopyInvite);
+        TeamNoteCommand = new RelayCommand(EditTeamNote);
+        TeamFillInValuesCommand = new RelayCommand(EditTeamFillInValues);
+        TeamCheckCommand = new RelayCommand(CheckTeamLibrary);
+        DismissTeamNoteCommand = new RelayCommand(DismissTeamNote);
         ReviewConflictCommand = new RelayCommand(() => OpenTeamHistory(review: true));
 
         if (_host.Updates is { } updates)
@@ -467,8 +474,42 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>The "Read only" note's tooltip: why this PC can't edit the team library.</summary>
     public string TeamReadOnlyReason => TeamEditBlockedText ?? "You can't change files in this folder";
 
-    /// <summary>The Team header's ⋯ menu ("Restore an older version…"): for editors only.</summary>
-    public bool ShowTeamMoreMenu => IsTeamSide && TeamLoaded && _team!.Service.CanEdit;
+    /// <summary>The Team header's ⋯ menu: Copy invite is for every member.</summary>
+    public bool ShowTeamMoreMenu => IsTeamSide && TeamLoaded;
+
+    /// <summary>The ⋯ menu's other items (note, fill-in values, check, restore) are for editors only.</summary>
+    public bool ShowTeamEditorItems => IsTeamSide && TeamLoaded && _team!.Service.CanEdit;
+
+    /// <summary>Copy invite: copies a message that tells a colleague how to get the app and join this team library.</summary>
+    public IRelayCommand CopyInviteCommand { get; }
+
+    /// <summary>Note for everyone…</summary>
+    public IRelayCommand TeamNoteCommand { get; }
+
+    /// <summary>Fill-in values for everyone…</summary>
+    public IRelayCommand TeamFillInValuesCommand { get; }
+
+    /// <summary>Check the team library</summary>
+    public IRelayCommand TeamCheckCommand { get; }
+
+    /// <summary>The × on the note line: hides this note until its text changes.</summary>
+    public IRelayCommand DismissTeamNoteCommand { get; }
+
+    /// <summary>The muted line under the Team header, <c>Note: text · 2 days ago</c>; null with no note or once hidden.</summary>
+    public string? TeamNoteLine
+    {
+        get
+        {
+            if (!IsTeamSide || _team?.Service.Team?.Note is not { } note || string.IsNullOrWhiteSpace(note.Text)) return null;
+            if (_host.Settings.SeenTeamNote == NoteHash(note.Text)) return null;
+            var text = string.Join(' ', note.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            return $"Note: {text} · {When(note.At)}";
+        }
+    }
+
+    public bool ShowTeamNoteLine => TeamNoteLine is not null;
+
+    private static string NoteHash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
 
     /// <summary>"Restore an older version…": lists the team file's history (and any sync conflict copies) to restore one.</summary>
     public IRelayCommand TeamHistoryCommand { get; }
@@ -1921,46 +1962,135 @@ public sealed class MainViewModel : ObservableObject
             }
         }
 
-        void Save(bool retry)
-        {
-            if (!Apply()) return;
-            var baseHash = team.IsEditing ? team.BaseHash : team.Service.CurrentHash;
-            team.SaveWithoutEditing();
-            if (team.PendingSave is not { } pending) return;
-            _teamSaving = true;
-            pending.ContinueWith(task =>
-            {
-                var result = task.IsCompletedSuccessfully
-                    ? task.Result
-                    : new TeamSaveResult(TeamSaveStatus.Failed, null, "Couldn't save the team library.");
-                _dispatcher.BeginInvoke(() =>
-                {
-                    _teamSaving = false;
-                    if (_team is not { } current) return;
-                    switch (result.Status)
-                    {
-                        case TeamSaveStatus.Saved:
-                            current.Rebase();
-                            _host.RefreshQuickMenu();
-                            ShowStatus($"Copied to team prompts · {added}", FeedbackDuration);
-                            break;
-                        case TeamSaveStatus.ChangedByOther when current.Service.CurrentHash != baseHash:
-                            current.Rebase(); // the service has re-read the file
-                            if (!retry)
-                                Save(retry: true);
-                            else
-                                _dialogs.ShowMessage(ChangeRedoMessage);
-                            break;
-                        default:
-                            current.Service.RevertToLoaded();
-                            _dialogs.ShowMessage(result.Message ?? "Couldn't save the team library.");
-                            break;
-                    }
-                });
-            }, TaskScheduler.Default);
-        }
+        SaveTeamChange(team, Apply, () => $"Copied to team prompts · {added}");
+    }
 
-        Save(retry: false);
+    /// <summary>
+    /// Applies a change to the loaded team library and saves it guarded, without edit mode. When someone else changed the
+    /// file the library is reloaded and the change applied once more; a second refusal shows the conflict text.
+    /// </summary>
+    private void SaveTeamChange(TeamDocument team, Func<bool> apply, Func<string> savedStatus, bool retry = false)
+    {
+        if (!apply()) return;
+        var baseHash = team.IsEditing ? team.BaseHash : team.Service.CurrentHash;
+        team.SaveWithoutEditing();
+        if (team.PendingSave is not { } pending) return;
+        _teamSaving = true;
+        pending.ContinueWith(task =>
+        {
+            var result = task.IsCompletedSuccessfully
+                ? task.Result
+                : new TeamSaveResult(TeamSaveStatus.Failed, null, "Couldn't save the team library.");
+            _dispatcher.BeginInvoke(() =>
+            {
+                _teamSaving = false;
+                if (_team is not { } current) return;
+                switch (result.Status)
+                {
+                    case TeamSaveStatus.Saved:
+                        current.Rebase();
+                        _host.RefreshQuickMenu();
+                        ShowStatus(savedStatus(), FeedbackDuration);
+                        break;
+                    case TeamSaveStatus.ChangedByOther when current.Service.CurrentHash != baseHash:
+                        current.Rebase(); // the service has re-read the file
+                        if (!retry)
+                            SaveTeamChange(current, apply, savedStatus, retry: true);
+                        else
+                            _dialogs.ShowMessage(ChangeRedoMessage);
+                        break;
+                    default:
+                        current.Service.RevertToLoaded();
+                        _dialogs.ShowMessage(result.Message ?? "Couldn't save the team library.");
+                        break;
+                }
+            });
+        }, TaskScheduler.Default);
+    }
+
+    // ---- Copy invite, team note, fill-in values, team check (the Team header's ⋯ menu) ----------------
+
+    private void RaiseTeamNote()
+    {
+        OnPropertyChanged(nameof(TeamNoteLine));
+        OnPropertyChanged(nameof(ShowTeamNoteLine));
+    }
+
+    /// <summary>Copy invite: the invite text with the clouds found on this PC, line breaks as Windows wants them.</summary>
+    private void CopyInvite()
+    {
+        if (!IsTeamSide || _team?.Service.Source is not { } source) return;
+        var text = TeamInvite.Build(source, _host.DetectCloudFolders()).Replace("\r\n", "\n").Replace("\n", "\r\n");
+        if (_host.CopyText(text, "Team invite", notifyInTray: false))
+            ShowStatus("Invite copied. Paste it into an email or chat.", FeedbackDuration);
+    }
+
+    /// <summary>Note for everyone…: sets, changes or removes the note members see under the Team header.</summary>
+    private void EditTeamNote()
+    {
+        if (!IsTeamSide || _teamSaving || _team is not { } team || !TeamLoaded || !team.Service.CanEdit) return;
+        var dialog = new TeamNoteViewModel(team.Service.Team?.Note?.Text);
+        _dialogs.ShowTeamNote(dialog);
+        if (dialog.Choice == TeamNoteChoice.None) return;
+
+        var save = dialog.Choice == TeamNoteChoice.Save;
+        var text = dialog.NoteText;
+        SaveTeamChange(team, () =>
+        {
+            if (team.Service.Team is not { } library) return false;
+            library.Note = save ? new TeamNote(text, DateTimeOffset.Now) : null;
+            return true;
+        }, () =>
+        {
+            RaiseTeamNote();
+            return save ? "Note saved for everyone" : "Note removed";
+        });
+    }
+
+    private void DismissTeamNote()
+    {
+        if (_team?.Service.Team?.Note is not { } note) return;
+        _host.Settings.SeenTeamNote = NoteHash(note.Text);
+        _host.SaveSettings();
+        RaiseTeamNote();
+    }
+
+    /// <summary>Fill-in values for everyone…: values every member starts with in a field of that name.</summary>
+    private void EditTeamFillInValues()
+    {
+        if (!IsTeamSide || _teamSaving || _team is not { } team || !TeamLoaded || !team.Service.CanEdit) return;
+        var dialog = new TeamFillInValuesViewModel(team.Library.Prompts.Select(p => p.Text),
+            team.Service.Team?.FillInValues ?? new Dictionary<string, string>());
+        if (!_dialogs.ShowTeamFillInValues(dialog)) return;
+
+        var values = dialog.Result;
+        SaveTeamChange(team, () =>
+        {
+            if (team.Service.Team is not { } library) return false;
+            library.FillInValues = new Dictionary<string, string>(values);
+            return true;
+        }, () => "Fill-in values saved for everyone");
+    }
+
+    /// <summary>Check the team library: lists problems; choosing one opens it (in edit mode) on the Team side.</summary>
+    private void CheckTeamLibrary()
+    {
+        if (!IsTeamSide || _team is not { } team || !TeamLoaded || !team.Service.CanEdit) return;
+        var dialog = new TeamCheckViewModel(TeamHealthCheck.Run(team.Library));
+        _dialogs.ShowTeamCheck(dialog);
+        if (dialog.Chosen is { } issue) GoToIssue(issue);
+    }
+
+    private void GoToIssue(HealthIssue issue)
+    {
+        if (!IsTeamSide || _team is not { } team || !TeamLoaded) return;
+        if (!ProceedOrDefer(() => GoToIssue(issue))) return;
+        if (!team.IsEditing && team.Service.CanEdit) StartEditingTeam();
+        if (!string.IsNullOrWhiteSpace(_searchText)) SearchText = "";
+
+        var prompt = issue.PromptId is { } id ? team.Library.Prompts.FirstOrDefault(p => p.Id == id) : null;
+        SelectCategoryNow(prompt?.CategoryId ?? issue.CategoryId);
+        if (prompt is not null) OpenPrompt(prompt, byUser: true);
     }
 
     /// <summary>Pins or unpins <paramref name="row"/>'s prompt (the editor's when null). Pins are capped at 10.</summary>
@@ -2352,6 +2482,8 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(TeamEditBlockedText));
         OnPropertyChanged(nameof(ShowTeamEditBlocked));
         OnPropertyChanged(nameof(ShowTeamMoreMenu));
+        OnPropertyChanged(nameof(ShowTeamEditorItems));
+        RaiseTeamNote();
         OnPropertyChanged(nameof(ShowConflictBar));
         OnPropertyChanged(nameof(ShowTeamBar));
         OnPropertyChanged(nameof(ShowBothTeamNotices));
