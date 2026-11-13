@@ -69,7 +69,7 @@ public sealed class TeamLibraryService : IDisposable
     {
         _seen = seenStore ?? new TeamSeenStore(Path.Combine(Path.GetDirectoryName(cachePath) ?? "", "team-seen.json"));
         _seen.Load();
-        _parse = parseInput ?? TeamSource.FromInput;
+        _parse = parseInput ?? (input => TeamSource.FromInput(input));
         _reader = new TeamReader(http, appVersion);
         _cachePath = cachePath;
         _settings = settings;
