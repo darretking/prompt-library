@@ -731,7 +731,7 @@ public sealed class MainWindowPremiumTests : IDisposable
         public ExchangePick? ChooseExportTarget() => Pick;
         public void ShowMessage(string message) => Messages.Add(message);
         public ImportResult? LastImport { get; private set; }
-        public void ShowImportResults(ImportResult result) { LastImport = result; Messages.Add(result.Summary); }
+        public void ShowImportResults(ImportResult result, bool intoTeam = false) { LastImport = result; Messages.Add(result.Summary); }
         public bool ShowTeamHistory(TeamLibraryService service, bool review) => false;
     }
 }

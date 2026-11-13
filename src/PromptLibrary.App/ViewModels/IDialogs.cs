@@ -1,6 +1,7 @@
 using PromptLibrary.App.Team;
 using PromptLibrary.Core.Exchange;
 using PromptLibrary.Core.Models;
+using PromptLibrary.Core.Team;
 
 namespace PromptLibrary.App.ViewModels;
 
@@ -40,11 +41,29 @@ public interface IDialogs
     void ShowMessage(string message);
 
     /// <summary>Says what an import did: counts and, for files that failed, a list of file and reason.</summary>
-    void ShowImportResults(ImportResult result) => ShowMessage(result.Summary);
+    void ShowImportResults(ImportResult result, bool intoTeam = false) => ShowMessage(result.Summary);
 
     /// <summary>
     /// Restore an older version of the team library (or, with <paramref name="review"/>, review the other versions sync
     /// left beside it). True when a version was restored.
     /// </summary>
     bool ShowTeamHistory(TeamLibraryService service, bool review);
+
+    /// <summary>Shows what changed in a prompt (the changed fields, then a line diff of the text) with a Close button.</summary>
+    void ShowChanges(string title, string caption, TeamChangeModel change) { }
+
+    /// <summary>Note for everyone: the dialog fills <see cref="TeamNoteViewModel.Choice"/>.</summary>
+    void ShowTeamNote(TeamNoteViewModel dialog) { }
+
+    /// <summary>Fill-in values for everyone: true when Save was chosen (values are in <see cref="TeamFillInValuesViewModel.Result"/>).</summary>
+    bool ShowTeamFillInValues(TeamFillInValuesViewModel dialog) => false;
+
+    /// <summary>Check the team library: the dialog sets <see cref="TeamCheckViewModel.Chosen"/> when a row was clicked.</summary>
+    void ShowTeamCheck(TeamCheckViewModel dialog) { }
+
+    /// <summary>Suggest for the team: true when Send suggestion was chosen.</summary>
+    bool ShowSuggest(SuggestViewModel dialog) => false;
+
+    /// <summary>The editors' Suggestions window (modal; closes with Close).</summary>
+    void ShowSuggestions(SuggestionsViewModel dialog) { }
 }

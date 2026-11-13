@@ -289,13 +289,15 @@ public sealed class AppHost : IMainHost, IDisposable
         {
             var version = AppVersion.FromSystemVersion(typeof(AppHost).Assembly.GetName().Version ?? new Version(0, 0, 0));
             Team = new TeamLibraryService(_http, version.ToString(), Paths.TeamCacheFile, Settings, () => Library,
-                SaveSettings, () => DateTimeOffset.Now, ex => CrashLog.Append(Paths.CrashLogFile, ex, DateTime.Now));
+                SaveSettings, () => DateTimeOffset.Now, ex => CrashLog.Append(Paths.CrashLogFile, ex, DateTime.Now),
+                seenStore: new PromptLibrary.Core.Team.TeamSeenStore(Paths.TeamSeenFile));
             Team.Changed += (_, _) => RefreshQuickMenu();
             Team.Start();
             // With a team library joined its first good read prunes (an old offline copy must not); with none, drop the
             // usage of prompts that are gone now. Only usage: team pins, hides and seen entries stay for a later re-join.
             if (Team.Source is null && UsageTracker.Prune(Settings, Library.Prompts.Select(p => p.Id)) > 0)
                 SaveSettings();
+            _ = ApplyTeamPresetAsync(Team);
         }
         catch (Exception ex)
         {
@@ -431,7 +433,8 @@ public sealed class AppHost : IMainHost, IDisposable
         var willPaste = Settings.PasteAfterCopy && pick.ReturnTo != IntPtr.Zero;
         var filled = PasteFlow.Resolve(prompt.Text, tokens, text =>
         {
-            var model = new FillInViewModel(text, Settings, tokens, willPaste ? "Paste" : "Copy", prompt.Title, cancelLabel: "Cancel");
+            var model = new FillInViewModel(text, Settings, tokens, willPaste ? "Paste" : "Copy", prompt.Title, cancelLabel: "Cancel",
+                teamValues: Team?.Team?.FillInValues);
             var result = FillInDialog.AskForResult(_mainWindow, model);
             if (result is not null) SaveSettings(); // the typed values are remembered
             return result;
@@ -480,6 +483,42 @@ public sealed class AppHost : IMainHost, IDisposable
 
         Tray.ShowMessage(AppName, "Couldn't copy — clipboard busy. Try again.", isError: true);
         return false;
+    }
+
+    /// <summary>The installer's team source, joined quietly in the background (see <see cref="TeamPreset"/>).</summary>
+    private async Task ApplyTeamPresetAsync(TeamLibraryService team)
+    {
+        try
+        {
+            await TeamPreset.ApplyAsync(new RegistryTeamPresetSource(), Settings, team.Source is not null,
+                team.JoinAsync, SaveSettings);
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Append(Paths.CrashLogFile, ex, DateTime.Now);
+        }
+    }
+
+    private bool _joinDialogOpen;
+
+    /// <summary>
+    /// A team file or link came from the command line: bring up the main window and open Join with it in the box.
+    /// The user still presses Join. Runs on the UI thread. With Join already open the window is just brought forward.
+    /// </summary>
+    public void ShowJoinPrefilled(string text)
+    {
+        if (_exiting) return;
+        ShowMainWindow();
+        if (_joinDialogOpen || Team is null) return;
+        _joinDialogOpen = true;
+        try
+        {
+            TeamDialogs.Join(_mainWindow is { IsVisible: true } ? _mainWindow : null, this, text);
+        }
+        finally
+        {
+            _joinDialogOpen = false;
+        }
     }
 
     /// <summary>Shows the one main window, creating it the first time.</summary>

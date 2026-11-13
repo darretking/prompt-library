@@ -100,6 +100,7 @@
             <Setter Property="Padding" Value="16,0" />
             <Setter Property="MinHeight" Value="32" />
             <Setter Property="MinWidth" Value="80" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
             <Setter Property="Template">
                 <Setter.Value>
@@ -110,7 +111,7 @@
                                 CornerRadius="{StaticResource Radius}"
                                 Padding="{TemplateBinding Padding}"
                                 SnapsToDevicePixels="True">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"
                                               RecognizesAccessKey="True" />
                         </Border>
                     </ControlTemplate>

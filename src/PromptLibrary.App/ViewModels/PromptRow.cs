@@ -21,6 +21,7 @@ public enum LibrarySide
 public sealed class PromptRow : ObservableObject
 {
     private bool _isPinned;
+    private bool _isFeatured;
     private TeamMarker _marker;
 
     public PromptRow(Prompt prompt, bool isTeam, bool isHidden, bool isPinned, TeamMarker marker, bool showTeamIcon,
@@ -71,6 +72,13 @@ public sealed class PromptRow : ObservableObject
 
     /// <summary>A prompt hidden from the menu can't be pinned (the row menu's Pin is off).</summary>
     public bool CanPin => !IsHidden;
+
+    /// <summary>True for a team prompt the editors feature (the row shows a small star).</summary>
+    public bool IsFeatured
+    {
+        get => _isFeatured;
+        set => SetProperty(ref _isFeatured, value);
+    }
 
     public bool IsPinned
     {

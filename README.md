@@ -18,7 +18,7 @@ Your prompt is pasted right where you were typing.
   <img src="https://img.shields.io/badge/no%20account-F5A524" alt="No account needed" />
   <img src="https://img.shields.io/badge/no%20tracking-F5A524" alt="No tracking" />
   <img src="https://img.shields.io/badge/installs%20without-admin%20rights-1B2230" alt="Installs without admin rights" />
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.4-4338CA" alt="Version 1.2.4, see the changelog" /></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.0-4338CA" alt="Version 1.3.0, see the changelog" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/free%20%26%20open%20source-GPL--3.0-4338CA" alt="Free and open source, GPL-3.0 licence" /></a>
 </p>
 
@@ -36,6 +36,8 @@ Your prompt is pasted right where you were typing.
 
 <br/>
 
+> **New in 1.3.0:** more for teams: suggest prompts to the team, see what changed, featured prompts, shared fill-in values, a team note, easier joining and a check of the team library.
+>
 > **New in 1.2.4:** with the shortcut set to open the menu, prompts with fields open the fill-in form and dynamic tokens fill, just as in the search window.
 >
 > **New in 1.2.3:** the prompt box now fills the editor down to the bottom of the window, and long prompts scroll inside it.
@@ -251,6 +253,12 @@ One person keeps the team's proven prompts in a shared folder (a network drive, 
 </details>
 
 <details>
+  <summary><b>Suggestions, featured prompts and other team tools</b></summary>
+  <br/>
+  Members choose <b>Suggest for the team…</b> on one of their own prompts; editors review them under <b>Suggestions</b> on the Team side. Editors can also <b>Copy to team prompts</b>, feature up to 10 prompts (they get a star and their own category), set shared fill-in values, leave a team note, invite people and run <b>Check the team library</b>, all from the Team <b>⋯</b> menu. When the team changes a prompt you have seen, <b>What changed</b> shows exactly what; when it changes a prompt you copied, your copy offers to update.
+</details>
+
+<details>
   <summary><b>What if the team folder can't be reached?</b></summary>
   <br/>
   Team prompts keep working from the last copy your PC saw. The Team side says when it last updated, with <b>Retry</b>. When the folder is back, new and changed prompts arrive by themselves.
@@ -260,6 +268,12 @@ One person keeps the team's proven prompts in a shared folder (a network drive, 
   <summary><b>What happens if I leave a team library?</b></summary>
   <br/>
   Settings → Team prompts → <b>Leave team library</b>. The team's prompts disappear from your PC; any copies you made with <b>Make my copy</b> stay in your own prompts. Nothing changes for the rest of the team.
+</details>
+
+<details>
+  <summary><b>For IT: pre-set the team library</b></summary>
+  <br/>
+  The installer can point every PC at the team library. Run <code>msiexec /i PromptLibrary-Setup.msi TEAMSOURCE="\\server\share\Prompts"</code>. For a synced folder, a path under the user's profile works too: <code>TEAMSOURCE="OneDrive - Acme\Shared\Prompts"</code>. The installer also adds Prompt Library to Explorer's <b>Open with</b> list for <code>.json</code> files, without making it the default app.
 </details>
 
 <br/>

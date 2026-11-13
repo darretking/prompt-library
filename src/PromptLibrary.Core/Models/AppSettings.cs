@@ -51,6 +51,12 @@ public class AppSettings
     /// <summary>True once the first copy of the team library has been recorded as already seen.</summary>
     public bool TeamBaselineTaken { get; set; }
 
+    /// <summary>The preset team source (from the install) that was already offered or joined, so it is only offered once.</summary>
+    public string? PresetTeamSourceApplied { get; set; }
+
+    /// <summary>The team note text this PC has already seen (drives the "new note" marker).</summary>
+    public string? SeenTeamNote { get; set; }
+
     /// <summary>How often and when each prompt (personal or team) was last used.</summary>
     public Dictionary<Guid, PromptUsage> Usage { get => _usage; set => _usage = value ?? []; }
     private Dictionary<Guid, PromptUsage> _usage = [];

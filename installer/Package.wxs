@@ -56,6 +56,27 @@
       <RemoveFolder Id="RemoveLocalProgramsFolder" Directory="LocalProgramsFolder" On="uninstall" />
     </Component>
 
+    <!-- For IT roll-outs: msiexec /i PromptLibrary-Setup.msi TEAMSOURCE="\\server\share\Prompts". A non-empty value
+         is written to HKCU\Software\Prompt Library\TeamSource for the app to read; empty writes nothing, so an
+         existing value is never cleared. Removed on uninstall (it is install config, not the app's own settings). -->
+    <Property Id="TEAMSOURCE" Secure="yes" />
+    <Component Id="TeamSourcePreset" Directory="INSTALLFOLDER" Guid="6B1F5E2A-3C94-4D7B-A8E0-52F1C9D07A31"
+               Condition="TEAMSOURCE">
+      <RegistryValue Root="HKCU" Key="Software\Prompt Library" Name="TeamSource" Type="string"
+                     Value="[TEAMSOURCE]" KeyPath="yes" />
+    </Component>
+
+    <!-- Explorer's "Open with" list for .json files, without becoming the default app: only the Applications
+         registration, no handler on .json itself and no OpenWithProgids. Removed on uninstall. -->
+    <Component Id="OpenWithJson" Directory="INSTALLFOLDER" Guid="E3A8D4C1-7F20-4B65-9C2D-18B6F0A47E95">
+      <RegistryKey Root="HKCU" Key="Software\Classes\Applications\PromptLibrary.exe">
+        <RegistryValue Name="FriendlyAppName" Type="string" Value="Prompt Library" KeyPath="yes" />
+        <RegistryValue Key="SupportedTypes" Name=".json" Type="string" Value="" />
+        <RegistryValue Key="shell\open\command" Type="string"
+                       Value="&quot;[INSTALLFOLDER]PromptLibrary.exe&quot; &quot;%1&quot;" />
+      </RegistryKey>
+    </Component>
+
     <!-- Closes a running copy before its files are replaced or removed (install, upgrade, uninstall). The app
          answers WM_CLOSE by exiting normally, which includes its exit backup (at most 10 s), so this waits up to
          12 s. No TerminateProcess: that needs WiX's deferred action, which can't run this early (see below); if
@@ -84,6 +105,8 @@
 
     <Feature Id="Main">
       <ComponentRef Id="AppExe" />
+      <ComponentRef Id="TeamSourcePreset" />
+      <ComponentRef Id="OpenWithJson" />
     </Feature>
 
     <UIRef Id="PromptLibraryUI" />

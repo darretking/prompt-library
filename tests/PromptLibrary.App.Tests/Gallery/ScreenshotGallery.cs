@@ -15,6 +15,7 @@ using PromptLibrary.Core.History;
 using PromptLibrary.Core.Hotkeys;
 using PromptLibrary.Core.Models;
 using PromptLibrary.Core.Seed;
+using PromptLibrary.Core.Team;
 using PromptLibrary.Core.Templates;
 
 namespace PromptLibrary.App.Tests.Gallery;
@@ -62,6 +63,7 @@ public sealed class ScreenshotGallery
             }
         }
 
+        CleanUpTeam();
         Directory.CreateDirectory(_out);
         File.WriteAllLines(Path.Combine(_out, "_log.txt"), _written.Concat(_failures.Select(f => "FAILED " + f)));
         Assert.True(_failures.Count == 0, string.Join(Environment.NewLine, _failures));
@@ -151,8 +153,216 @@ public sealed class ScreenshotGallery
         yield return ("21-main-minimum-size", n => Main(n, w => { }, width: 860, height: 520));
         yield return ("22-toast", n => Toast(n, "Pasted: Plan a trip itinerary", Core.Clipboard.ToastKind.Success));
         yield return ("23-toast-error", n => Toast(n, Core.Clipboard.PasteDecision.CouldntPasteText, Core.Clipboard.ToastKind.Error));
-        // The team side is skipped: it needs a joined TeamLibraryService (file-backed team source and cache), which can't be
-        // built from the sandbox without product changes.
+
+        // ---- The team side: a real TeamLibraryService joined to a team file in a temp folder (see TeamHost) ----
+        yield return ("t01-join-found", TeamJoin);
+        yield return ("t02-note", n => Window(n, new TeamNoteDialog(new TeamNoteViewModel(
+            "Pricing prompts were refreshed in November. Ask Dana in Sales Ops if a number looks off.")), null, null));
+        yield return ("t02b-note-new", n => Window(n, new TeamNoteDialog(new TeamNoteViewModel(null)), null, null));
+        yield return ("t03-fill-in-values", n => Window(n, new TeamFillInValuesDialog(new TeamFillInValuesViewModel(
+            ["Write a follow-up email to {client} about {topic}.", "Draft a reply to {client}'s complaint about {issue}."],
+            new Dictionary<string, string> { ["client"] = "the customer" })), null, null));
+        yield return ("t04-team-check", n => Window(n, new TeamCheckDialog(new TeamCheckViewModel(
+        [
+            new(HealthIssueKind.DuplicateTitle, Guid.NewGuid(), null, "Two prompts are called \"Follow-up email\" (Sales)."),
+            new(HealthIssueKind.NoDescription, Guid.NewGuid(), null, "\"Complaint reply\" has no description."),
+            new(HealthIssueKind.EmptyCategory, null, Guid.NewGuid(), "The category \"Onboarding\" has no prompts."),
+        ])), null, null));
+        yield return ("t04b-team-check-empty", n => Window(n, new TeamCheckDialog(new TeamCheckViewModel([])), null, null));
+        yield return ("t05-suggest", n => Window(n, new SuggestDialog(new SuggestViewModel("Renewal email", "Sales",
+            ["Sales", "Support"], "Ana")), null, null));
+        yield return ("t06-suggestions", n => Suggestions(n, 2));
+        yield return ("t06b-suggestions-empty", n => Suggestions(n, 0));
+        yield return ("t07-changes", TeamChanges);
+        yield return ("t08-fill-in-team-value", TeamValueFillIn);
+        yield return ("t10-team-side", n => TeamMain(n, TeamHost(editor: false, updated: true), w =>
+            w.Vm.SelectedPrompt = w.Vm.Prompts.First(r => r.Title == "Follow-up email")));
+        yield return ("t10b-team-side-editor", n => TeamMain(n, TeamHost(editor: true, updated: true, suggestions: 2), w =>
+        {
+            w.Vm.SelectedPrompt = w.Vm.Prompts.First(r => r.Title == "Follow-up email");
+            WaitFor(() => w.Vm.SuggestionCount == 2);
+        }));
+        yield return ("t11-team-featured", n => TeamMain(n, TeamHost(editor: false, featured: true), w =>
+            w.Vm.SelectedCategory = w.Vm.Categories.First(c => c.IsFeatured)));
+        yield return ("t12-team-menu", n => TeamMain(n, TeamHost(editor: true), w => { },
+            after: win => Menu(n, FindButton(win, "More team library actions"), win)));
+        yield return ("t13-personal-banner", n =>
+        {
+            var host = TeamHost(editor: false, staleCopy: true);
+            Main(n, w =>
+            {
+                w.Vm.SelectedCategory = w.Vm.Categories.First(c => c.Name == "Sales");
+                w.Vm.SelectedPrompt = w.Vm.Prompts.First(r => r.Title == "Renewal email");
+            }, host: host);
+        });
+        yield return ("t14-personal-menu", n => Main(n, w => { }, host: TeamHost(editor: true), after: win => Menu(n, win.OverflowButton, win)));
+        yield return ("t14b-personal-menu-member", n => Main(n, w => { }, host: TeamHost(editor: false), after: win => Menu(n, win.OverflowButton, win)));
+    }
+
+    // ---- Team scenes ---------------------------------------------------------------------------
+
+    private static readonly System.Net.Http.HttpClient Http = new();
+    private readonly List<string> _roots = [];
+    private readonly List<Team.TeamLibraryService> _services = [];
+
+    /// <summary>The team side's screens: opens the Team side, then runs <paramref name="setup"/>.</summary>
+    private void TeamMain(string name, AppHost host, Action<World> setup, Action<MainWindow>? after = null) =>
+        Main(name, w =>
+        {
+            w.Vm.ShowTeamCommand.Execute(null);
+            Pump();
+            setup(w);
+        }, host: host, after: after);
+
+    private static void WaitFor(Func<bool> done, int seconds = 10)
+    {
+        var until = DateTime.UtcNow.AddSeconds(seconds);
+        while (!done() && DateTime.UtcNow < until) Pump();
+    }
+
+    /// <summary>
+    /// A sandbox host joined to a real team file in a temp folder: team Acme best practice, categories Sales and Support.
+    /// <paramref name="editor"/> false makes the file read-only (a member); <paramref name="updated"/> changes two prompts after
+    /// the join (Updated, with What changed) and leaves one unseen (New); <paramref name="staleCopy"/> adds a personal copy of
+    /// a team prompt that the team has since changed.
+    /// </summary>
+    private AppHost TeamHost(bool editor, bool updated = false, int suggestions = 0, bool featured = false, bool staleCopy = false)
+    {
+        var host = NewHost(populated: true);
+        var root = Path.Combine(Path.GetTempPath(), "pl-gallery-team-" + Guid.NewGuid().ToString("N"));
+        _roots.Add(root);
+        var folder = Path.Combine(root, "team");
+        Directory.CreateDirectory(folder);
+        var teamPath = Path.Combine(folder, Core.Team.TeamFile.FileName);
+
+        var now = DateTimeOffset.Now;
+        var team = new Core.Team.TeamLibrary { Name = "Acme best practice", UpdatedAt = now };
+        var sales = new Category { Id = Guid.NewGuid(), Name = "Sales" };
+        var support = new Category { Id = Guid.NewGuid(), Name = "Support" };
+        team.Content.Categories.AddRange([sales, support]);
+        Prompt T(Category c, string title, string description, string text) => new()
+        {
+            Id = Guid.NewGuid(), CategoryId = c.Id, Title = title, Description = description, Text = text,
+            CreatedAt = now.AddDays(-20), UpdatedAt = now.AddDays(-20),
+        };
+        var followUp = T(sales, "Follow-up email", "After a meeting", "Write a follow-up email to {client} about {topic}.\nKeep it short and friendly.");
+        var discovery = T(sales, "Discovery questions", "First call", "List ten discovery questions for {client}.");
+        var renewal = T(sales, "Renewal email", "Contract renewals", "Write a renewal email for {client}.\nMention the new pricing.");
+        var complaint = T(support, "Complaint reply", "Empathetic tone", "Reply to this complaint about {issue}: {clipboard}");
+        var refund = T(support, "Refund policy answer", "Standard wording", "Explain our refund policy to {client}.");
+        team.Content.Prompts.AddRange([followUp, discovery, renewal, complaint, refund]);
+        if (featured) { followUp.Featured = true; complaint.Featured = true; discovery.Featured = true; }
+        team.Note = new Core.Team.TeamNote("Pricing prompts were refreshed in November.", now.AddDays(-2));
+        team.FillInValues = new Dictionary<string, string> { ["client"] = "the customer", ["issue"] = "the late delivery" };
+        File.WriteAllText(teamPath, Core.Team.TeamFile.Serialize(team));
+        if (!editor) File.SetAttributes(teamPath, FileAttributes.ReadOnly);
+
+        var cache = Path.Combine(root, "cache");
+        var service = new Team.TeamLibraryService(Http, "1.0.0", Path.Combine(cache, "team-cache.json"), host.Settings,
+            () => host.Library, () => true, () => DateTimeOffset.Now, _ => { }, TimeSpan.FromMilliseconds(50),
+            seenStore: new Core.Team.TeamSeenStore(Path.Combine(cache, "team-seen.json")));
+        _services.Add(service);
+        var join = service.JoinAsync(folder);
+        WaitFor(() => join.IsCompleted);
+        if (!join.IsCompleted || !join.Result.Success) throw new InvalidOperationException("team join failed: " + (join.IsCompleted ? join.Result.Message : "timeout"));
+        typeof(AppHost).GetProperty(nameof(AppHost.Team))!.SetValue(host, service);
+        var live = service.Team!.Content.Prompts;
+        Prompt Live(Prompt p) => live.First(x => x.Id == p.Id);
+
+        if (staleCopy)
+        {
+            var mySales = host.Library.Categories.FirstOrDefault(c => c.Name == "Sales");
+            if (mySales is null) host.Library.Categories.Add(mySales = new Category { Id = Guid.NewGuid(), Name = "Sales" });
+            host.Library.Prompts.Add(new Prompt
+            {
+                Id = Guid.NewGuid(), CategoryId = mySales.Id, Title = renewal.Title, Description = renewal.Description, Text = renewal.Text,
+                CreatedAt = now.AddDays(-10), UpdatedAt = now.AddDays(-10),
+                SourceTeamPromptId = renewal.Id, SourceFingerprint = Core.Team.TeamUserState.ContentFingerprint(renewal),
+            });
+            Live(renewal).Text = "Write a renewal email for {client}.\nMention the new pricing and the 12-month option.";
+        }
+        if (updated)
+        {
+            Live(followUp).Text = "Write a follow-up email to {client} about {topic}.\nKeep it under 120 words and end with a clear next step.";
+            Live(complaint).Description = "Empathetic, apologise first";
+            host.Settings.SeenTeamPrompts.Remove(discovery.Id); // arrived since the last look: New
+        }
+        for (var i = 1; i <= suggestions; i++)
+            Core.Team.TeamSuggestions.TryWrite(teamPath, Suggestion($"Suggestion {i}", "Sales", i));
+        if (suggestions > 0) WaitFor(() => service.CanEdit);
+        return host;
+    }
+
+    private static Core.Team.Suggestion Suggestion(string title, string category, int i) => new(Guid.NewGuid(), title, "A description",
+        "Reply about {topic}.", ["pricing"], category, "From the field", i == 1 ? "Ana" : "Ben", Fixed.AddDays(-i));
+
+    private void TeamJoin(string name)
+    {
+        IReadOnlyList<Core.Team.FoundTeamFile> found =
+        [
+            new(@"C:\Users\Sam\OneDrive - Acme\Shared\Prompts\prompt-library-team.json", "Acme best practice", "OneDrive - Acme › Shared › Prompts"),
+            new(@"C:\Users\Sam\Dropbox\Sales team\prompt-library-team.json", "Sales playbook", "Dropbox › Sales team"),
+        ];
+        var vm = new TeamJoinViewModel(_ => Task.FromResult(new Team.TeamJoinResult(false, "")), _ => null, _ => Task.FromResult(found));
+        Window(name, new TeamJoinDialog(vm), null, null, beforeCapture: _ => WaitFor(() => vm.HasFound));
+    }
+
+    private void Suggestions(string name, int count)
+    {
+        Core.Team.Suggestion[] list = [.. Enumerable.Range(1, count).Select(i => new Core.Team.Suggestion(Guid.NewGuid(),
+            i == 1 ? "Renewal email" : "Escalation checklist", "For contracts that end this quarter", "Write a renewal email for {client}.\nMention {date}.",
+            ["sales"], i == 1 ? "Sales" : "Onboarding", "Used this on the Acme renewal.", i == 1 ? "Ana" : "Ben", Fixed.AddDays(-i)))];
+        var vm = new SuggestionsViewModel(@"C:\Team\prompt-library-team.json", list, ["Sales", "Support"], Fixed, (_, _, _) => { });
+        Window(name, new SuggestionsWindow(vm), null, null);
+    }
+
+    private void TeamChanges(string name)
+    {
+        var host = NewHost(true);
+        var old = new Prompt { Title = "Follow-up email", Description = "After a meeting", Text = "Write a follow-up email to {client}.\nKeep it short." };
+        var now = new Prompt { Title = "Follow-up email", Description = "After a sales call", Text = "Write a follow-up email to {client} about {topic}.\nKeep it short.\nEnd with a clear next step." };
+        var change = Core.Team.TeamChange.Between(old, "Sales", now, "Sales");
+        Window(name, new ChangesWindow(host, new ChangesViewModel("Follow-up email", "Changed by the team since you last looked", change)), null, null);
+    }
+
+    private void TeamValueFillIn(string name)
+    {
+        var host = NewHost(true);
+        var trip = host.Library.Prompts.First(p => p.Title == "Plan a trip itinerary");
+        var model = new FillInViewModel(trip.Text, host.Settings, new Tokens(), "Copy", trip.Title, cancelLabel: "Cancel",
+            teamValues: new Dictionary<string, string> { ["destination"] = "Lisbon", ["budget"] = "mid-range" });
+        var dialog = (Window)Activator.CreateInstance(typeof(FillInDialog),
+            BindingFlags.Instance | BindingFlags.NonPublic, null, [model], null)!;
+        Window(name, dialog, null, null);
+    }
+
+    private static Button FindButton(DependencyObject root, string automationName)
+    {
+        Button? hit = null;
+        void Walk(DependencyObject o)
+        {
+            if (hit is not null) return;
+            if (o is Button b && System.Windows.Automation.AutomationProperties.GetName(b) == automationName) { hit = b; return; }
+            foreach (var c in LogicalTreeHelper.GetChildren(o).OfType<DependencyObject>().Concat(VisualChildren(o))) Walk(c);
+        }
+        Walk(root);
+        return hit ?? throw new InvalidOperationException("no button named " + automationName);
+    }
+
+    private void CleanUpTeam()
+    {
+        foreach (var s in _services) try { s.Dispose(); } catch (Exception) { }
+        _services.Clear();
+        foreach (var root in _roots)
+        {
+            try
+            {
+                foreach (var f in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)) File.SetAttributes(f, FileAttributes.Normal);
+                Directory.Delete(root, true);
+            }
+            catch (Exception) { }
+        }
+        _roots.Clear();
     }
 
     private sealed class World(MainWindow window, Prompt? trip)
@@ -162,9 +372,9 @@ public sealed class ScreenshotGallery
     }
 
     private void Main(string name, Action<World> setup, bool populated = true, double width = 1100, double height = 700,
-        Action<MainWindow>? after = null, bool capture = true, bool inactiveTitle = false)
+        Action<MainWindow>? after = null, bool capture = true, bool inactiveTitle = false, AppHost? host = null)
     {
-        var host = NewHost(populated);
+        host ??= NewHost(populated);
         var window = new MainWindow(host);
         var trip = host.Library.Prompts.FirstOrDefault(p => p.Title == "Plan a trip itinerary");
         var world = new World(window, trip);

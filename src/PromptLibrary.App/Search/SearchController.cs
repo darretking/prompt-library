@@ -43,6 +43,7 @@ internal sealed class SearchController : ISearchActions, IDisposable
 
     public Library Library => _host.Library;
     public Library? TeamLibrary => _host.Team?.Team?.Content;
+    public IReadOnlyDictionary<string, string>? TeamFillInValues => _host.Team?.Team?.FillInValues;
     public AppSettings Settings => _host.Settings;
     public ITokenValues Tokens => _tokens;
 

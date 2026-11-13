@@ -64,6 +64,7 @@ public sealed class TeamReader(HttpClient http, string appVersion)
         string text;
         try
         {
+            if (new FileInfo(path).Length > MaxBytes) return Fail(TeamReadStatus.NotATeamFile, NotTeamMessage);
             text = await File.ReadAllTextAsync(path, ct);
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException or UnauthorizedAccessException)
@@ -76,6 +77,7 @@ public sealed class TeamReader(HttpClient http, string appVersion)
             await Task.Delay(RetryDelay, ct);
             try
             {
+                if (new FileInfo(path).Length > MaxBytes) return Fail(TeamReadStatus.NotATeamFile, NotTeamMessage);
                 text = await File.ReadAllTextAsync(path, ct);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

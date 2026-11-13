@@ -54,6 +54,29 @@ public class SearchViewModelTests
         => vm.Items.Select(i => i.IsHeader ? $"[{i.Header}]" : i.Title).ToList();
 
     [Fact]
+    public void EmptyQuery_FeaturedAfterPinned_DedupedAndHiddenLeftOut() => Sta.Run(() =>
+    {
+        var host = new FakeActions();
+        var (lib, cat) = NewLibrary();
+        var (team, tcat) = NewLibrary();
+        host.Library = lib;
+        host.TeamLibrary = team;
+        var pinned = Add(team, tcat, "Pinned one");
+        var a = Add(team, tcat, "Feat A");
+        var hidden = Add(team, tcat, "Feat hidden");
+        Add(team, tcat, "Plain");
+        Add(lib, cat, "Mine");
+        pinned.Featured = a.Featured = hidden.Featured = true;
+        host.Settings.PinnedPromptIds.Add(pinned.Id);
+        host.Settings.HiddenTeamPromptIds.Add(hidden.Id);
+
+        var vm = Make(host);
+        vm.Reset();
+
+        Assert.Equal(["[Pinned]", "Pinned one", "[Featured]", "Feat A", "[All prompts]", "Mine", "Plain"], Shape(vm));
+    });
+
+    [Fact]
     public void EmptyQuery_PinnedThenRecentThenAllAlphabetical_NoDuplicates() => Sta.Run(() =>
     {
         var host = new FakeActions();

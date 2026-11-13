@@ -44,7 +44,8 @@ public partial class MainWindow : Window, IDialogs
         ViewModel.FillInResolver = text =>
         {
             var model = new FillInViewModel(text, _host.Settings, TokenValues.For(text), ViewModel.FillInPrimaryLabel,
-                ViewModel.FillInTitle, cancelLabel: "Cancel");
+                ViewModel.FillInTitle, cancelLabel: "Cancel",
+                teamValues: _host.Team?.Team?.FillInValues);
             var filled = FillInDialog.Ask(this, model);
             if (filled is not null) _host.SaveSettings();
             return filled;
@@ -309,16 +310,48 @@ public partial class MainWindow : Window, IDialogs
             ConfirmDialog.Inform(this, message);
     }
 
-    public void ShowImportResults(ImportResult result)
+    public void ShowImportResults(ImportResult result, bool intoTeam = false)
     {
         if (!_host.AsksNothing)
-            new ImportResultsDialog(result) { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog();
+            new ImportResultsDialog(result, intoTeam) { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog();
     }
 
     public bool ShowTeamHistory(TeamLibraryService service, bool review)
     {
         var window = new TeamHistoryWindow(_host, service, review) { Owner = this };
         return window.ShowDialog() == true;
+    }
+
+    public void ShowChanges(string title, string caption, PromptLibrary.Core.Team.TeamChangeModel change)
+    {
+        if (!_host.AsksNothing)
+            new ChangesWindow(_host, new ChangesViewModel(title, caption, change)) { Owner = this }.ShowDialog();
+    }
+
+    public void ShowTeamNote(TeamNoteViewModel dialog)
+    {
+        if (!_host.AsksNothing)
+            new TeamNoteDialog(dialog) { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog();
+    }
+
+    public bool ShowTeamFillInValues(TeamFillInValuesViewModel dialog)
+        => !_host.AsksNothing
+           && new TeamFillInValuesDialog(dialog) { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog() == true;
+
+    public void ShowTeamCheck(TeamCheckViewModel dialog)
+    {
+        if (!_host.AsksNothing)
+            new TeamCheckDialog(dialog) { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog();
+    }
+
+    public bool ShowSuggest(SuggestViewModel dialog)
+        => !_host.AsksNothing
+           && new SuggestDialog(dialog) { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog() == true;
+
+    public void ShowSuggestions(SuggestionsViewModel dialog)
+    {
+        if (!_host.AsksNothing)
+            new SuggestionsWindow(dialog) { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog();
     }
 
     // ---- Category rail -------------------------------------------------------------------------

@@ -85,8 +85,14 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <StackPanel MinHeight="56" Margin="0,0,0,4">
-                            <TextBlock Text="{Binding Label}" Style="{StaticResource FieldLabel}"
-                                       TextTrimming="CharacterEllipsis" />
+                            <!-- The label, with "Team value" at the right of the same row when the team filled it in. -->
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding TeamHint}" Style="{StaticResource MutedText}"
+                                           Margin="8,0,0,4" VerticalAlignment="Bottom"
+                                           Visibility="{Binding FromTeam, Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Text="{Binding Label}" Style="{StaticResource FieldLabel}"
+                                           TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
                             <TextBox Style="{StaticResource PlaceholderBox}" Tag="{Binding Hint}" Height="32"
                                      Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
                                      AutomationProperties.Name="{Binding Name}"

@@ -24,6 +24,16 @@ public static class TeamUserState
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(joined)));
     }
 
+    /// <summary>SHA-256 (hex) of title, description and text only, line endings normalised. Kept on a personal copy of a
+    /// team prompt (<see cref="Prompt.SourceFingerprint"/>): moving the team prompt to another category does not make the
+    /// copy out of date, and comparing it with the copy's own content tells whether the member edited the copy.</summary>
+    public static string ContentFingerprint(Prompt p)
+    {
+        static string N(string s) => (s ?? "").Replace("\r\n", "\n").Replace('\r', '\n');
+        var joined = N(p.Title) + "\n" + N(p.Description) + "\n" + N(p.Text);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(joined)));
+    }
+
     /// <summary>On first join, records every prompt as seen so nothing is marked, and sets the baseline flag.</summary>
     public static void TakeBaseline(AppSettings s, Library team)
     {

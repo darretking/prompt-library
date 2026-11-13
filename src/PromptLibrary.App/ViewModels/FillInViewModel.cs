@@ -12,11 +12,25 @@ public sealed class FillField : ObservableObject
     private bool _listOpen;
     private string? _highlighted;
 
-    public FillField(TemplateField field, string value)
+    public FillField(TemplateField field, string value, bool fromTeam = false)
     {
         Field = field;
         _value = value;
+        FromTeam = fromTeam;
+        StartValue = value;
     }
+
+    /// <summary>The value the field opened with (remembered, team or empty).</summary>
+    public string StartValue { get; }
+
+    /// <summary>True while the field still shows the team's value untouched: it is not saved as the member's own (T11).</summary>
+    public bool IsUntouchedTeamValue => FromTeam && string.Equals(_value, StartValue, StringComparison.Ordinal);
+
+    /// <summary>True when the starting value came from the team's shared fill-in values (shows the muted "Team value" hint).</summary>
+    public bool FromTeam { get; }
+
+    /// <summary>The muted line under a team-prefilled field.</summary>
+    public string TeamHint => "Team value";
 
     public TemplateField Field { get; }
 
@@ -113,7 +127,8 @@ public sealed class FillInViewModel : ObservableObject
     private readonly ITokenValues _tokens;
 
     public FillInViewModel(string promptText, AppSettings settings, ITokenValues tokens,
-        string primaryLabel = "Paste", string title = "", string cancelLabel = "Back")
+        string primaryLabel = "Paste", string title = "", string cancelLabel = "Back",
+        IReadOnlyDictionary<string, string>? teamValues = null)
     {
         _text = promptText ?? "";
         _settings = settings;
@@ -122,10 +137,11 @@ public sealed class FillInViewModel : ObservableObject
         Title = title;
         CancelLabel = cancelLabel;
 
+        var defaults = new FillInDefaults(settings.PlaceholderValues, teamValues);
         foreach (var field in PromptTemplate.Parse(_text))
         {
-            var remembered = settings.PlaceholderValues.TryGetValue(field.Name.ToLowerInvariant(), out var v) ? v : "";
-            var item = new FillField(field, remembered ?? "");
+            var found = defaults.TryGet(field.Name, out var start, out var fromTeam);
+            var item = new FillField(field, found ? start : "", found && fromTeam);
             item.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName != nameof(FillField.Value)) return;
@@ -218,11 +234,11 @@ public sealed class FillInViewModel : ObservableObject
     public event Action<string, int?>? Completed;
     public event Action? Cancelled;
 
-    /// <summary>Fills the prompt, remembers the values and raises <see cref="Completed"/>.</summary>
+    /// <summary>Fills the prompt, remembers the values the member typed (not an untouched team value) and raises <see cref="Completed"/>.</summary>
     public void Complete()
     {
         foreach (var field in Fields)
-            if (!string.IsNullOrWhiteSpace(field.Value))
+            if (!string.IsNullOrWhiteSpace(field.Value) && !field.IsUntouchedTeamValue)
                 _settings.PlaceholderValues[field.Name.ToLowerInvariant()] = field.Value;
 
         var result = Fill();

@@ -21,11 +21,12 @@ public sealed class TeamDialogViewModelTests : IDisposable
         try { Directory.Delete(_root, true); } catch (IOException) { }
     }
 
-    private TeamLibraryService NewService(Library? personal = null)
+    private TeamLibraryService NewService(Library? personal = null, IReadOnlyList<PromptLibrary.Core.Backup.CloudFolder>? clouds = null)
     {
         var mine = personal ?? new Library();
         return new(_http, "1.0.0", Path.Combine(_root, "cache", "team-cache.json"), _settings, () => mine, () => true,
-            () => new DateTimeOffset(2026, 11, 5, 9, 0, 0, TimeSpan.Zero), _ => { }, TimeSpan.FromMilliseconds(50));
+            () => new DateTimeOffset(2026, 11, 5, 9, 0, 0, TimeSpan.Zero), _ => { }, TimeSpan.FromMilliseconds(50),
+            cloudFolders: () => clouds ?? []);
     }
 
     private string MakeTeamFolder(string name)
@@ -35,6 +36,22 @@ public sealed class TeamDialogViewModelTests : IDisposable
         var team = new TeamLibrary { Name = name };
         File.WriteAllText(Path.Combine(folder, TeamFile.FileName), TeamFile.Serialize(team));
         return folder;
+    }
+
+    [Fact]
+    public void Join_resolves_a_cloud_relative_input_with_a_fake_cloud_list()
+    {
+        var cloudRoot = Path.Combine(_root, "OneDrive - Acme");
+        var folder = Path.Combine(cloudRoot, "Shared", "Prompts");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, TeamFile.FileName), TeamFile.Serialize(new TeamLibrary { Name = "Acme" }));
+        var clouds = new List<PromptLibrary.Core.Backup.CloudFolder>
+            { new(PromptLibrary.Core.Backup.CloudProvider.OneDrive, "OneDrive - Acme", cloudRoot) };
+        using var service = NewService(clouds: clouds);
+
+        var result = Wait(service.JoinAsync(@"OneDrive - Acme\Shared\Prompts"));
+
+        Assert.True(result.Success, result.Message);
     }
 
     private static T Wait<T>(Task<T> task) { Wait((Task)task); return task.Result; }

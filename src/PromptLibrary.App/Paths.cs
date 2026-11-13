@@ -45,6 +45,7 @@ public static class Paths
 
     /// <summary>The offline copy of the joined team library (see <c>TeamCache</c>).</summary>
     public static string TeamCacheFile { get; } = Path.Combine(DataFolder, "team-cache.json");
+    public static string TeamSeenFile { get; } = Path.Combine(DataFolder, "team-seen.json");
 
     /// <summary>Where a downloaded installer waits to be run: <c>%TEMP%\PromptLibrary\</c>.</summary>
     public static string UpdateDownloadFolder { get; } = Path.Combine(Path.GetTempPath(), "PromptLibrary");

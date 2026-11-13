@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -114,6 +116,7 @@ public sealed class MainViewModel : ObservableObject
         {
             _team = new TeamDocument(team);
             team.Changed += (_, _) => OnTeamChanged();
+            RefreshSuggestionCount();
         }
 
         NewCategoryCommand = new RelayCommand(StartNewCategory);
@@ -126,8 +129,8 @@ public sealed class MainViewModel : ObservableObject
         ClearSearchCommand = new RelayCommand(() => SearchText = "");
         BackupNowCommand = new RelayCommand(() => _ = _host.RunBackupAsync(BackupTrigger.Manual));
         RestoreCommand = new RelayCommand(_host.OpenRestore);
-        ImportCommand = new RelayCommand(ImportPrompts, () => !IsTeamSide);
-        ExportCommand = new RelayCommand(ExportPrompts, () => !IsTeamSide);
+        ImportCommand = new RelayCommand(ImportPrompts, () => !IsTeamSide || IsEditingTeam);
+        ExportCommand = new RelayCommand(ExportPrompts);
         AddStarterPromptsCommand = new RelayCommand(AddStarterPrompts, () => !IsTeamSide);
         OpenSettingsCommand = new RelayCommand(() => _host.OpenSettings());
         SetUpBackupsCommand = new RelayCommand(() => _host.OpenSettings(focusBackups: true));
@@ -144,13 +147,26 @@ public sealed class MainViewModel : ObservableObject
         ShowHistoryCommand = new RelayCommand(ShowHistory);
         MoveToCategoryCommand = new RelayCommand<Category?>(MoveToCategory);
         CopyToYoursCommand = new RelayCommand(CopyToYours);
+        CopyToTeamCommand = new RelayCommand(CopyToTeam);
+        SuggestCommand = new RelayCommand(SuggestToTeam);
+        SuggestionsCommand = new RelayCommand(OpenSuggestions);
         PinCommand = new RelayCommand<PromptRow?>(TogglePin);
         HideCommand = new RelayCommand<PromptRow?>(ToggleHide);
+        FeatureCommand = new RelayCommand<PromptRow?>(ToggleFeature);
         MarkAllSeenCommand = new RelayCommand(MarkAllSeen);
+        WhatChangedCommand = new RelayCommand(WhatChanged);
+        SeeCopyChangesCommand = new RelayCommand(SeeCopyChanges);
+        UpdateMyCopyCommand = new RelayCommand(UpdateMyCopy);
+        KeepMineCommand = new RelayCommand(KeepMine);
         RetryTeamCommand = new AsyncRelayCommand(() => _team?.Service.RefreshAsync() ?? Task.CompletedTask);
         EditTeamCommand = new RelayCommand(StartEditingTeam);
         DoneEditingTeamCommand = new RelayCommand(() => StopEditingTeam());
         TeamHistoryCommand = new RelayCommand(() => OpenTeamHistory(review: false));
+        CopyInviteCommand = new RelayCommand(CopyInvite);
+        TeamNoteCommand = new RelayCommand(EditTeamNote);
+        TeamFillInValuesCommand = new RelayCommand(EditTeamFillInValues);
+        TeamCheckCommand = new RelayCommand(CheckTeamLibrary);
+        DismissTeamNoteCommand = new RelayCommand(DismissTeamNote);
         ReviewConflictCommand = new RelayCommand(() => OpenTeamHistory(review: true));
 
         if (_host.Updates is { } updates)
@@ -276,6 +292,27 @@ public sealed class MainViewModel : ObservableObject
     /// opens the copy on Your prompts.
     /// </summary>
     public IRelayCommand CopyToYoursCommand { get; }
+    public IRelayCommand CopyToTeamCommand { get; }
+    public IRelayCommand SuggestCommand { get; }
+    public IRelayCommand SuggestionsCommand { get; }
+
+    /// <summary>"Suggest for the team…" in a personal prompt's menu: Your prompts side, a team joined that you can't edit
+    /// (editors get "Copy to team prompts" instead).</summary>
+    public bool ShowSuggest => IsYoursSide && TeamLoaded && !_team!.Service.CanEdit;
+
+    private int _suggestionCount;
+    private int _suggestionRefresh;
+
+    /// <summary>The suggestions waiting for editors (file source), counted on each team refresh.</summary>
+    public int SuggestionCount => _suggestionCount;
+
+    /// <summary>The Team header's "Suggestions (n)" button: editors, a team file, at least one suggestion.</summary>
+    public bool ShowSuggestionsButton => IsTeamSide && _suggestionCount > 0 && TeamLoaded && _team!.Service.CanEdit;
+
+    public string SuggestionsLabel => $"Suggestions ({_suggestionCount})";
+
+    /// <summary>"Copy to team prompts" in a personal prompt's menu: Your prompts side, a team joined that you can edit.</summary>
+    public bool ShowCopyToTeam => IsYoursSide && TeamLoaded && _team!.Service.CanEdit;
 
     /// <summary>Copies the prompt and opens an AI app with it; the parameter is a <c>SendTargets</c> id, null = the prompt's default.</summary>
     public IRelayCommand<string?> SendCommand { get; }
@@ -335,7 +372,8 @@ public sealed class MainViewModel : ObservableObject
     private void ShowToast(string text) => ToastRequested?.Invoke(this, text);
 
     /// <summary>The remembered placeholder values, shown in the preview's chips.</summary>
-    public IDictionary<string, string> PlaceholderValues => _host.Settings.PlaceholderValues;
+    public IDictionary<string, string> PlaceholderValues
+        => new FillInDefaults(_host.Settings.PlaceholderValues, _team?.Service.Team?.FillInValues).Merge();
 
     /// <summary>Version history is for saved personal prompts (team libraries keep their own history).</summary>
     public bool CanShowHistory => _history is not null && !CurrentDocument.IsTeam && EditorPromptId is not null;
@@ -358,6 +396,7 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>Hide from menu / Unhide the given team row's prompt, or the editor's when null.</summary>
     public IRelayCommand<PromptRow?> HideCommand { get; }
+    public IRelayCommand<PromptRow?> FeatureCommand { get; }
 
     /// <summary>"Show hidden (n)": lists the team prompts hidden from the menu, greyed, each with Unhide.</summary>
     public bool ShowHiddenTeamPrompts
@@ -402,9 +441,20 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>The editor's <c>Hide from menu</c>, or <c>Unhide</c> when the open team prompt is hidden.</summary>
     public string HideLabel => EditorPromptId is { } id && IsHiddenTeamPrompt(id) ? "Unhide" : "Hide from menu";
 
+    /// <summary>The editor's <c>Feature for everyone</c> / <c>Stop featuring</c> (editors, team edit mode only).</summary>
+    public bool ShowFeatureToggle => IsTeamSide && IsEditingTeam && EditorPromptId is not null;
+
+    public string FeatureLabel => EditorPromptId is { } id && TeamContent?.Prompts.FirstOrDefault(p => p.Id == id)?.Featured == true
+        ? "Stop featuring" : "Feature for everyone";
+
     /// <summary>The open prompt's category name (shown as text while the editor is read only).</summary>
     public string? EditorCategoryName => _editor?.CategoryId is { } id
         ? CurrentDocument.Library.Categories.FirstOrDefault(c => c.Id == id)?.Name
+        : null;
+
+    /// <summary>The open prompt's category emoji (beside the name while the editor is read only), or null.</summary>
+    public string? EditorCategoryEmoji => _editor?.CategoryId is { } id
+        ? CurrentDocument.Library.Categories.FirstOrDefault(c => c.Id == id)?.Emoji ?? CategoryItem.DefaultEmoji
         : null;
 
     private bool TeamConnected => _team?.Service.Source is not null;
@@ -453,8 +503,42 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>The "Read only" note's tooltip: why this PC can't edit the team library.</summary>
     public string TeamReadOnlyReason => TeamEditBlockedText ?? "You can't change files in this folder";
 
-    /// <summary>The Team header's ⋯ menu ("Restore an older version…"): for editors only.</summary>
-    public bool ShowTeamMoreMenu => IsTeamSide && TeamLoaded && _team!.Service.CanEdit;
+    /// <summary>The Team header's ⋯ menu: Copy invite is for every member.</summary>
+    public bool ShowTeamMoreMenu => IsTeamSide && TeamLoaded;
+
+    /// <summary>The ⋯ menu's other items (note, fill-in values, check, restore) are for editors only.</summary>
+    public bool ShowTeamEditorItems => IsTeamSide && TeamLoaded && _team!.Service.CanEdit;
+
+    /// <summary>Copy invite: copies a message that tells a colleague how to get the app and join this team library.</summary>
+    public IRelayCommand CopyInviteCommand { get; }
+
+    /// <summary>Note for everyone…</summary>
+    public IRelayCommand TeamNoteCommand { get; }
+
+    /// <summary>Fill-in values for everyone…</summary>
+    public IRelayCommand TeamFillInValuesCommand { get; }
+
+    /// <summary>Check the team library</summary>
+    public IRelayCommand TeamCheckCommand { get; }
+
+    /// <summary>The × on the note line: hides this note until its text changes.</summary>
+    public IRelayCommand DismissTeamNoteCommand { get; }
+
+    /// <summary>The muted line under the Team header, <c>Note: text · 2 days ago</c>; null with no note or once hidden.</summary>
+    public string? TeamNoteLine
+    {
+        get
+        {
+            if (!IsTeamSide || _team?.Service.Team?.Note is not { } note || string.IsNullOrWhiteSpace(note.Text)) return null;
+            if (_host.Settings.SeenTeamNote == NoteHash(note.Text)) return null;
+            var text = string.Join(' ', note.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            return $"Note: {text} · {When(note.At)}";
+        }
+    }
+
+    public bool ShowTeamNoteLine => TeamNoteLine is not null;
+
+    private static string NoteHash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
 
     /// <summary>"Restore an older version…": lists the team file's history (and any sync conflict copies) to restore one.</summary>
     public IRelayCommand TeamHistoryCommand { get; }
@@ -1045,10 +1129,10 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     private void ImportPrompts()
     {
-        if (IsTeamSide || _teamSaving) return;
+        if (_teamSaving || (IsTeamSide && !IsEditingTeam)) return;
         if (_dialogs.ChooseImportSource() is not { } pick) return;
 
-        var library = _personal.Library;
+        var library = CurrentDocument.Library;
         ImportResult result;
         try
         {
@@ -1064,12 +1148,12 @@ public sealed class MainViewModel : ObservableObject
 
         if (result.Imported > 0)
         {
-            _personal.SaveLibraryChange(); // on failure the prompts stay and are written later (the host says so)
+            SaveChange(); // yours: on failure the prompts stay and are written later; team: one guarded save
             RebuildCategories(_selectedCategory?.Id);
             RefreshPrompts();
             OpenFirstPromptIfNone();
         }
-        _dialogs.ShowImportResults(result);
+        _dialogs.ShowImportResults(result, IsTeamSide);
     }
 
     /// <summary>
@@ -1096,8 +1180,7 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Export prompts…: one .json file, or a folder of .md files (one per prompt, a subfolder per category).</summary>
     private void ExportPrompts()
     {
-        if (IsTeamSide) return;
-        var library = _personal.Library;
+        var library = CurrentDocument.Library;
         if (library.Prompts.Count == 0)
         {
             _dialogs.ShowMessage("There are no prompts to export yet.");
@@ -1563,7 +1646,7 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>True if switching to category <paramref name="id"/> can keep the editor open.</summary>
     private bool EditorSurvivesCategory(Guid? id)
-        => _editor is null || id is null || id == CategoryItem.RecentId || _editor.CategoryId == id;
+        => _editor is null || id is null || id == CategoryItem.RecentId || id == CategoryItem.FeaturedId || _editor.CategoryId == id;
 
     /// <summary>The category the list is limited to: null for All prompts and Recent.</summary>
     private Guid? CategoryFilter => _selectedCategory is { IsCategory: true } category ? category.Id : null;
@@ -1587,6 +1670,37 @@ public sealed class MainViewModel : ObservableObject
     }
 
     private const int RecentLimit = 10;
+
+    /// <summary>The most prompts the editors can feature.</summary>
+    public const int MaxFeatured = 10;
+
+    /// <summary>The team prompts the editors feature that this user hasn't hidden, in library order (team side only).</summary>
+    private List<Prompt> FeaturedPrompts()
+        => !CurrentDocument.IsTeam ? []
+            : CurrentDocument.Library.Prompts
+                .Where(p => p.Featured && !_host.Settings.HiddenTeamPromptIds.Contains(p.Id)).ToList();
+
+    /// <summary>Features or unfeatures a team prompt (the editor's when null): editors in edit mode only, max 10.</summary>
+    private void ToggleFeature(PromptRow? row)
+    {
+        if (!IsTeamSide || !IsEditingTeam || CannotChange) return;
+        if ((row?.Id ?? EditorPromptId) is not { } id) return;
+        if (CurrentDocument.Library.Prompts.FirstOrDefault(p => p.Id == id) is not { } prompt) return;
+
+        if (!prompt.Featured && CurrentDocument.Library.Prompts.Count(p => p.Featured) >= MaxFeatured)
+        {
+            ShowStatus($"Up to {MaxFeatured} prompts can be featured.", FeedbackDuration);
+            return;
+        }
+
+        prompt.Featured = !prompt.Featured;
+        SaveChange(); // one guarded team save; a refused or failed one puts the library back
+        foreach (var item in Prompts.Where(r => r.Id == id)) item.IsFeatured = prompt.Featured;
+        var before = _selectedCategory?.Id;
+        RebuildCategories(before);
+        if (before == CategoryItem.FeaturedId) RefreshPrompts();
+        RaiseEditorState();
+    }
 
     /// <summary>
     /// Pins, usage or hides changed somewhere else (the search window, the tray): the pin glyphs, the Recent row and its
@@ -1625,6 +1739,12 @@ public sealed class MainViewModel : ObservableObject
         var editor = PromptEditorViewModel.ForPrompt(prompt);
         editor.Uses = UsesOf(prompt.Id);
         editor.IsReadOnly = CurrentDocument.IsReadOnly;
+        // What changed since this PC last saw the prompt: taken before opening clears the marker, kept while it is open.
+        _openChange = null;
+        if (CurrentDocument.IsTeam && _team is { } teamDoc
+            && TeamUserState.MarkerFor(_host.Settings, prompt) == TeamMarker.Updated
+            && teamDoc.Service.TryGetChange(prompt.Id, out var change) && !change.IsEmpty)
+            _openChange = change;
         Editor = editor;
         _selectedPrompt = Prompts.FirstOrDefault(r => ReferenceEquals(r.Prompt, prompt));
         OnPropertyChanged(nameof(SelectedPrompt));
@@ -1645,6 +1765,8 @@ public sealed class MainViewModel : ObservableObject
             Categories.Add(new CategoryItem(null, "All prompts", shown.Count, canEdit));
             if (RecentPrompts() is { Count: > 0 } recent)
                 Categories.Add(new CategoryItem(CategoryItem.RecentId, "Recent", recent.Count, canEdit));
+            if (FeaturedPrompts() is { Count: > 0 } featured)
+                Categories.Add(new CategoryItem(CategoryItem.FeaturedId, "Featured", featured.Count, canEdit));
             foreach (var category in sorted)
                 Categories.Add(new CategoryItem(category.Id, category.Name,
                     shown.Count(p => p.CategoryId == category.Id), canEdit, category.Emoji));
@@ -1674,6 +1796,7 @@ public sealed class MainViewModel : ObservableObject
             Prompts.Clear();
             var now = DateTimeOffset.Now;
             var isRecent = _selectedCategory?.IsRecent == true;
+            var isFeatured = _selectedCategory?.IsFeatured == true;
             if (_searchingBoth)
             {
                 // Both libraries, best match first; hidden team prompts are listed greyed so they can be unhidden.
@@ -1684,13 +1807,19 @@ public sealed class MainViewModel : ObservableObject
             {
                 // The shown category (or the Recent list), best match first.
                 var categoryId = CategoryFilter;
-                var recentIds = isRecent ? RecentPrompts().Select(p => p.Id).ToHashSet() : null;
+                var recentIds = isRecent ? RecentPrompts().Select(p => p.Id).ToHashSet()
+                    : isFeatured ? FeaturedPrompts().Select(p => p.Id).ToHashSet() : null;
                 foreach (var hit in FuzzySearch.Search(CurrentDocument.Library, null, _host.Settings, _searchText, now))
                     if (IsListed(hit.Prompt)
                         && (categoryId is null || hit.Prompt.CategoryId == categoryId)
                         && (recentIds is null || recentIds.Contains(hit.Prompt.Id)))
                         Prompts.Add(NewRow(hit.Prompt, CurrentDocument.IsTeam, showTeamIcon: false,
                             hit.TitleMatches, hit.DescriptionMatches));
+            }
+            else if (isFeatured)
+            {
+                foreach (var prompt in FeaturedPrompts())
+                    Prompts.Add(NewRow(prompt, true, showTeamIcon: false));
             }
             else if (isRecent)
             {
@@ -1785,6 +1914,7 @@ public sealed class MainViewModel : ObservableObject
             OpenPrompt(prompt, byUser: openPromptId is not null); // a search result the user chose, or the side's last prompt
         else
             OpenFirstPromptIfNone();
+        if (side == LibrarySide.Team) RefreshSuggestionCount();
         RaiseSideState();
         return true;
     }
@@ -1819,6 +1949,8 @@ public sealed class MainViewModel : ObservableObject
                            string.Equals(c.Name.Trim(), categoryName, StringComparison.OrdinalIgnoreCase))
                        ?? editor.AddCategory(categoryName);
             copy = editor.AddPrompt(category.Id, source.Title, source.Description, source.Text, source.Tags, null);
+            copy.SourceTeamPromptId = source.Id; // lets the copy offer an update when the team version changes
+            copy.SourceFingerprint = TeamUserState.ContentFingerprint(source);
         }
         catch (ArgumentException ex)
         {
@@ -1830,6 +1962,304 @@ public sealed class MainViewModel : ObservableObject
         _remembered[LibrarySide.Yours] = (category.Id, copy.Id);
         if (!SwitchSide(LibrarySide.Yours)) return;
         ShowStatus($"Copied to your prompts · {category.Name}", FeedbackDuration);
+    }
+
+    /// <summary>
+    /// Copy to team prompts: one click on a personal prompt. Adds a copy (new id, no source) to the team category of the
+    /// same name (created when missing) and saves it guarded, without edit mode. When someone else changed the file the
+    /// team library is reloaded and the add is applied once more; a second refusal shows the conflict text.
+    /// </summary>
+    private void CopyToTeam()
+    {
+        if (!IsYoursSide || _teamSaving || _team is not { } team || !TeamLoaded || !team.Service.CanEdit
+            || EditorPromptId is not { } id
+            || _personal.Library.Prompts.FirstOrDefault(p => p.Id == id) is not { } source) return;
+
+        var categoryName = (_personal.Library.Categories.FirstOrDefault(c => c.Id == source.CategoryId)?.Name
+                            ?? "Prompts").Trim();
+        string? added = null;
+
+        bool Apply()
+        {
+            var library = team.Library;
+            var editor = new LibraryEditor(library, () => DateTimeOffset.Now);
+            try
+            {
+                var category = library.Categories.FirstOrDefault(c =>
+                                   string.Equals(c.Name.Trim(), categoryName, StringComparison.OrdinalIgnoreCase))
+                               ?? editor.AddCategory(categoryName);
+                editor.AddPrompt(category.Id, source.Title, source.Description, source.Text, source.Tags, source.SendTo);
+                added = category.Name;
+                return true;
+            }
+            catch (ArgumentException ex)
+            {
+                team.Service.RevertToLoaded();
+                _dialogs.ShowMessage(ex.Message);
+                return false;
+            }
+        }
+
+        SaveTeamChange(team, Apply, () => $"Copied to team prompts · {added}");
+    }
+
+    /// <summary>
+    /// Applies a change to the loaded team library and saves it guarded, without edit mode. When someone else changed the
+    /// file the library is reloaded and the change applied once more; a second refusal shows the conflict text.
+    /// </summary>
+    private void SaveTeamChange(TeamDocument team, Func<bool> apply, Func<string> savedStatus, bool retry = false)
+    {
+        if (!apply()) return;
+        var baseHash = team.IsEditing ? team.BaseHash : team.Service.CurrentHash;
+        team.SaveWithoutEditing();
+        if (team.PendingSave is not { } pending) return;
+        _teamSaving = true;
+        pending.ContinueWith(task =>
+        {
+            var result = task.IsCompletedSuccessfully
+                ? task.Result
+                : new TeamSaveResult(TeamSaveStatus.Failed, null, "Couldn't save the team library.");
+            _dispatcher.BeginInvoke(() =>
+            {
+                _teamSaving = false;
+                if (_team is not { } current) return;
+                switch (result.Status)
+                {
+                    case TeamSaveStatus.Saved:
+                        current.Rebase();
+                        _host.RefreshQuickMenu();
+                        ShowStatus(savedStatus(), FeedbackDuration);
+                        break;
+                    case TeamSaveStatus.ChangedByOther when current.Service.CurrentHash != baseHash:
+                        current.Rebase(); // the service has re-read the file
+                        if (!retry)
+                            SaveTeamChange(current, apply, savedStatus, retry: true);
+                        else
+                            _dialogs.ShowMessage(ChangeRedoMessage);
+                        break;
+                    default:
+                        current.Service.RevertToLoaded();
+                        _dialogs.ShowMessage(result.Message ?? "Couldn't save the team library.");
+                        break;
+                }
+            });
+        }, TaskScheduler.Default);
+    }
+
+    // ---- Suggestions: members suggest a prompt, editors review them ---------------------------------
+
+    private string? SuggestionsTeamPath =>
+        _team?.Service.Source is { Kind: TeamSourceKind.File } source ? source.Location : null;
+
+    /// <summary>
+    /// Suggest for the team…: asks for a team category, a note and a name, then writes a suggestion file next to the team
+    /// file. A web source or a folder that can't be written gets the suggestion on the clipboard instead.
+    /// </summary>
+    private void SuggestToTeam()
+    {
+        if (!IsYoursSide || _team is not { } team || !TeamLoaded
+            || EditorPromptId is not { } id
+            || _personal.Library.Prompts.FirstOrDefault(p => p.Id == id) is not { } source) return;
+
+        var own = _personal.Library.Categories.FirstOrDefault(c => c.Id == source.CategoryId)?.Name ?? "Prompts";
+        var dialog = new SuggestViewModel(source.Title, own, team.Library.Categories.Select(c => c.Name),
+            SuggestViewModel.DefaultName());
+        if (!_dialogs.ShowSuggest(dialog) || !dialog.Sent) return;
+
+        var suggestion = new Suggestion(Guid.NewGuid(), source.Title, source.Description, source.Text,
+            source.Tags.ToList(), dialog.SelectedCategory.Trim(),
+            string.IsNullOrWhiteSpace(dialog.Note) ? null : dialog.Note.Trim(),
+            string.IsNullOrWhiteSpace(dialog.YourName) ? null : dialog.YourName.Trim(), DateTimeOffset.Now);
+
+        void OnClipboard()
+        {
+            var text = TeamSuggestions.ToClipboardText(suggestion).Replace("\r\n", "\n").Replace("\n", "\r\n");
+            if (_host.CopyText(text, "Team suggestion", notifyInTray: false))
+                ShowStatus("Couldn't reach the team folder. The suggestion is on your clipboard to send to the team owner.",
+                    FeedbackDuration);
+        }
+
+        if (SuggestionsTeamPath is not { } path)
+        {
+            OnClipboard();
+            return;
+        }
+        Task.Run(() => TeamSuggestions.TryWrite(path, suggestion)).ContinueWith(task =>
+        {
+            var written = task.IsCompletedSuccessfully && task.Result == SuggestionWriteResult.Written;
+            _dispatcher.BeginInvoke(() =>
+            {
+                if (written) ShowStatus("Suggestion sent to the team.", FeedbackDuration);
+                else OnClipboard();
+            });
+        }, TaskScheduler.Default);
+    }
+
+    /// <summary>Counts the waiting suggestions off the UI thread; only editors of a team file are counted.</summary>
+    private void RefreshSuggestionCount()
+    {
+        var generation = ++_suggestionRefresh;
+        var path = _team?.Service.CanEdit == true ? SuggestionsTeamPath : null;
+        if (path is null)
+        {
+            SetSuggestionCount(0);
+            return;
+        }
+        Task.Run(() => TeamSuggestions.List(path).Count).ContinueWith(task =>
+        {
+            var count = task.IsCompletedSuccessfully ? task.Result : 0;
+            _dispatcher.BeginInvoke(() =>
+            {
+                if (generation == _suggestionRefresh) SetSuggestionCount(count);
+            });
+        }, TaskScheduler.Default);
+    }
+
+    private void SetSuggestionCount(int count)
+    {
+        _suggestionCount = count;
+        OnPropertyChanged(nameof(SuggestionCount));
+        OnPropertyChanged(nameof(SuggestionsLabel));
+        OnPropertyChanged(nameof(ShowSuggestionsButton));
+    }
+
+    /// <summary>The Suggestions window: read the list now (off the UI thread), then add or dismiss in the dialog.</summary>
+    private void OpenSuggestions()
+    {
+        if (!IsTeamSide || _team is not { } team || !TeamLoaded || !team.Service.CanEdit
+            || SuggestionsTeamPath is not { } path) return;
+        Task.Run(() => TeamSuggestions.List(path)).ContinueWith(task =>
+        {
+            var list = task.IsCompletedSuccessfully ? task.Result : [];
+            _dispatcher.BeginInvoke(() =>
+            {
+                if (_team is not { } current || !TeamLoaded) return;
+                var dialog = new SuggestionsViewModel(path, list, current.Library.Categories.Select(c => c.Name),
+                    DateTimeOffset.Now, (s, category, onSaved) => AddSuggestion(current, s, category, onSaved));
+                _dialogs.ShowSuggestions(dialog);
+                RefreshSuggestionCount();
+            });
+        }, TaskScheduler.Default);
+    }
+
+    /// <summary>Adds a suggestion as a team prompt (new id, not featured) in the named category, created when missing.</summary>
+    private void AddSuggestion(TeamDocument team, Suggestion suggestion, string categoryName, Action onSaved)
+    {
+        if (_teamSaving || !team.Service.CanEdit) return;
+        string? added = null;
+
+        bool Apply()
+        {
+            var library = team.Library;
+            var editor = new LibraryEditor(library, () => DateTimeOffset.Now);
+            try
+            {
+                var category = library.Categories.FirstOrDefault(c =>
+                                   string.Equals(c.Name.Trim(), categoryName.Trim(), StringComparison.OrdinalIgnoreCase))
+                               ?? editor.AddCategory(categoryName.Trim());
+                editor.AddPrompt(category.Id, suggestion.Title, suggestion.Description, suggestion.Text, suggestion.Tags, null);
+                added = category.Name;
+                return true;
+            }
+            catch (ArgumentException ex)
+            {
+                team.Service.RevertToLoaded();
+                _dialogs.ShowMessage(ex.Message);
+                return false;
+            }
+        }
+
+        SaveTeamChange(team, Apply, () =>
+        {
+            onSaved();
+            RefreshSuggestionCount();
+            return $"Added to team prompts · {added}";
+        });
+    }
+
+    // ---- Copy invite, team note, fill-in values, team check (the Team header's ⋯ menu) ----------------
+
+    private void RaiseTeamNote()
+    {
+        OnPropertyChanged(nameof(TeamNoteLine));
+        OnPropertyChanged(nameof(ShowTeamNoteLine));
+    }
+
+    /// <summary>Copy invite: the invite text with the clouds found on this PC, line breaks as Windows wants them.</summary>
+    private void CopyInvite()
+    {
+        if (!IsTeamSide || _team?.Service.Source is not { } source) return;
+        var text = TeamInvite.Build(source, _host.DetectCloudFolders()).Replace("\r\n", "\n").Replace("\n", "\r\n");
+        if (_host.CopyText(text, "Team invite", notifyInTray: false))
+            ShowStatus("Invite copied. Paste it into an email or chat.", FeedbackDuration);
+    }
+
+    /// <summary>Note for everyone…: sets, changes or removes the note members see under the Team header.</summary>
+    private void EditTeamNote()
+    {
+        if (!IsTeamSide || _teamSaving || _team is not { } team || !TeamLoaded || !team.Service.CanEdit) return;
+        var dialog = new TeamNoteViewModel(team.Service.Team?.Note?.Text);
+        _dialogs.ShowTeamNote(dialog);
+        if (dialog.Choice == TeamNoteChoice.None) return;
+
+        var save = dialog.Choice == TeamNoteChoice.Save;
+        var text = dialog.NoteText;
+        SaveTeamChange(team, () =>
+        {
+            if (team.Service.Team is not { } library) return false;
+            library.Note = save ? new TeamNote(text, DateTimeOffset.Now) : null;
+            return true;
+        }, () =>
+        {
+            RaiseTeamNote();
+            return save ? "Note saved for everyone" : "Note removed";
+        });
+    }
+
+    private void DismissTeamNote()
+    {
+        if (_team?.Service.Team?.Note is not { } note) return;
+        _host.Settings.SeenTeamNote = NoteHash(note.Text);
+        _host.SaveSettings();
+        RaiseTeamNote();
+    }
+
+    /// <summary>Fill-in values for everyone…: values every member starts with in a field of that name.</summary>
+    private void EditTeamFillInValues()
+    {
+        if (!IsTeamSide || _teamSaving || _team is not { } team || !TeamLoaded || !team.Service.CanEdit) return;
+        var dialog = new TeamFillInValuesViewModel(team.Library.Prompts.Select(p => p.Text),
+            team.Service.Team?.FillInValues ?? new Dictionary<string, string>());
+        if (!_dialogs.ShowTeamFillInValues(dialog)) return;
+
+        var values = dialog.Result;
+        SaveTeamChange(team, () =>
+        {
+            if (team.Service.Team is not { } library) return false;
+            library.FillInValues = new Dictionary<string, string>(values);
+            return true;
+        }, () => "Fill-in values saved for everyone");
+    }
+
+    /// <summary>Check the team library: lists problems; choosing one opens it (in edit mode) on the Team side.</summary>
+    private void CheckTeamLibrary()
+    {
+        if (!IsTeamSide || _team is not { } team || !TeamLoaded || !team.Service.CanEdit) return;
+        var dialog = new TeamCheckViewModel(TeamHealthCheck.Run(team.Library));
+        _dialogs.ShowTeamCheck(dialog);
+        if (dialog.Chosen is { } issue) GoToIssue(issue);
+    }
+
+    private void GoToIssue(HealthIssue issue)
+    {
+        if (!IsTeamSide || _team is not { } team || !TeamLoaded) return;
+        if (!ProceedOrDefer(() => GoToIssue(issue))) return;
+        if (!team.IsEditing && team.Service.CanEdit) StartEditingTeam();
+        if (!string.IsNullOrWhiteSpace(_searchText)) SearchText = "";
+
+        var prompt = issue.PromptId is { } id ? team.Library.Prompts.FirstOrDefault(p => p.Id == id) : null;
+        SelectCategoryNow(prompt?.CategoryId ?? issue.CategoryId);
+        if (prompt is not null) OpenPrompt(prompt, byUser: true);
     }
 
     /// <summary>Pins or unpins <paramref name="row"/>'s prompt (the editor's when null). Pins are capped at 10.</summary>
@@ -1886,10 +2316,85 @@ public sealed class MainViewModel : ObservableObject
         RaiseSideState();
     }
 
+    private TeamChangeModel? _openChange;
+
+    /// <summary>An Updated team prompt that is open and has a kept copy of what was seen: the "What changed" link shows.</summary>
+    public bool ShowWhatChanged => IsTeamSide && _editor is not null && _openChange is not null;
+
+    /// <summary>"What changed" sits at the end of the lock line when there is one…</summary>
+    public bool ShowWhatChangedInLockLine => ShowWhatChanged && LockLineText is not null;
+
+    /// <summary>…and on its own line while the team library is being edited (no lock line).</summary>
+    public bool ShowWhatChangedAlone => ShowWhatChanged && LockLineText is null;
+
+    public IRelayCommand WhatChangedCommand { get; }
+    public IRelayCommand SeeCopyChangesCommand { get; }
+    public IRelayCommand UpdateMyCopyCommand { get; }
+    public IRelayCommand KeepMineCommand { get; }
+
+    /// <summary>The team prompt the open personal copy came from, when the team has changed it since the copy (or the
+    /// last Keep mine / update); otherwise null.</summary>
+    private Prompt? OutOfDateSource(out Prompt? mine)
+    {
+        mine = null;
+        if (!IsYoursSide || _editor?.PromptId is not { } id) return null;
+        mine = _personal.Library.Prompts.FirstOrDefault(p => p.Id == id);
+        if (mine?.SourceTeamPromptId is not { } sourceId || mine.SourceFingerprint is null) return null;
+        var source = TeamContent?.Prompts.FirstOrDefault(p => p.Id == sourceId);
+        return source is not null && TeamUserState.ContentFingerprint(source) != mine.SourceFingerprint ? source : null;
+    }
+
+    /// <summary>The quiet line in a personal copy's editor: the team changed the prompt it was copied from.</summary>
+    public bool ShowTeamUpdateBanner => OutOfDateSource(out _) is not null;
+
+    private void WhatChanged()
+    {
+        if (_openChange is not { } change || _editor is null || !IsTeamSide) return;
+        _dialogs.ShowChanges(_editor.Title, "Since you last looked", change);
+        if (CurrentDocument.Library.Prompts.FirstOrDefault(p => p.Id == _editor.PromptId) is { } prompt)
+            MarkOpenedSeen(prompt); // opening the changes counts as seeing them
+    }
+
+    private void SeeCopyChanges()
+    {
+        if (OutOfDateSource(out var mine) is not { } source || mine is null) return;
+        var change = TeamChange.Between(mine, TeamChange.CategoryName(_personal.Library, mine),
+            source, TeamChange.CategoryName(TeamContent!, source));
+        _dialogs.ShowChanges(source.Title, "Your copy to the team version", change);
+    }
+
+    private void UpdateMyCopy()
+    {
+        if (OutOfDateSource(out var mine) is not { } source || mine is null || _editor is not { } editor) return;
+        // Edited = the copy's saved content no longer matches what it was copied (or last updated) from, or unsaved edits.
+        var changed = editor.IsDirty || TeamUserState.ContentFingerprint(mine) != mine.SourceFingerprint;
+        if (changed && !_dialogs.ConfirmDestructive("Replace your changes with the team's version?", "Replace")) return;
+
+        editor.Title = source.Title;
+        editor.Description = source.Description;
+        editor.Text = source.Text;
+        editor.Tags.Clear();
+        foreach (var tag in source.Tags ?? []) editor.Tags.Add(tag);
+        if (!Save()) return; // the editor keeps the team's version as an unsaved change
+        mine.SourceFingerprint = TeamUserState.ContentFingerprint(source);
+        _personal.SaveLibraryChange();
+        RaiseEditorState();
+        ShowStatus("Updated from the team.", FeedbackDuration);
+    }
+
+    private void KeepMine()
+    {
+        if (OutOfDateSource(out var mine) is not { } source || mine is null) return;
+        mine.SourceFingerprint = TeamUserState.ContentFingerprint(source);
+        _personal.SaveLibraryChange();
+        RaiseEditorState();
+    }
+
     private void MarkAllSeen()
     {
         if (TeamContent is not { } team) return;
         TeamUserState.MarkAllSeen(_host.Settings, team);
+        foreach (var teamPrompt in team.Prompts) _team?.Service.MarkSeen(teamPrompt.Id);
         SaveTeamState();
         foreach (var row in Prompts.Where(r => r.IsTeam)) row.Marker = TeamMarker.None;
         RaiseMarkerState();
@@ -1901,6 +2406,7 @@ public sealed class MainViewModel : ObservableObject
         var settings = _host.Settings;
         if (TeamUserState.MarkerFor(settings, prompt) == TeamMarker.None) return;
         TeamUserState.MarkSeen(settings, prompt);
+        _team?.Service.MarkSeen(prompt.Id);
         SaveTeamState();
         foreach (var row in Prompts.Where(r => r.Id == prompt.Id)) row.Marker = TeamMarker.None;
         RaiseMarkerState();
@@ -2106,6 +2612,8 @@ public sealed class MainViewModel : ObservableObject
         }
 
         UpdateSearchingBoth();
+        RefreshSuggestionCount();
+        OnPropertyChanged(nameof(PlaceholderValues)); // the team's fill-in values may have changed
         if (IsTeamSide)
         {
             ReloadTeamSide();
@@ -2172,16 +2680,24 @@ public sealed class MainViewModel : ObservableObject
             isHidden: isTeam && settings.HiddenTeamPromptIds.Contains(prompt.Id),
             isPinned: settings.PinnedPromptIds.Contains(prompt.Id),
             marker: isTeam ? TeamUserState.MarkerFor(settings, prompt) : TeamMarker.None,
-            showTeamIcon, titleMatches, descriptionMatches);
+            showTeamIcon, titleMatches, descriptionMatches)
+        { IsFeatured = isTeam && prompt.Featured };
     }
 
     private void RaiseEditorState()
     {
+        OnPropertyChanged(nameof(ShowWhatChanged));
+        OnPropertyChanged(nameof(ShowWhatChangedInLockLine));
+        OnPropertyChanged(nameof(ShowWhatChangedAlone));
+        OnPropertyChanged(nameof(ShowTeamUpdateBanner));
         OnPropertyChanged(nameof(LockLineText));
         OnPropertyChanged(nameof(PinLabel));
         OnPropertyChanged(nameof(CanPin));
         OnPropertyChanged(nameof(HideLabel));
+        OnPropertyChanged(nameof(ShowFeatureToggle));
+        OnPropertyChanged(nameof(FeatureLabel));
         OnPropertyChanged(nameof(EditorCategoryName));
+        OnPropertyChanged(nameof(EditorCategoryEmoji));
         OnPropertyChanged(nameof(CanShowHistory));
         OnPropertyChanged(nameof(SendChoices));
         OnPropertyChanged(nameof(SendDefaultName));
@@ -2213,10 +2729,15 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(TeamReadOnlyReason));
         OnPropertyChanged(nameof(IsEditingTeam));
         OnPropertyChanged(nameof(ShowEditTeamButton));
+        OnPropertyChanged(nameof(ShowCopyToTeam));
+        OnPropertyChanged(nameof(ShowSuggest));
+        OnPropertyChanged(nameof(ShowSuggestionsButton));
         OnPropertyChanged(nameof(ShowTeamEditBar));
         OnPropertyChanged(nameof(TeamEditBlockedText));
         OnPropertyChanged(nameof(ShowTeamEditBlocked));
         OnPropertyChanged(nameof(ShowTeamMoreMenu));
+        OnPropertyChanged(nameof(ShowTeamEditorItems));
+        RaiseTeamNote();
         OnPropertyChanged(nameof(ShowConflictBar));
         OnPropertyChanged(nameof(ShowTeamBar));
         OnPropertyChanged(nameof(ShowBothTeamNotices));

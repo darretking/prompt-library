@@ -122,6 +122,36 @@ public class QuickMenuBuilderTests
     }
 
     [Fact]
+    public void Build_Featured_LibraryOrder_HiddenAndPinnedLeftOut()
+    {
+        var (mine, _) = Lib("Mine", "m1");
+        var (team, _) = Lib("Team", "t1", "t2", "t3", "t4", "t5");
+        foreach (var p in team.Prompts.Take(4)) p.Featured = true;
+        var s = new AppSettings
+        {
+            HiddenTeamPromptIds = [team.Prompts[1].Id],
+            PinnedPromptIds = [team.Prompts[2].Id],
+        };
+
+        var menu = QuickMenuBuilder.Build(mine, team, s);
+
+        Assert.Equal(new[] { "t1", "t4" }, menu.Featured.Select(p => p.Title)); // t2 hidden, t3 only in Pinned
+        Assert.All(menu.Featured, p => Assert.True(p.IsTeam));
+        Assert.Equal(new[] { "t3" }, menu.Pinned.Select(p => p.Title));
+    }
+
+    [Fact]
+    public void Build_NoFeatured_BlockAbsent()
+    {
+        var (mine, _) = Lib("Mine", "m1");
+        var (team, _) = Lib("Team", "t1");
+        mine.Prompts[0].Featured = true; // only team prompts count
+
+        Assert.Empty(QuickMenuBuilder.Build(mine, team, new AppSettings()).Featured);
+        Assert.Empty(QuickMenuBuilder.Build(mine, null, new AppSettings()).Featured);
+    }
+
+    [Fact]
     public void Build_SameNamedCategories_StaySeparate()
     {
         var (mine, _) = Lib("Same", "m1");
