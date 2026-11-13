@@ -328,6 +328,22 @@ public partial class MainWindow : Window, IDialogs
             new ChangesWindow(_host, new ChangesViewModel(title, caption, change)) { Owner = this }.ShowDialog();
     }
 
+    public void ShowTeamNote(TeamNoteViewModel dialog)
+    {
+        if (!_host.AsksNothing)
+            new TeamNoteDialog(dialog) { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog();
+    }
+
+    public bool ShowTeamFillInValues(TeamFillInValuesViewModel dialog)
+        => !_host.AsksNothing
+           && new TeamFillInValuesDialog(dialog) { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog() == true;
+
+    public void ShowTeamCheck(TeamCheckViewModel dialog)
+    {
+        if (!_host.AsksNothing)
+            new TeamCheckDialog(dialog) { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog();
+    }
+
     // ---- Category rail -------------------------------------------------------------------------
 
     private void RailList_KeyDown(object sender, KeyEventArgs e)

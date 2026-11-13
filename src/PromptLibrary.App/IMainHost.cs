@@ -59,6 +59,9 @@ public interface IMainHost
 
     Task<BackupResult?> RunBackupAsync(BackupTrigger trigger, bool showInTray = true);
 
+    /// <summary>Cloud folders found on this PC (OneDrive, Google Drive, …), for the team invite. Slow-ish.</summary>
+    IReadOnlyList<CloudFolder> DetectCloudFolders() => AppHost.DetectCloudFolders();
+
     void OpenRestore();
 
     void OpenSettings(bool focusBackups = false);

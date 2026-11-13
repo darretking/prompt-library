@@ -51,4 +51,13 @@ public interface IDialogs
 
     /// <summary>Shows what changed in a prompt (the changed fields, then a line diff of the text) with a Close button.</summary>
     void ShowChanges(string title, string caption, TeamChangeModel change) { }
+
+    /// <summary>Note for everyone: the dialog fills <see cref="TeamNoteViewModel.Choice"/>.</summary>
+    void ShowTeamNote(TeamNoteViewModel dialog) { }
+
+    /// <summary>Fill-in values for everyone: true when Save was chosen (values are in <see cref="TeamFillInValuesViewModel.Result"/>).</summary>
+    bool ShowTeamFillInValues(TeamFillInValuesViewModel dialog) => false;
+
+    /// <summary>Check the team library: the dialog sets <see cref="TeamCheckViewModel.Chosen"/> when a row was clicked.</summary>
+    void ShowTeamCheck(TeamCheckViewModel dialog) { }
 }
