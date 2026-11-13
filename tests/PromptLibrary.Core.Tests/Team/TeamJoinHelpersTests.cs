@@ -74,7 +74,7 @@ public sealed class TeamJoinHelpersTests : IDisposable
         Assert.Empty(found);
 
         var calls = 0;
-        var some = await Find(() => calls++ < 4 ? TimeSpan.Zero : TimeSpan.FromSeconds(4));
+        var some = await Find(() => calls++ < 8 ? TimeSpan.Zero : TimeSpan.FromSeconds(4));
         Assert.InRange(some.Count, 1, 9);
     }
 
@@ -141,5 +141,24 @@ public sealed class TeamJoinHelpersTests : IDisposable
         Assert.Equal(TeamSource.FromInput(@"DropboxFoo\x"), TeamSource.FromInput(@"DropboxFoo\x", clouds));
         Assert.Equal(TeamSource.FromInput(@"Other\x"), TeamSource.FromInput(@"Other\x", clouds));
         Assert.Equal(TeamSource.FromInput(@"Dropbox\x"), TeamSource.FromInput(@"Dropbox\x", null));
+    }
+
+    [Fact]
+    public async Task Finder_SkipsOversizeTeamFile()
+    {
+        var big = TeamFile.Serialize(new TeamLibrary { Name = "Big" }) + new string(' ', TeamReader.MaxBytes);
+        Team("big", "Big", big);
+        Team("ok", "Ok");
+        var found = await Find();
+        Assert.DoesNotContain(found, f => f.LibraryName == "Big");
+        Assert.Contains(found, f => f.LibraryName == "Ok");
+    }
+
+    [Fact]
+    public async Task Finder_ChecksBudgetBeforeReadingAFile()
+    {
+        Team("", "Root");
+        var found = await Find(() => TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(3));
+        Assert.Empty(found);
     }
 }

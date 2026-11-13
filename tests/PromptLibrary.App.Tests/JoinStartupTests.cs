@@ -125,4 +125,26 @@ public sealed class JoinStartupTests : IDisposable
         Assert.False(vm.HasFound);
         Assert.False(vm.IsLooking);
     }
+
+    [Fact]
+    public void Validate_rejects_format_characters_such_as_bidi_override()
+    {
+        Assert.Null(JoinArguments.Validate("C:\team‮gnp.json"));
+        Assert.Null(JoinArguments.Validate("a​b"));
+    }
+
+    [Fact]
+    public void Pipe_name_includes_the_session_id()
+    {
+        Assert.NotEqual(JoinPipe.NameFor("", 1), JoinPipe.NameFor("", 2));
+        Assert.Contains("s7", JoinPipe.NameFor("-x", 7));
+    }
+
+    [Fact]
+    public void Backoff_grows_and_stops_at_30_seconds()
+    {
+        Assert.Equal(TimeSpan.FromMilliseconds(200), JoinPipe.Backoff(1));
+        Assert.True(JoinPipe.Backoff(3) > JoinPipe.Backoff(2));
+        Assert.Equal(TimeSpan.FromSeconds(30), JoinPipe.Backoff(50));
+    }
 }

@@ -223,4 +223,21 @@ public class TeamReaderTests : IDisposable
         Assert.Equal(TeamReadStatus.Unreachable, r.Status);
         Assert.Empty(h.Requests);
     }
+
+    [Fact]
+    public async Task Read_OversizeLocalFile_IsUnreadableAndKeepsLastGoodCopy()
+    {
+        var path = Path.Combine(_dir, "team-prompts.json");
+        var cache = Path.Combine(_dir, "cache.json");
+        var source = new TeamSource(TeamSourceKind.File, path);
+        File.WriteAllText(path, Good);
+        Assert.True(TeamRefresh.Apply(await Reader().ReadAsync(source, default), cache, source, DateTimeOffset.UtcNow));
+        var before = File.ReadAllText(cache);
+
+        File.WriteAllText(path, Good + new string(' ', TeamReader.MaxBytes));
+        var bad = await Reader().ReadAsync(source, default);
+        Assert.Equal(TeamReadStatus.NotATeamFile, bad.Status);
+        Assert.False(TeamRefresh.Apply(bad, cache, source, DateTimeOffset.UtcNow));
+        Assert.Equal(before, File.ReadAllText(cache));
+    }
 }

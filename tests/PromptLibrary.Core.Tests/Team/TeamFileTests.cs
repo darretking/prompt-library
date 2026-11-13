@@ -104,4 +104,12 @@ public class TeamFileTests
         Assert.NotEqual(TeamFile.Hash("a"), TeamFile.Hash("b"));
         Assert.Equal(64, TeamFile.Hash("a").Length);
     }
+
+    [Fact]
+    public void Parse_CapsLongLibraryName()
+    {
+        var json = Json().Replace("Sales team", "  " + new string('n', 500));
+        var team = TeamFile.Parse(json);
+        Assert.Equal(TeamFile.MaxNameLength, team.Name.Length);
+    }
 }

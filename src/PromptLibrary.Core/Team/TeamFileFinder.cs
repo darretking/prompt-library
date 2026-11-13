@@ -48,7 +48,8 @@ public static class TeamFileFinder
                 var file = System.IO.Path.Combine(dir, TeamFile.FileName);
                 try
                 {
-                    if (File.Exists(file) && TeamFile.Parse(File.ReadAllText(file)) is { } lib)
+                    if (!Stop() && File.Exists(file) && new FileInfo(file).Length <= TeamReader.MaxBytes
+                        && TeamFile.Parse(File.ReadAllText(file)) is { } lib)
                         hits.Add(new FoundTeamFile(file, lib.Name, ShortLocation(root, dir)));
                 }
                 catch (Exception)

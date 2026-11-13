@@ -10,7 +10,15 @@ namespace PromptLibrary.App.Startup;
 /// </summary>
 public static class JoinPipe
 {
-    public static string Name => "PromptLibrary.Join" + Paths.InstanceSuffix;
+    public static string Name => NameFor(Paths.InstanceSuffix, System.Diagnostics.Process.GetCurrentProcess().SessionId);
+
+    /// <summary>The pipe name for an instance suffix and Windows session, so users on one PC never share a pipe.</summary>
+    public static string NameFor(string instanceSuffix, int sessionId) =>
+        "PromptLibrary.Join.s" + sessionId + instanceSuffix;
+
+    /// <summary>The wait before retrying after <paramref name="failures"/> failures in a row: 200 ms doubling up to 30 s.</summary>
+    public static TimeSpan Backoff(int failures) =>
+        TimeSpan.FromMilliseconds(Math.Min(30_000, 200 * Math.Pow(2, Math.Min(Math.Max(failures, 1) - 1, 10))));
 
     /// <summary>Sends the message; false when nobody answers within the timeout (the caller falls back to the Show signal).</summary>
     public static bool Send(string message, string pipeName, TimeSpan timeout)
@@ -36,12 +44,14 @@ public static class JoinPipe
     {
         var thread = new Thread(() =>
         {
+            var failures = 0;
             while (!stop.IsCancellationRequested)
             {
                 try
                 {
                     using var server = new NamedPipeServerStream(pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte,
                         PipeOptions.CurrentUserOnly | PipeOptions.Asynchronous);
+                    failures = 0;
                     server.WaitForConnectionAsync(stop).GetAwaiter().GetResult();
                     if (Read(server) is { } message && JoinArguments.Validate(message) is { } text)
                         onMessage(text);
@@ -50,9 +60,13 @@ public static class JoinPipe
                 {
                     return;
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
-                    Thread.Sleep(200); // a broken connection must not spin; the next client gets a new pipe
+                    // A broken connection or a pipe that can't be created must not spin: back off up to 30 s.
+                    failures++;
+                    if (failures == 1) // logged once
+                        System.Diagnostics.Debug.WriteLine("Join pipe unavailable: " + ex.Message);
+                    if (stop.WaitHandle.WaitOne(Backoff(failures))) return;
                 }
             }
         })

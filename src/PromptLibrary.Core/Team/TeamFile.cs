@@ -11,6 +11,7 @@ namespace PromptLibrary.Core.Team;
 public static class TeamFile
 {
     /// <summary>The file name inside a team folder.</summary>
+    public const int MaxNameLength = 100;
     public const string FileName = "team-prompts.json";
 
     /// <summary>The value of the file's <c>kind</c> field.</summary>
@@ -57,7 +58,7 @@ public static class TeamFile
 
             return new TeamLibrary
             {
-                Name = name,
+                Name = CapName(name),
                 UpdatedAt = updatedAt,
                 SchemaVersion = version,
                 Content = content,
@@ -93,6 +94,14 @@ public static class TeamFile
     {
         var normalised = json.Replace("\r\n", "\n").Replace('\r', '\n');
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalised))).ToLowerInvariant();
+    }
+
+    private static string CapName(string name)
+    {
+        name = name.Trim();
+        if (name.Length <= MaxNameLength) return name;
+        var cut = char.IsHighSurrogate(name[MaxNameLength - 1]) ? MaxNameLength - 1 : MaxNameLength;
+        return name[..cut].TrimEnd();
     }
 
     private static TeamNote? ReadNote(JsonNode? node)

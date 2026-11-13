@@ -26,12 +26,13 @@ public static class JoinArguments
         return null;
     }
 
-    /// <summary>The text when it is safe to show in the box (non-blank, ≤ 4 KB, no control characters), else null.</summary>
+    /// <summary>The text when it is safe to show in the box (non-blank, ≤ 4 KB, no control or format characters), else null.</summary>
     public static string? Validate(string? message)
     {
         if (string.IsNullOrWhiteSpace(message)) return null;
         if (System.Text.Encoding.UTF8.GetByteCount(message) > MaxBytes) return null;
-        if (message.Any(char.IsControl)) return null;
+        if (message.Any(c => char.IsControl(c)
+                           || char.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.Format)) return null;
         return message.Trim();
     }
 }

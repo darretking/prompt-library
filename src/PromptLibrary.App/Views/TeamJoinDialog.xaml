@@ -45,7 +45,7 @@
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
                                 <TextBlock FontFamily="{StaticResource Font.Icons}" Text="&#xE902;" FontSize="16"
                                            Foreground="{DynamicResource Brush.Muted}" VerticalAlignment="Center" Margin="0,0,12,0" />
-                                <StackPanel VerticalAlignment="Center">
+                                <StackPanel VerticalAlignment="Center" MaxWidth="360">
                                     <TextBlock Text="{Binding LibraryName}" FontSize="13" FontWeight="SemiBold"
                                                TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{Binding ShortLocation}" Style="{StaticResource MutedText}"
@@ -71,7 +71,7 @@
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
             <Button x:Name="CancelButton" Content="Cancel" IsCancel="True" Margin="0,0,8,0"
                     IsEnabled="{Binding CanEdit}" AutomationProperties.Name="Cancel" />
-            <Button Style="{StaticResource PrimaryButton}" Content="Join" IsDefault="True"
+            <Button x:Name="JoinButton" Style="{StaticResource PrimaryButton}" Content="Join"
                     Command="{Binding JoinCommand}" AutomationProperties.Name="Join" />
         </StackPanel>
     </StackPanel>

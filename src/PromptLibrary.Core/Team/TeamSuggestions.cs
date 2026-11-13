@@ -22,6 +22,7 @@ public static class TeamSuggestions
     public const string DoneFolderName = "done";
     public const string Kind = "prompt-library-suggestion";
     public const int MaxFiles = 200;
+    public const int MaxScan = 1000;
     public const int MaxFileBytes = 64 * 1024;
     public const int MaxTitle = 120;
     public const int MaxCategory = 60;
@@ -73,12 +74,13 @@ public static class TeamSuggestions
         {
             var folder = SuggestionsFolder(teamFilePath);
             if (!Directory.Exists(folder)) return result;
-            var files = Directory.EnumerateFiles(folder, "*.json", SearchOption.TopDirectoryOnly)
-                .Where(p => p.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-                .OrderBy(p => p, StringComparer.Ordinal)
-                .Take(MaxFiles);
-            foreach (var path in files)
+            var scanned = 0;
+            foreach (var path in Directory.EnumerateFiles(folder, "*.json", SearchOption.TopDirectoryOnly))
+            {
+                if (++scanned > MaxScan || result.Count >= MaxFiles) break;
+                if (!path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) || IsReparsePoint(path)) continue;
                 if (TryRead(path) is { } s) result.Add(s);
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
@@ -93,18 +95,26 @@ public static class TeamSuggestions
         try
         {
             var folder = SuggestionsFolder(teamFilePath);
+            if (!Directory.Exists(folder) || IsReparsePoint(folder)) return false;
             var source = Path.Combine(folder, id.ToString("D") + ".json");
             if (!File.Exists(source))
                 source = List(teamFilePath).FirstOrDefault(s => s.Id == id)?.FilePath ?? "";
-            if (source.Length == 0 || !File.Exists(source)) return false;
+            if (source.Length == 0 || !File.Exists(source) || IsReparsePoint(source)) return false;
 
             var doneDir = Path.Combine(folder, DoneFolderName);
+            if (IsReparsePoint(doneDir)) return false;
             Directory.CreateDirectory(doneDir);
-            var target = Path.Combine(doneDir, Path.GetFileName(source));
-            File.Move(source, target, overwrite: true);
+            if (IsReparsePoint(doneDir)) return false;
+
+            var stem = Path.GetFileNameWithoutExtension(source);
+            var target = Path.Combine(doneDir, stem + ".json");
+            for (var n = 2; File.Exists(target) || Directory.Exists(target); n++)
+                target = Path.Combine(doneDir, stem + "-" + n + ".json");
+            File.Move(source, target, overwrite: false);
             File.SetLastWriteTimeUtc(target, DateTime.UtcNow);
 
             var old = Directory.EnumerateFiles(doneDir)
+                .Where(p => IsSuggestionFileName(Path.GetFileName(p)) && !IsReparsePoint(p))
                 .Select(p => new FileInfo(p))
                 .OrderByDescending(f => f.LastWriteTimeUtc)
                 .ThenByDescending(f => f.Name, StringComparer.Ordinal)
@@ -120,6 +130,29 @@ public static class TeamSuggestions
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             return false;
+        }
+    }
+
+    /// <summary>True for <c>&lt;guid&gt;.json</c> or <c>&lt;guid&gt;-&lt;n&gt;.json</c>: the only names pruned from <c>done</c>.</summary>
+    public static bool IsSuggestionFileName(string fileName)
+    {
+        if (!fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return false;
+        var stem = fileName[..^5];
+        if (stem.Length > 36)
+        {
+            var suffix = stem[37..];
+            if (stem[36] != '-' || suffix.Length == 0 || !suffix.All(char.IsAsciiDigit)) return false;
+            stem = stem[..36];
+        }
+        return stem.Length == 36 && Guid.TryParseExact(stem, "D", out _);
+    }
+
+    internal static bool IsReparsePoint(string path)
+    {
+        try { return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return false; // missing path: nothing to refuse
         }
     }
 

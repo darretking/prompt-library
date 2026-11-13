@@ -118,4 +118,100 @@ public class TeamSuggestionsTests : IDisposable
     {
         Assert.Empty(TeamSuggestions.List(TeamPath));
     }
+
+    private static void Junction(string link, string target)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
+            { CreateNoWindow = true, UseShellExecute = false, RedirectStandardOutput = true };
+        using var p = System.Diagnostics.Process.Start(psi)!;
+        p.WaitForExit();
+        Assert.True(p.ExitCode == 0, "could not create a junction");
+    }
+
+    [Fact]
+    public void MarkDone_RefusesWhenDoneIsAJunction()
+    {
+        var s = Make();
+        TeamSuggestions.TryWrite(TeamPath, s);
+        var elsewhere = Directory.CreateTempSubdirectory().FullName;
+        var done = Path.Combine(Folder, TeamSuggestions.DoneFolderName);
+        Junction(done, elsewhere);
+        try
+        {
+            Assert.False(TeamSuggestions.MarkDone(TeamPath, s.Id));
+            Assert.True(File.Exists(Path.Combine(Folder, s.Id + ".json")));
+            Assert.Empty(Directory.GetFiles(elsewhere));
+        }
+        finally
+        {
+            Directory.Delete(done); // removes only the junction
+            Directory.Delete(elsewhere, true);
+        }
+    }
+
+    [Fact]
+    public void MarkDone_RefusesWhenSuggestionsFolderIsAJunction()
+    {
+        var real = Directory.CreateTempSubdirectory().FullName;
+        File.WriteAllText(Path.Combine(real, "x.json"), "{}");
+        Junction(Folder, real);
+        try { Assert.False(TeamSuggestions.MarkDone(TeamPath, Guid.NewGuid())); }
+        finally { Directory.Delete(Folder); Directory.Delete(real, true); }
+    }
+
+    [Fact]
+    public void MarkDone_DoesNotOverwriteAndPrunesOnlySuggestionFiles()
+    {
+        var done = Path.Combine(Folder, TeamSuggestions.DoneFolderName);
+        Directory.CreateDirectory(done);
+        var keep = Path.Combine(done, "notes.txt");
+        var keepJson = Path.Combine(done, "mine.json");
+        File.WriteAllText(keep, "x");
+        File.WriteAllText(keepJson, "x");
+        File.SetLastWriteTimeUtc(keep, DateTime.UtcNow.AddYears(-5));
+        File.SetLastWriteTimeUtc(keepJson, DateTime.UtcNow.AddYears(-5));
+        for (var i = 0; i < TeamSuggestions.DoneLimit + 5; i++)
+        {
+            var f = Path.Combine(done, Guid.NewGuid() + ".json");
+            File.WriteAllText(f, "{}");
+            File.SetLastWriteTimeUtc(f, DateTime.UtcNow.AddDays(-1 - i));
+        }
+        var s = Make();
+        TeamSuggestions.TryWrite(TeamPath, s);
+        File.WriteAllText(Path.Combine(done, s.Id + ".json"), "original");
+
+        Assert.True(TeamSuggestions.MarkDone(TeamPath, s.Id));
+        Assert.Equal("original", File.ReadAllText(Path.Combine(done, s.Id + ".json")));
+        Assert.True(File.Exists(Path.Combine(done, s.Id + "-2.json")));
+        Assert.True(File.Exists(keep));
+        Assert.True(File.Exists(keepJson));
+        Assert.Equal(TeamSuggestions.DoneLimit, Directory.GetFiles(done).Count(f => TeamSuggestions.IsSuggestionFileName(Path.GetFileName(f))));
+    }
+
+    [Theory]
+    [InlineData("0f8fad5b-d9cb-469f-a165-70867728950e.json", true)]
+    [InlineData("0f8fad5b-d9cb-469f-a165-70867728950e-3.json", true)]
+    [InlineData("0f8fad5b-d9cb-469f-a165-70867728950e-x.json", false)]
+    [InlineData("notes.json", false)]
+    [InlineData("0f8fad5bd9cb469fa16570867728950e.json", false)]
+    [InlineData("0f8fad5b-d9cb-469f-a165-70867728950e.txt", false)]
+    public void IsSuggestionFileName_matches_only_guid_names(string name, bool expected) =>
+        Assert.Equal(expected, TeamSuggestions.IsSuggestionFileName(name));
+
+    [Fact]
+    public void List_stops_after_the_scan_limit()
+    {
+        Directory.CreateDirectory(Folder);
+        for (var i = 0; i < TeamSuggestions.MaxScan + 50; i++)
+            File.WriteAllText(Path.Combine(Folder, $"junk{i}.json"), "nope");
+        Assert.Empty(TeamSuggestions.List(TeamPath));
+    }
+
+    [Fact]
+    public void List_keeps_at_most_200_valid_suggestions()
+    {
+        for (var i = 0; i < TeamSuggestions.MaxFiles + 20; i++)
+            TeamSuggestions.TryWrite(TeamPath, Make("T" + i, i % 50));
+        Assert.Equal(TeamSuggestions.MaxFiles, TeamSuggestions.List(TeamPath).Count);
+    }
 }

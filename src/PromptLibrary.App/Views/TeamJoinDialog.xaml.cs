@@ -23,6 +23,10 @@ public partial class TeamJoinDialog : Window
         {
             InputBox.Focus();
             InputBox.CaretIndex = InputBox.Text.Length;
+            // A box prefilled from a command-line argument must not join on a stray Enter: Join becomes the
+            // default button only once the user edits the text.
+            if (InputBox.Text.Length == 0) JoinButton.IsDefault = true;
+            else InputBox.TextChanged += (_, _) => JoinButton.IsDefault = true;
             _ = viewModel.FindAsync();
         };
         Closed += (_, _) => viewModel.CancelFind();
