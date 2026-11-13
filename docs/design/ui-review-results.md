@@ -155,3 +155,17 @@ Targets: UI ≥ 90 on every screen; simplicity ≥ 95 on the main window and the
 - **Tray balloon messages:** scored from their text in the code.
 - **Installer:** scored from the existing task 15 screenshots. I didn't install it again.
 - **Scaling:** 100% and 150% weren't tested.
+
+## Simplicity & intuitiveness, 2026-11-12 (Unreleased)
+
+Scored by an independent Opus critic from screenshots (offscreen gallery, light/dark, 100 %/150 %, plus real windows at 200 % with a sandbox team library), using the second part of `ui-review-rubric.md`.
+
+| Round | Overall | Main window | Main states | Search | Fill-in | Delete category | Export/Import | Settings | Onboarding | Toasts | Title bar |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 82 | 73 | 87 | 84 | 84 | 80 | 82 | 78 | 86 | 92 | 78 |
+| 2 | 87.8 | 84 | 89 | 89.5 | 84.5 | 87.5 | 85.5 | 82.5 | 86 | 94.5 | 95 |
+| 3 | 90.6 | 88 | 90 | 89 | 87 | 94 | 88 | 84 | 93.5 | 98 | 94 |
+| 4 | 92.2 | 89.5 | 90.5 | 91.5 | 91 | 92 | 95 | 84.5 | 92.5 | 99 | 96 |
+| 5 (Settings and main only) | – | 89 | – | – | – | – | – | 88 | – | – | – |
+
+Still open (below the 95 % main-window target): one icon per category that has no emoji (now a shared memo), the Send to menu's "Set as default" submenu, the amount on screen in the Team view, and the shortcut box looking editable in Settings.

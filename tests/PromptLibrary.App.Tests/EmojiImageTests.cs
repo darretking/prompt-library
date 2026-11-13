@@ -18,6 +18,8 @@ public class EmojiImageTests
         => EmojiChoices.All
             .Concat(SeedLibrary.Create(DateTimeOffset.UtcNow).Categories.Select(c => c.Emoji))
             .Concat(TeamSeedLibrary.Create(DateTimeOffset.UtcNow).Categories.Select(c => c.Emoji))
+            .Concat([PromptLibrary.App.ViewModels.CategoryItem.AllEmoji, PromptLibrary.App.ViewModels.CategoryItem.RecentEmoji,
+                     PromptLibrary.App.ViewModels.CategoryItem.DefaultEmoji])
             .Where(e => !string.IsNullOrEmpty(e))
             .Select(e => e!)
             .Distinct();
@@ -26,7 +28,7 @@ public class EmojiImageTests
     public void EveryPickerAndSeedEmoji_HasBothBundledImages()
     {
         var all = Needed().ToList();
-        Assert.True(all.Count >= 36);
+        Assert.True(all.Count >= 54);
         foreach (var e in all)
         {
             var name = EmojiImage.AssetName(e);

@@ -134,6 +134,7 @@ public sealed class MainViewModel : ObservableObject
         ExitCommand = new RelayCommand(() => _host.ExitApp());
         SetupGuideCommand = new RelayCommand(_host.OpenOnboarding);
         AboutCommand = new RelayCommand(_host.ShowAbout);
+        ChangelogCommand = new RelayCommand(() => _openUrl(AppRepository.ChangelogUrl));
         OpenUpdateCommand = new RelayCommand(() => _host.Updates?.OpenDialog());
         CheckForUpdatesCommand = new AsyncRelayCommand(CheckForUpdatesAsync, () => _host.Updates is not null);
         ShowYoursCommand = new RelayCommand(() => SwitchSide(LibrarySide.Yours));
@@ -496,6 +497,9 @@ public sealed class MainViewModel : ObservableObject
     public IRelayCommand SetupGuideCommand { get; }
     public IRelayCommand AboutCommand { get; }
 
+    /// <summary><c>Help → What's new</c>: opens the changelog in the repository.</summary>
+    public IRelayCommand ChangelogCommand { get; }
+
     /// <summary>The rail's "Update available: v1.0.2" link: opens the update dialog.</summary>
     public IRelayCommand OpenUpdateCommand { get; }
 
@@ -598,6 +602,8 @@ public sealed class MainViewModel : ObservableObject
             OnPropertyChanged();
             OnPropertyChanged(nameof(HasEditor));
             OnPropertyChanged(nameof(HasNoEditor));
+            OnPropertyChanged(nameof(ShowNoPromptsYet));
+            OnPropertyChanged(nameof(ShowNewPromptFooter));
             OnPropertyChanged(nameof(WindowTitle));
             RaiseEditorState();
         }
@@ -609,7 +615,11 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>"Prompt Library", with a "• " prefix while the editor has unsaved changes.</summary>
     public string WindowTitle => _editor is { IsDirty: true } ? "• " + AppTitle : AppTitle;
 
-    public bool ShowNoPromptsYet => !IsTeamSide && Prompts.Count == 0 && string.IsNullOrWhiteSpace(_searchText);
+    /// <summary>
+    /// The empty-library card (it spans the list and editor columns): only while nothing is open in the editor, so a
+    /// new first prompt being written is never covered by it.
+    /// </summary>
+    public bool ShowNoPromptsYet => !IsTeamSide && Prompts.Count == 0 && string.IsNullOrWhiteSpace(_searchText) && _editor is null;
 
     /// <summary>The list's "+ New prompt" footer; hidden while the empty state shows its own New prompt button.</summary>
     public bool ShowNewPromptFooter => !CurrentDocument.IsReadOnly && !ShowNoPromptsYet;
@@ -660,8 +670,14 @@ public sealed class MainViewModel : ObservableObject
     public bool IsAddingCategory
     {
         get => _isAddingCategory;
-        private set => SetProperty(ref _isAddingCategory, value);
+        private set
+        {
+            if (SetProperty(ref _isAddingCategory, value)) OnPropertyChanged(nameof(ShowNewCategoryButton));
+        }
     }
+
+    /// <summary>The rail's "New category" button: on an editable side, while no new category is being typed.</summary>
+    public bool ShowNewCategoryButton => ShowEditButtons && !IsAddingCategory;
 
     public string NewCategoryName
     {
@@ -1254,7 +1270,7 @@ public sealed class MainViewModel : ObservableObject
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException
                                        or UriFormatException or PlatformNotSupportedException)
         {
-            ShowStatus($"Couldn't open {target.Name}. The prompt is on your clipboard.", FeedbackDuration);
+            ShowStatus($"Couldn't open {target.Name}. The prompt is on your clipboard: press Ctrl+V to paste it.", FeedbackDuration);
             return;
         }
 
@@ -2199,6 +2215,7 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowTeamBar));
         OnPropertyChanged(nameof(ShowBothTeamNotices));
         OnPropertyChanged(nameof(ShowEditButtons));
+        OnPropertyChanged(nameof(ShowNewCategoryButton));
         OnPropertyChanged(nameof(ShowTeamButtons));
         OnPropertyChanged(nameof(ShowHiddenTeamPrompts));
         OnPropertyChanged(nameof(HiddenCount));

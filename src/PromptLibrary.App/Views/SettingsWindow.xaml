@@ -16,12 +16,25 @@
         </Grid.RowDefinitions>
 
         <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Focusable="False">
-            <StackPanel Margin="16,16,16,8">
+            <StackPanel Margin="16,16,16,24">
 
                 <!-- General -->
                 <TextBlock Text="General" Style="{StaticResource FieldLabel}" />
                 <CheckBox x:Name="StartupBox" Content="Start Prompt Library when Windows starts"
                           AutomationProperties.Name="Start Prompt Library when Windows starts" />
+
+                <!-- Backups -->
+                <TextBlock Text="Backups" Style="{StaticResource FieldLabel}" Margin="0,24,0,4" />
+                <views:BackupLocationPicker x:Name="Picker" />
+
+                <!-- Only once backups go somewhere: there is nothing to keep while they are off. -->
+                <StackPanel Orientation="Horizontal" Margin="0,16,0,0"
+                            Visibility="{Binding DataContext.CanTurnOff, ElementName=Picker, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="Keep the last" VerticalAlignment="Center" />
+                    <ComboBox x:Name="KeepBox" Width="80" Margin="8,0"
+                              AutomationProperties.Name="Number of backups to keep" />
+                    <TextBlock Text="backups" VerticalAlignment="Center" />
+                </StackPanel>
 
                 <!-- Shortcut -->
                 <TextBlock Text="Shortcut" Style="{StaticResource FieldLabel}" Margin="0,24,0,4" />
@@ -34,13 +47,16 @@
                 </StackPanel>
                 <TextBlock x:Name="ShortcutStatus" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,4,0,0" />
 
-                <TextBlock Text="Shortcut opens" Margin="0,12,0,4" />
-                <StackPanel Orientation="Horizontal">
-                    <RadioButton x:Name="OpensSearchRadio" GroupName="ShortcutOpens" Content="Search window"
-                                 AutomationProperties.Name="Shortcut opens the search window" />
-                    <RadioButton x:Name="OpensMenuRadio" GroupName="ShortcutOpens" Content="Menu" Margin="24,0,0,0"
-                                 AutomationProperties.Name="Shortcut opens the menu" />
-                </StackPanel>
+                <!-- What the shortcut opens: each choice says what you get. -->
+                <TextBlock Text="The shortcut opens" Margin="0,12,0,4" />
+                <RadioButton x:Name="OpensSearchRadio" GroupName="ShortcutOpens" Content="The search window"
+                             AutomationProperties.Name="Shortcut opens the search window" />
+                <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="24,2,0,0"
+                           Text="Type a few letters to find any prompt, see it before you paste it." />
+                <RadioButton x:Name="OpensMenuRadio" GroupName="ShortcutOpens" Content="A menu at the mouse pointer" Margin="0,8,0,0"
+                             AutomationProperties.Name="Shortcut opens a menu at the mouse pointer" />
+                <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="24,2,0,0"
+                           Text="Your categories and prompts as a short menu, no typing." />
 
                 <!-- Pasting -->
                 <TextBlock Text="Pasting" Style="{StaticResource FieldLabel}" Margin="0,24,0,4" />
@@ -65,19 +81,6 @@
                                  AutomationProperties.Name="Theme: light" />
                     <RadioButton x:Name="ThemeDarkRadio" GroupName="Theme" Content="Dark" Margin="24,0,0,0"
                                  AutomationProperties.Name="Theme: dark" />
-                </StackPanel>
-
-                <!-- Backups -->
-                <TextBlock Text="Back up to" Style="{StaticResource FieldLabel}" Margin="0,24,0,4" />
-                <TextBlock Text="Your library is copied here once a day and when you exit."
-                           Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,8" />
-                <views:BackupLocationPicker x:Name="Picker" />
-
-                <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
-                    <TextBlock Text="Keep the last" VerticalAlignment="Center" />
-                    <ComboBox x:Name="KeepBox" Width="80" Margin="8,0"
-                              AutomationProperties.Name="Number of backups to keep" />
-                    <TextBlock Text="backups" VerticalAlignment="Center" />
                 </StackPanel>
 
                 <!-- Team prompts: Join / Start until a team library is connected, then only the connected state + Leave. -->
@@ -112,12 +115,27 @@
                                 Click="LeaveTeam_Click" AutomationProperties.Name="Leave team library" />
                     </StackPanel>
                 </StackPanel>
+
+                <!-- Start fresh: empties Your prompts (e.g. to drop the starter prompts) after a typed DELETE. Team prompts stay. -->
+                <TextBlock Text="Start fresh" Style="{StaticResource FieldLabel}" Margin="0,24,0,4" />
+                <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,8"
+                           Text="Delete every prompt and category in Your prompts, for example to remove the starter prompts. Team prompts stay." />
+                <Button x:Name="DeleteAllButton" Content="Delete all my prompts…" HorizontalAlignment="Left"
+                        Foreground="{DynamicResource Brush.Danger}" Click="DeleteAll_Click"
+                        AutomationProperties.Name="Delete all my prompts" />
+                <TextBlock x:Name="DeleteAllStatus" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,4,0,0"
+                           AutomationProperties.LiveSetting="Polite" />
             </StackPanel>
         </ScrollViewer>
 
         <Border Grid.Row="1" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,1,0,0" Padding="16">
-            <Button Content="Close" IsCancel="True" HorizontalAlignment="Right" Click="Close_Click"
-                    AutomationProperties.Name="Close settings" />
+            <Grid>
+                <!-- Nothing to apply: every change is saved the moment it is made. -->
+                <TextBlock Text="Changes are saved as you make them." Style="{StaticResource MutedText}"
+                           HorizontalAlignment="Left" VerticalAlignment="Center" />
+                <Button Content="Close" IsCancel="True" HorizontalAlignment="Right" Click="Close_Click"
+                        AutomationProperties.Name="Close settings" />
+            </Grid>
         </Border>
     </Grid>
 </Window>

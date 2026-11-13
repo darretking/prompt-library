@@ -37,7 +37,8 @@ public static class FillPreview
     private static System.Windows.Documents.InlineUIContainer Chip(FillSegment segment)
     {
         var empty = segment.Kind == FillSegmentKind.Empty;
-        var label = new TextBlock { Text = segment.Text, FontWeight = empty ? FontWeights.SemiBold : FontWeights.Normal };
+        // A blank left empty shows in braces, as it will be pasted: {Interests} stays a placeholder until it is filled.
+        var label = new TextBlock { Text = empty ? "{" + segment.Text + "}" : segment.Text, FontWeight = empty ? FontWeights.SemiBold : FontWeights.Normal };
         label.SetResourceReference(TextBlock.ForegroundProperty, empty ? "Brush.Brand" : "Brush.Ink");
         var chip = new Border
         {
@@ -45,6 +46,7 @@ public static class FillPreview
             Margin = new Thickness(1, 0, 1, 0),
             CornerRadius = new CornerRadius(4),
             Child = label,
+            ToolTip = empty ? "Not filled in yet: pasted as a {placeholder}" : null,
         };
         chip.SetResourceReference(Border.BackgroundProperty, empty ? "Brush.BrandSoft" : "Brush.Hover");
         return new System.Windows.Documents.InlineUIContainer(chip) { BaselineAlignment = BaselineAlignment.Center };

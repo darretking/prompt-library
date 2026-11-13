@@ -90,9 +90,11 @@ public sealed class PromptEditorViewModel : ObservableObject
         get => _isReadOnly;
         set
         {
-            if (SetProperty(ref _isReadOnly, value)) OnPropertyChanged(nameof(IsEditable));
+            if (!SetProperty(ref _isReadOnly, value)) return;
+            OnPropertyChanged(nameof(IsEditable));
         }
     }
+
 
     /// <summary>The opposite of <see cref="IsReadOnly"/> (for bindings).</summary>
     public bool IsEditable => !_isReadOnly;
@@ -435,9 +437,27 @@ public sealed class PromptEditorViewModel : ObservableObject
         _copiedTimer.Start();
     }
 
+    /// <summary>
+    /// What the always-visible Save button says: "Save" while there is something to save (or the prompt is new), else
+    /// "Saved", so the header always tells the user whether their edits are kept.
+    /// </summary>
+    public string SaveStateText => IsDirty || IsNew ? "Save" : "Saved";
+
+    /// <summary>True when everything is saved: the Save button shows a check and "Saved".</summary>
+    public bool IsAllSaved => !IsDirty && !IsNew;
+
+    /// <summary>The opposite of <see cref="IsAllSaved"/>: the Save button is enabled and shows the unsaved dot.</summary>
+    public bool HasSomethingToSave => !IsAllSaved;
+
     protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
+        if (e.PropertyName is nameof(IsDirty) or nameof(IsNew))
+        {
+            base.OnPropertyChanged(new System.ComponentModel.PropertyChangedEventArgs(nameof(SaveStateText)));
+            base.OnPropertyChanged(new System.ComponentModel.PropertyChangedEventArgs(nameof(IsAllSaved)));
+            base.OnPropertyChanged(new System.ComponentModel.PropertyChangedEventArgs(nameof(HasSomethingToSave)));
+        }
         // An edit straight after saving turns "Saved" back into "Save".
         if (e.PropertyName == nameof(IsDirty) && _showSaved)
         {

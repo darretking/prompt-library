@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using PromptLibrary.Core.Editing;
 using PromptLibrary.Core.Models;
+using PromptLibrary.Core.Send;
 using PromptLibrary.Core.Storage;
 
 namespace PromptLibrary.Core.Exchange;
@@ -9,7 +10,7 @@ namespace PromptLibrary.Core.Exchange;
 /// <summary>
 /// What happened to one file of an import: prompts added, duplicates (same title in the same category) left out,
 /// prompts in it that had no title or text, and, when the whole file couldn't be used, <see cref="FailureReason"/>
-/// (plain words: <c>couldn't be read</c>, <c>empty</c>, <c>larger than 1 MB</c>, <c>not valid JSON</c>, <c>not a Prompt Library export</c>).
+/// (plain words: <c>couldn't be read</c>, <c>empty</c>, <c>larger than 1 MB</c>, <c>damaged or not a prompt file</c>, <c>not a Prompt Library export</c>).
 /// </summary>
 public sealed record ImportFileOutcome(string File, int Imported, int Duplicates, int UnusablePrompts, string? FailureReason)
 {
@@ -90,7 +91,7 @@ public static class PromptImport
         }
         catch (JsonException)
         {
-            return Fail(name, "not valid JSON");
+            return Fail(name, "damaged or not a prompt file");
         }
         catch (InvalidDataException)
         {
@@ -173,7 +174,8 @@ public static class PromptImport
             var title = parsed.Title ?? Path.GetFileNameWithoutExtension(file);
             var category = string.IsNullOrWhiteSpace(parsed.Category) ? parent : parsed.Category!;
 
-            outcomes.Add(Add(editor, target, category, null, title, parsed.Description ?? "", parsed.Body, parsed.Tags, null) switch
+            outcomes.Add(Add(editor, target, category, parsed.Emoji, title, parsed.Description ?? "", parsed.Body, parsed.Tags,
+                SendTargets.Find(parsed.SendTo)?.Id) switch
             {
                 Outcome.Added => new ImportFileOutcome(name, 1, 0, 0, null),
                 Outcome.Duplicate => new ImportFileOutcome(name, 0, 1, 0, null),
@@ -193,6 +195,13 @@ public static class PromptImport
 
         var name = categoryName.Trim();
         var category = target.Categories.FirstOrDefault(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
+
+        // The category's emoji (icon) is optional. A new category takes it, and an existing one without an emoji gets it;
+        // one that already has an emoji keeps its own. Anything that isn't a single emoji is ignored.
+        var icon = UsableEmoji(emoji);
+        if (category is not null && icon is not null && string.IsNullOrWhiteSpace(category.Emoji))
+            editor.SetCategoryEmoji(category.Id, icon);
+
         if (category is not null
             && target.Prompts.Any(p => p.CategoryId == category.Id
                                        && string.Equals(p.Title.Trim(), title.Trim(), StringComparison.CurrentCultureIgnoreCase)))
@@ -201,14 +210,24 @@ public static class PromptImport
         if (category is null)
         {
             category = editor.AddCategory(name);
-            if (!string.IsNullOrWhiteSpace(emoji)) editor.SetCategoryEmoji(category.Id, emoji);
+            if (icon is not null) editor.SetCategoryEmoji(category.Id, icon);
         }
         editor.AddPrompt(category.Id, title, description ?? "", text, tags, sendTo);
         return Outcome.Added;
     }
 
-    /// <summary>One <c>.md</c>/<c>.txt</c> file: optional front matter, then the body (kept exactly).</summary>
-    internal sealed record MarkdownFile(string? Title, string? Description, string? Category, List<string> Tags, string Body);
+    /// <summary>The trimmed emoji when it is a single emoji (one text element, at most 16 UTF-16 units, not a letter or digit), else null.</summary>
+    internal static string? UsableEmoji(string? emoji)
+    {
+        var e = emoji?.Trim();
+        if (string.IsNullOrEmpty(e) || e.Length > 16 || char.IsLetterOrDigit(e, 0)) return null;
+        return new System.Globalization.StringInfo(e).LengthInTextElements == 1 ? e : null;
+    }
+
+    /// <summary>One <c>.md</c>/<c>.txt</c> file: optional front matter, then the body (kept exactly). <c>emoji:</c> (or
+    /// <c>icon:</c>) is the category's optional emoji.</summary>
+    internal sealed record MarkdownFile(string? Title, string? Description, string? Category, List<string> Tags, string Body,
+        string? Emoji = null, string? SendTo = null);
 
     internal static MarkdownFile ParseMarkdown(string content)
     {
@@ -217,7 +236,7 @@ public static class PromptImport
 
         if (LineEnd(content, 0) is not { } first || content[..first.End].TrimEnd('\r') != "---") return none;
 
-        string? title = null, description = null, category = null;
+        string? title = null, description = null, category = null, emoji = null, sendTo = null;
         var tags = new List<string>();
         var position = first.Next;
         string? lastKey = null;
@@ -228,7 +247,7 @@ public static class PromptImport
             position = line.Next;
 
             if (text == "---")
-                return new MarkdownFile(title, description, category, TagRules.Normalize(tags), content[position..]);
+                return new MarkdownFile(title, description, category, TagRules.Normalize(tags), content[position..], emoji, sendTo);
 
             if (lastKey == "tags" && text.TrimStart().StartsWith("- ", StringComparison.Ordinal))
             {
@@ -246,6 +265,8 @@ public static class PromptImport
                 case "title": title = Unquote(value); break;
                 case "description": description = Unquote(value); break;
                 case "category": category = Unquote(value); break;
+                case "emoji" or "icon": emoji = Unquote(value); break;
+                case "sendto": sendTo = Unquote(value); break;
                 case "tags": tags.AddRange(ParseList(value)); break;
             }
         }

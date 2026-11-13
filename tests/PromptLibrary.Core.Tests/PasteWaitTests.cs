@@ -43,7 +43,7 @@ public class PasteWaitTests
     {
         Assert.Equal(("Pasted: X", ToastKind.Success), PasteDecision.ToastFor("X", PasteOutcome.Pasted));
         Assert.Equal(("Copied: X", ToastKind.Success), PasteDecision.ToastFor("X", PasteOutcome.NotAttempted));
-        Assert.Equal(("Couldn't paste into that app. The prompt is on your clipboard.", ToastKind.Error),
+        Assert.Equal(("Couldn't paste into that app. The prompt is on your clipboard: press Ctrl+V to paste it.", ToastKind.Error),
             PasteDecision.ToastFor("X", PasteOutcome.Failed));
         Assert.Equal(PasteDecision.CouldntPasteText, PasteDecision.ToastFor("X", PasteOutcome.Elevated).Text);
     }

@@ -36,6 +36,9 @@
                                     <TextBlock Text="{Binding BadgeText}" FontSize="12" FontWeight="SemiBold" Margin="4,0,0,0"
                                                Foreground="{DynamicResource Brush.Brand}" VerticalAlignment="Center" />
                                 </StackPanel>
+                                <!-- On a card not in use: says what clicking it does. -->
+                                <TextBlock x:Name="UseHint" Grid.Column="1" Text="Use this folder" Margin="8,0,0,0"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource Brush.Brand}" />
                                 <TextBlock x:Name="Busy" Grid.Column="1" Text="Backing up…" Style="{StaticResource MutedText}"
                                            Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" />
                             </Grid>
@@ -50,10 +53,12 @@
                                 <Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource Brush.Brand}" />
                                 <Setter TargetName="Edge" Property="Visibility" Value="Visible" />
                                 <Setter TargetName="InUse" Property="Visibility" Value="Visible" />
+                                <Setter TargetName="UseHint" Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
                             <DataTrigger Binding="{Binding IsBackingUp}" Value="True">
                                 <Setter TargetName="InUse" Property="Visibility" Value="Collapsed" />
                                 <Setter TargetName="Busy" Property="Visibility" Value="Visible" />
+                                <Setter TargetName="UseHint" Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="Frame" Property="Background" Value="{DynamicResource Brush.BrandSoft}" />
@@ -79,6 +84,8 @@
     </UserControl.Resources>
 
     <StackPanel>
+        <!-- Says first whether backups are on, and where. -->
+        <TextBlock Text="{Binding StatusText}" Style="{StaticResource HiddenWhenNull}" FontWeight="SemiBold" Margin="0,0,0,8" />
         <TextBlock Text="Looking for cloud folders…" Style="{StaticResource MutedText}" Margin="0,0,0,8"
                    Visibility="{Binding ShowDetecting, Converter={StaticResource BoolToVisibility}}" />
 
@@ -111,6 +118,12 @@
             <Button Content="Refresh" Command="{Binding RefreshCommand}" Margin="8,0,0,0"
                     Visibility="{Binding NothingFound, Converter={StaticResource BoolToVisibility}}"
                     ToolTip="Look for cloud folders again" AutomationProperties.Name="Refresh cloud folders" />
+            <!-- While backups go somewhere: a way to stop them (earlier backups stay). -->
+            <Button Style="{StaticResource LinkButton}" Content="Turn off backups" Command="{Binding TurnOffCommand}"
+                    Margin="16,0,0,0" VerticalAlignment="Center"
+                    Visibility="{Binding CanTurnOff, Converter={StaticResource BoolToVisibility}}"
+                    ToolTip="Stop backing up. Backups already made stay in their folder."
+                    AutomationProperties.Name="Turn off backups" />
         </StackPanel>
 
         <TextBlock Text="{Binding ProgressText}" Style="{StaticResource HiddenWhenNull}" Margin="0,8,0,0" />
@@ -165,8 +178,8 @@
         <TextBlock Text="{Binding NoteText}" Style="{StaticResource HiddenWhenNull}" />
         <TextBlock Text="{Binding LastBackupText}" Style="{StaticResource HiddenWhenNull}" />
 
-        <Button Style="{StaticResource LinkButton}" Content="Restore from a backup…" HorizontalAlignment="Left"
-                Margin="0,8,0,0" Command="{Binding RestoreCommand}" AutomationProperties.Name="Restore from a backup"
+        <Button Style="{StaticResource LinkButton}" Content="Restore from backup…" HorizontalAlignment="Left"
+                Margin="0,8,0,0" Command="{Binding RestoreCommand}" AutomationProperties.Name="Restore from backup"
                 Visibility="{Binding ShowRestoreLink, Converter={StaticResource BoolToVisibility}}" />
     </StackPanel>
 </UserControl>

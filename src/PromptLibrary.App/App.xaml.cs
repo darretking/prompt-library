@@ -24,6 +24,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        Views.DropAlignment.KeepLeftAligned();
 
         _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName + Paths.InstanceSuffix);
         _singleInstance = new Mutex(initiallyOwned: true, MutexName + Paths.InstanceSuffix, out _ownsMutex);

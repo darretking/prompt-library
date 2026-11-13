@@ -58,8 +58,26 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
         TryAgainCommand = new AsyncRelayCommand(() => _retry?.Invoke() ?? Task.CompletedTask,
             () => _host.SlowPickedFolderBackup is null);
         RestoreCommand = new RelayCommand(_host.OpenRestore);
+        TurnOffCommand = new RelayCommand(TurnOff, () => !_isBusy);
 
         RebuildCards();
+    }
+
+    /// <summary><c>Turn off backups</c>: shown while backups go somewhere (not in the setup guide's select-only mode).</summary>
+    public IRelayCommand TurnOffCommand { get; }
+
+    public bool CanTurnOff => !_selectOnly && _host.Settings.BackupFolder is not null;
+
+    private void TurnOff()
+    {
+        _host.TurnOffBackups();
+        ResultText = "Backups are off. Your earlier backups are still in their folder.";
+        ResultIsError = false;
+        NoteText = null;
+        RebuildCards();
+        OnPropertyChanged(nameof(CanTurnOff));
+        OnPropertyChanged(nameof(LastBackupText));
+        OnPropertyChanged(nameof(StatusText));
     }
 
     public ObservableCollection<BackupFolderCard> Cards { get; } = new();
@@ -70,7 +88,7 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
     /// <summary>A backup is running (cards and "Choose another folder…" are disabled).</summary>
     public bool IsBusy => _isBusy;
 
-    /// <summary>The "Restore from a backup…" link; not in the wizard (there is nothing to restore yet).</summary>
+    /// <summary>The "Restore from backup…" link; not in the wizard (there is nothing to restore yet).</summary>
     public bool ShowRestoreLink => !_selectOnly;
 
     public IAsyncRelayCommand<BackupFolderCard?> PickCommand { get; }
@@ -131,6 +149,14 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
         => _host.Settings is { BackupFolder: not null, LastBackupAt: { } at }
             ? $"Last backup: {BackupLocation.RelativeTimeText(at.LocalDateTime, DateTime.Now)}"
             : null;
+
+    /// <summary>
+    /// The first line of the picker, so it always says whether backups are on: "Backups are off. Pick a folder to turn
+    /// them on." or "Backing up to OneDrive." (Not in the setup guide, which asks the question itself.)
+    /// </summary>
+    public string? StatusText => _selectOnly ? null
+        : _host.Settings.BackupFolder is null ? "Backups are off. Pick a folder below to turn them on."
+        : $"Backing up to {_host.Settings.BackupProviderName ?? "your chosen folder"}, once a day and when you exit.";
 
     /// <summary>
     /// Looks for cloud folders off the UI thread, then rebuilds the cards. Skipped while a detection or a
@@ -239,6 +265,8 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
         }
         OnPropertyChanged(nameof(ShowTryAgain));
         OnPropertyChanged(nameof(LastBackupText));
+        OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(CanTurnOff));
         return result.Success;
     }
 
@@ -263,6 +291,7 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
         foreach (var card in Cards)
             card.IsEnabled = !busy;
         ChooseFolderCommand.NotifyCanExecuteChanged();
+        TurnOffCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(IsBusy));
     }
 
@@ -306,6 +335,7 @@ public sealed class BackupLocationPickerViewModel : ObservableObject
 
         OnPropertyChanged(nameof(NothingFound));
         OnPropertyChanged(nameof(LastBackupText));
+        OnPropertyChanged(nameof(StatusText));
     }
 
     /// <summary>True when the folder is on the same drive as the library itself (so it's no help if the PC fails).</summary>

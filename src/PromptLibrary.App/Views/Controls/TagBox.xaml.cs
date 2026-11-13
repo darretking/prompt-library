@@ -49,12 +49,12 @@ public partial class TagBox : UserControl
     private void TagsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
         => Refresh();
 
-    /// <summary>Shows the typing box only while more tags fit and the field is editable; the hint only while empty.</summary>
+    /// <summary>Shows the typing box only while more tags fit and the field is editable; the hint while it is empty.</summary>
     private void Refresh()
     {
         var count = Tags?.Count ?? 0;
         InputHost.Visibility = IsReadOnly || count >= TagRules.MaxTags ? Visibility.Collapsed : Visibility.Visible;
-        Placeholder.Visibility = count == 0 && Input.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        UpdatePlaceholder();
         // Re-evaluate the × buttons' visibility.
         Chips.Items.Refresh();
     }
@@ -64,8 +64,14 @@ public partial class TagBox : UserControl
         if (InputHost.IsVisible) Input.Focus();
     }
 
-    private void Input_TextChanged(object sender, TextChangedEventArgs e)
-        => Placeholder.Visibility = (Tags?.Count ?? 0) == 0 && Input.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+    private void Input_TextChanged(object sender, TextChangedEventArgs e) => UpdatePlaceholder();
+
+    /// <summary>The hint in the empty typing box: "Add tags" with none yet, "Add a tag" after the chips, so adding one more is always visible.</summary>
+    private void UpdatePlaceholder()
+    {
+        Placeholder.Text = (Tags?.Count ?? 0) == 0 ? "Add tags" : "Add a tag";
+        Placeholder.Visibility = Input.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     private void Input_PreviewTextInput(object sender, TextCompositionEventArgs e)
     {

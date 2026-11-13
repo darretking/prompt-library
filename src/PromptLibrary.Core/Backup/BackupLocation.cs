@@ -86,7 +86,7 @@ public static class BackupLocation
         => settings.PreRestoreBackupFiles.Contains(Path.GetFileName(backupPath), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The muted second line of a Restore window row, or null.</summary>
-    public static string? BackupRowNote(bool isPreRestoreCopy) => isPreRestoreCopy ? "Made automatically before a restore" : null;
+    public static string? BackupRowNote(bool isPreRestoreCopy) => isPreRestoreCopy ? "Safety copy, made automatically before a restore or a delete" : null;
 
     /// <summary><c>&lt;folder&gt; isn't available. Is &lt;provider&gt; signed in?</c> (the question only with a provider).</summary>
     public static string UnavailableText(string folder, string? provider)

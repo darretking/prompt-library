@@ -12,6 +12,9 @@ public static class ReleaseUrls
     /// <summary>The repository's latest-release page; the fallback when a release's own page URL isn't usable.</summary>
     public static string LatestPage(string owner, string repo) => $"https://{Host}/{owner}/{repo}/releases/latest";
 
+    /// <summary>The changelog (what's new in each version) on the repository's main branch.</summary>
+    public static string ChangelogPage(string owner, string repo) => $"https://{Host}/{owner}/{repo}/blob/main/CHANGELOG.md";
+
     /// <summary>True for <c>https://github.com/{owner}/{repo}/releases/…</c>.</summary>
     public static bool IsReleasePage(string? url, string owner, string repo)
         => HasPrefix(url, $"/{owner}/{repo}/releases/");

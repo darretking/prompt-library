@@ -12,11 +12,12 @@
     <StackPanel Margin="16">
         <TextBlock x:Name="MessageText" TextWrapping="Wrap" Margin="0,0,0,16" />
 
-        <!-- The label and the choice are gone (not just greyed) while "Also delete the prompts" is ticked. -->
+        <!-- Two plain choices: move the prompts (the category to move them to right under it), or delete them too. -->
         <StackPanel x:Name="MovePanel">
-            <TextBlock Text="Move prompts to" Style="{StaticResource FieldLabel}" />
+            <RadioButton x:Name="MoveRadio" GroupName="PromptsGo" IsChecked="True"
+                         Checked="Choice_Changed" Unchecked="Choice_Changed" />
             <!-- The first other category is chosen at first, so the box is never empty. -->
-            <ComboBox x:Name="TargetBox" AutomationProperties.Name="Move prompts to"
+            <ComboBox x:Name="TargetBox" AutomationProperties.Name="Move prompts to" Margin="28,6,0,0"
                       SelectionChanged="TargetBox_SelectionChanged">
                 <ComboBox.ItemTemplate>
                     <DataTemplate>
@@ -43,11 +44,12 @@
                 </ComboBox.ItemContainerStyle>
             </ComboBox>
         </StackPanel>
-        <TextBlock x:Name="HintText" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,4,0,0" />
+        <TextBlock x:Name="HintText" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="28,4,0,0" />
 
-        <!-- The other way out: delete the prompts with the category. Only for a category that has some. -->
-        <CheckBox x:Name="DeleteBox" Margin="0,16,0,0" Checked="DeleteBox_Changed" Unchecked="DeleteBox_Changed"
-                  ToolTip="Delete the prompts too instead of moving them" />
+        <!-- The other way out: delete the prompts with the category. -->
+        <RadioButton x:Name="DeleteBox" GroupName="PromptsGo" Margin="0,12,0,0"
+                     Checked="Choice_Changed" Unchecked="Choice_Changed"
+                     ToolTip="Delete the prompts too instead of moving them" />
         <!-- Under the box that causes it: shown only while the prompts are to be deleted. -->
         <TextBlock x:Name="DeleteWarning" Style="{StaticResource ErrorText}" Text="This can't be undone." TextWrapping="Wrap"
                    Margin="28,4,0,0" Visibility="Collapsed" />

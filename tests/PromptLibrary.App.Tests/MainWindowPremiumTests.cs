@@ -357,7 +357,7 @@ public sealed class MainWindowPremiumTests : IDisposable
         w.Vm.ImportCommand.Execute(null);
 
         var failure = Assert.Single(w.Dialogs.LastImport!.Failures);
-        Assert.Equal(("bad.json", "not valid JSON"), (failure.File, failure.Reason));
+        Assert.Equal(("bad.json", "damaged or not a prompt file"), (failure.File, failure.Reason));
         Assert.Equal("Imported 0 prompts. Skipped 1 file that couldn't be used.", w.Dialogs.Messages.Single());
         Assert.Single(w.Host.Library.Prompts);
         Assert.Equal(0, w.Host.LibrarySaves);
@@ -459,6 +459,87 @@ public sealed class MainWindowPremiumTests : IDisposable
         Assert.True(w.Vm.ShowNoPromptsYet);
         Assert.Equal("", w.Vm.NoEditorText); // the list column says it; the editor doesn't repeat it
         Assert.True(w.Vm.HasNoEditor);
+    });
+
+    [Fact]
+    public void EmptyLibrary_NewPrompt_HidesTheEmptyCard() => Sta.Run(() =>
+    {
+        var w = Build();
+        Assert.True(w.Vm.ShowNoPromptsYet);
+
+        // The empty card spans the list and editor columns: it must not sit on top of the new prompt being written.
+        w.Vm.NewPromptCommand.Execute(null);
+        Assert.True(w.Vm.HasEditor);
+        Assert.False(w.Vm.ShowNoPromptsYet);
+    });
+
+    [Fact]
+    public void EmptyLibrary_AfterANewCategory_NewPromptStillHidesTheEmptyCard() => Sta.Run(() =>
+    {
+        var w = Build();
+        w.Vm.NewCategoryCommand.Execute(null);
+        w.Vm.NewCategoryName = "Claude";
+        w.Vm.CommitNewCategory();
+
+        w.Vm.NewPromptCommand.Execute(null);
+        Assert.False(w.Vm.ShowNoPromptsYet);
+        Assert.Equal("Claude", w.Vm.CategoryChoices.Single(c => c.Id == w.Vm.Editor!.CategoryId).Name);
+    });
+
+    // ---- Settings → Delete all my prompts (the main window afterwards) -----------------------------
+
+    [Fact]
+    public void DeleteAll_WithUnsavedEditsOpen_ClosesTheEditorWithoutAsking_AndShowsTheEmptyCard() => Sta.Run(() =>
+    {
+        var w = Build(P("One"), P("Two"), P("Mail", email: true));
+        w.Vm.SelectedPrompt = w.Vm.Prompts.First();
+        w.Vm.Editor!.Title = "One, edited";
+        Assert.True(w.Vm.Editor.IsDirty);
+        w.Host.Settings.PinnedPromptIds.Add(w.Prompts[0].Id);
+
+        LibraryReset.ClearPersonal(w.Host.Library, w.Host.Settings);
+        w.Vm.ReloadAfterRestore("All your prompts were deleted. Restore from backup brings them back.");
+
+        Assert.True(w.Vm.HasNoEditor);
+        Assert.Empty(w.Vm.Prompts);
+        Assert.True(w.Vm.ShowNoPromptsYet);
+        Assert.Empty(w.Host.Settings.PinnedPromptIds);
+        Assert.Equal("All your prompts were deleted. Restore from backup brings them back.", w.Vm.StatusText);
+        Assert.All(w.Vm.Categories, c => Assert.False(c.IsCategory)); // only All prompts is left
+        Assert.Null(w.Dialogs.LastDeletionAsked); // nothing was asked: DELETE was typed already
+    });
+
+    [Fact]
+    public void DeleteAll_ThenStarterPrompts_FillsTheLibraryAgain() => Sta.Run(() =>
+    {
+        var w = Build(P("One"));
+        LibraryReset.ClearPersonal(w.Host.Library, w.Host.Settings);
+        w.Vm.ReloadAfterRestore("done");
+
+        w.Vm.AddStarterPromptsCommand.Execute(null);
+
+        Assert.Equal(39, w.Host.Library.Prompts.Count);
+        Assert.False(w.Vm.ShowNoPromptsYet);
+    });
+
+    [Fact]
+    public void DeleteAll_ThenNewCategoryAndPrompt_Works() => Sta.Run(() =>
+    {
+        var w = Build(P("One"));
+        LibraryReset.ClearPersonal(w.Host.Library, w.Host.Settings);
+        w.Vm.ReloadAfterRestore("done");
+
+        w.Vm.NewCategoryCommand.Execute(null);
+        w.Vm.NewCategoryName = "Claude";
+        Assert.True(w.Vm.CommitNewCategory());
+        w.Vm.NewPromptCommand.Execute(null);
+        w.Vm.Editor!.Title = "First";
+        w.Vm.Editor.Text = "Hello";
+        w.Vm.SaveCommand.Execute(null);
+
+        Assert.Equal(["First"], w.Host.Library.Prompts.Select(p => p.Title));
+        Assert.Equal("Claude", w.Host.Library.Categories.Single().Name);
+        Assert.False(w.Vm.ShowNoPromptsYet);
     });
 
     [Fact]
