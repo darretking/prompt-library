@@ -18,7 +18,7 @@ Your prompt is pasted right where you were typing.
   <img src="https://img.shields.io/badge/no%20account-F5A524" alt="No account needed" />
   <img src="https://img.shields.io/badge/no%20tracking-F5A524" alt="No tracking" />
   <img src="https://img.shields.io/badge/installs%20without-admin%20rights-1B2230" alt="Installs without admin rights" />
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.1-4338CA" alt="Version 1.2.1, see the changelog" /></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.2-4338CA" alt="Version 1.2.2, see the changelog" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/free%20%26%20open%20source-GPL--3.0-4338CA" alt="Free and open source, GPL-3.0 licence" /></a>
 </p>
 
@@ -36,6 +36,8 @@ Your prompt is pasted right where you were typing.
 
 <br/>
 
+> **New in 1.2.2:** six more category emoji (AI, music, photos, video, sports, medicine) and brighter ones where the old ones faded into their tiles.
+>
 > **New in 1.2.1:** clearer for first-time users (labelled buttons, a visible save state, plainer words), colour icons on every category with 18 new business icons, and Settings → Delete all my prompts to start fresh.
 >
 > **New in 1.2:** prompt templates with a live preview, ranked search, version history, import and export, and a new Windows 11 look in light and dark. [See the changelog](CHANGELOG.md).
