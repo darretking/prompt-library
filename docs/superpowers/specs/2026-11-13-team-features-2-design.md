@@ -126,7 +126,8 @@ values, 6 featured prompts, 7 installer preset, 8 team library check, 11 out-of-
 
 - Core `TeamHealthCheck.Run(Library) -> IReadOnlyList<HealthIssue(Kind, PromptId?, CategoryId?, Message)>`:
   duplicate titles in a category (case-insensitive), identical text (whitespace-normalised) across prompts, empty
-  categories, prompts with no description, the same field name used with different choice lists, likely broken fields
+  categories, prompts with no description, choice lists that share 2+ options but differ (**T15**: a choice field's name
+  is its option list, so "same name, different choices" can't occur; near-identical lists are the real problem), likely broken fields
   (`{name` not closed on the same line, `{}`), titles over 80 chars. Ordered by severity: duplicates, broken fields,
   empty categories, the rest.
 - Team ⋯ → **Check the team library** (CanEdit): dialog with the list (plain sentence per issue). Clicking an issue
