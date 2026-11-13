@@ -18,7 +18,7 @@ Your prompt is pasted right where you were typing.
   <img src="https://img.shields.io/badge/no%20account-F5A524" alt="No account needed" />
   <img src="https://img.shields.io/badge/no%20tracking-F5A524" alt="No tracking" />
   <img src="https://img.shields.io/badge/installs%20without-admin%20rights-1B2230" alt="Installs without admin rights" />
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.3-4338CA" alt="Version 1.2.3, see the changelog" /></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.4-4338CA" alt="Version 1.2.4, see the changelog" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/free%20%26%20open%20source-GPL--3.0-4338CA" alt="Free and open source, GPL-3.0 licence" /></a>
 </p>
 
@@ -36,6 +36,8 @@ Your prompt is pasted right where you were typing.
 
 <br/>
 
+> **New in 1.2.4:** with the shortcut set to open the menu, prompts with fields open the fill-in form and dynamic tokens fill, just as in the search window.
+>
 > **New in 1.2.3:** the prompt box now fills the editor down to the bottom of the window, and long prompts scroll inside it.
 >
 > **New in 1.2.2:** six more category emoji (AI, music, photos, video, sports, medicine) and brighter ones where the old ones faded into their tiles.

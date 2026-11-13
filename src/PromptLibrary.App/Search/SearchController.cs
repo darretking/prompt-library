@@ -138,35 +138,14 @@ internal sealed class SearchController : ISearchActions, IDisposable
     {
         try
         {
-            // Taken now (not when the window opened): it is what the clipboard holds just before we replace it.
-            var previous = _host.Settings.RestoreClipboard ? ClipboardSnapshot.TextIfOnlyText() : null;
-
-            if (!_host.TryCopy(text))
-            {
-                _toast.Show("Couldn't copy — clipboard busy. Try again.", ToastKind.Error);
-                return;
-            }
-            RecordUse(prompt);
-
-            var hasTarget = AutoPaster.IsOtherAppWindow(returnTo, out var isOurs);
-            var outcome = PasteDecision.ShouldPaste(_host.Settings.PasteAfterCopy, fromShortcutMenu: returnTo != IntPtr.Zero,
-                hasTarget, isOurs)
-                ? await AutoPaster.PasteAsync(returnTo)
-                : PasteOutcome.NotAttempted;
-
-            if (!_disposed)
-            {
-                var (toastText, kind) = PasteDecision.ToastFor(prompt.Title, outcome);
-                _toast.Show(toastText, kind, outcome == PasteOutcome.Pasted ? returnTo : IntPtr.Zero);
-            }
-
-            if (outcome == PasteOutcome.Pasted && (caretBackSteps is not null || previous is not null))
-            {
-                // Not a fixed delay: until the app has read the clipboard and gone idle (400 ms at least, 1.5 s at most).
-                await AutoPaster.WaitForTargetToReadClipboardAsync(returnTo);
-                if (caretBackSteps is { } steps) AutoPaster.PressLeft(steps);
-                if (previous is not null && !_disposed) ClipboardSnapshot.RestoreIfUnchanged(_host, previous, text);
-            }
+            var copied = await PasteFlow.RunAsync(new WindowsPasteSteps(_host, () => _disposed), _host.Settings, text,
+                caretBackSteps, returnTo, onCopied: () => RecordUse(prompt), onOutcome: outcome =>
+                {
+                    if (_disposed) return;
+                    var (toastText, kind) = PasteDecision.ToastFor(prompt.Title, outcome);
+                    _toast.Show(toastText, kind, outcome == PasteOutcome.Pasted ? returnTo : IntPtr.Zero);
+                });
+            if (!copied) _toast.Show("Couldn't copy — clipboard busy. Try again.", ToastKind.Error);
         }
         catch (Exception ex)
         {

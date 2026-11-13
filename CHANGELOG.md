@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-11-13
+
+### Fixed
+- With **Shortcut opens: Menu**, picking a prompt now works like the search window: a prompt with fields opens the fill-in form, `{date}`, `{time}`, `{clipboard}` and `{cursor}` fill, and your clipboard is put back after the paste when that setting is on. It used to copy the raw text.
+- Recent and ranking no longer remember prompts that were deleted, including team prompts removed by the team and the prompts in a deleted team category. While a team library can't be reached, its prompts' usage is kept.
+
 ## [1.2.3] - 2026-11-13
 
 ### Fixed

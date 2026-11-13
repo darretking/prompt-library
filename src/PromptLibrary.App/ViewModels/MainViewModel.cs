@@ -1013,6 +1013,12 @@ public sealed class MainViewModel : ObservableObject
                 PromptReferences.Remove(settings, removed);
                 if (referenced) SaveTeamState();
             }
+            else
+            {
+                // Usage is only the Recent list and ranking, so it goes now rather than after the team save.
+                var cleared = removed.Count(r => _host.Settings.Usage.Remove(r));
+                if (cleared > 0) SaveTeamState();
+            }
         }
         else
         {
