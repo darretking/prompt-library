@@ -1,3 +1,5 @@
+using PromptLibrary.Core.Backup;
+
 namespace PromptLibrary.Core.Team;
 
 /// <summary>Where a team library is read from.</summary>
@@ -17,8 +19,10 @@ public sealed record TeamSource(TeamSourceKind Kind, string Location)
     /// Turns what the user typed or picked into a source. A folder becomes <c>folder\team-prompts.json</c>, a file path is kept,
     /// and an https link is kept after two rewrites: Dropbox <c>dl=0</c> becomes <c>dl=1</c>, and a GitHub <c>/blob/</c>
     /// link becomes its raw link. Returns null for empty input, http and any other scheme.
+    /// When <paramref name="clouds"/> is given, a path that starts with a cloud folder's name (<c>OneDrive - Acme\Shared</c>,
+    /// any case) is resolved against that folder's root first.
     /// </summary>
-    public static TeamSource? FromInput(string input)
+    public static TeamSource? FromInput(string input, IReadOnlyList<CloudFolder>? clouds = null)
     {
         var text = input?.Trim().Trim('"').Trim();
         if (string.IsNullOrEmpty(text)) return null;
@@ -29,9 +33,25 @@ public sealed record TeamSource(TeamSourceKind Kind, string Location)
             return new TeamSource(TeamSourceKind.Url, Rewrite(uri).AbsoluteUri);
         }
 
+        text = ResolveCloudRelative(text, clouds);
         if (Directory.Exists(text) || Path.GetExtension(text).Length == 0)
             return new TeamSource(TeamSourceKind.File, Path.Combine(text, TeamFile.FileName));
         return new TeamSource(TeamSourceKind.File, text);
+    }
+
+    private static string ResolveCloudRelative(string text, IReadOnlyList<CloudFolder>? clouds)
+    {
+        if (clouds is null || Path.IsPathRooted(text)) return text;
+        foreach (var cloud in clouds)
+        {
+            var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(cloud.RootPath));
+            if (name.Length == 0 || !text.StartsWith(name, StringComparison.OrdinalIgnoreCase)) continue;
+            var rest = text[name.Length..];
+            if (rest.Length > 0 && rest[0] != '\\' && rest[0] != '/') continue;
+            rest = rest.TrimStart('\\', '/');
+            return rest.Length == 0 ? cloud.RootPath : Path.Combine(cloud.RootPath, rest.Replace('/', '\\'));
+        }
+        return text;
     }
 
     private static Uri Rewrite(Uri uri)
