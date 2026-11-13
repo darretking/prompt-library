@@ -5,7 +5,7 @@ internal static class SeedDecor
 {
     private static readonly Dictionary<string, string> CategoryEmoji = new()
     {
-        ["Marketing"] = "\U0001F4E3",           // megaphone
+        ["Marketing"] = "\U0001F4E2",           // loudspeaker (the megaphone was dim on dark tiles)
         ["Website design"] = "\U0001F3A8",      // palette
         ["Productivity"] = "✅",            // check mark
         ["Kids & family"] = "\U0001F9F8",       // teddy bear
@@ -19,7 +19,7 @@ internal static class SeedDecor
         ["Career"] = "\U0001F454",              // necktie
         ["Coding"] = "\U0001F4BB",              // laptop
         ["Sales"] = "\U0001F91D",               // handshake
-        ["Customer support"] = "\U0001F4AC",    // speech bubble
+        ["Customer support"] = "\U0001F6DF",    // ring buoy (the white speech bubble faded into light tiles)
         ["Meetings & management"] = "\U0001F4C5", // calendar
         ["HR & people"] = "\U0001F465",         // people
         ["Operations & finance"] = "\U0001F4CA", // bar chart

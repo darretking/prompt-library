@@ -6,6 +6,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+- Brighter emoji where the old ones faded into their tiles: in the category emoji picker the speech bubble, wrench and megaphone are now a mobile phone, a hammer and wrench, and a loudspeaker. New libraries start Marketing with the loudspeaker and Customer support with the ring buoy. Categories that already use the old emoji keep them.
+
 ## [1.2.1] - 2026-11-13
 
 ### Added
