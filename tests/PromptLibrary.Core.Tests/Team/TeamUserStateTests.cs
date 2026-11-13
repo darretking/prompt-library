@@ -1,6 +1,7 @@
 using PromptLibrary.Core.Models;
 using PromptLibrary.Core.Storage;
 using PromptLibrary.Core.Team;
+using PromptLibrary.Core.Usage;
 
 namespace PromptLibrary.Core.Tests.Team;
 
@@ -190,6 +191,48 @@ public sealed class TeamUserStateTests : IDisposable
         Assert.Equal([team.Id], s.HiddenTeamPromptIds);
         Assert.Equal([team.Id], s.SeenTeamPrompts.Keys);
         Assert.False(TeamUserState.Prune(s, Lib(personal), Lib(team)));
+    }
+
+    [Fact]
+    public void Prune_DropsUsageOfGonePrompts_KeepsPersonalAndTeam()
+    {
+        var s = new AppSettings();
+        var personal = P();
+        var team = P();
+        var gone = Guid.NewGuid();
+        foreach (var id in new[] { personal.Id, team.Id, gone }) UsageTracker.Record(s, id, DateTimeOffset.Now);
+
+        Assert.True(TeamUserState.Prune(s, Lib(personal), Lib(team)));
+
+        Assert.Equivalent(new[] { personal.Id, team.Id }, s.Usage.Keys);
+    }
+
+    [Fact]
+    public void Prune_TeamJoinedButNotLoaded_KeepsTeamUsage()
+    {
+        var s = new AppSettings();
+        var personal = P();
+        var teamId = Guid.NewGuid();
+        UsageTracker.Record(s, personal.Id, DateTimeOffset.Now);
+        UsageTracker.Record(s, teamId, DateTimeOffset.Now);
+
+        Assert.False(TeamUserState.Prune(s, Lib(personal), TeamUserState.TeamForPrune(joined: true, loaded: null)));
+
+        Assert.Contains(teamId, s.Usage.Keys);
+    }
+
+    [Fact]
+    public void Prune_NoTeamJoined_DropsTeamUsage()
+    {
+        var s = new AppSettings();
+        var personal = P();
+        var teamId = Guid.NewGuid();
+        UsageTracker.Record(s, personal.Id, DateTimeOffset.Now);
+        UsageTracker.Record(s, teamId, DateTimeOffset.Now);
+
+        Assert.True(TeamUserState.Prune(s, Lib(personal), TeamUserState.TeamForPrune(joined: false, loaded: null)));
+
+        Assert.Equal([personal.Id], s.Usage.Keys);
     }
 
     [Fact]

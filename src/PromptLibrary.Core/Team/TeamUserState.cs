@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using PromptLibrary.Core.Models;
+using PromptLibrary.Core.Usage;
 
 namespace PromptLibrary.Core.Team;
 
@@ -82,9 +83,9 @@ public static class TeamUserState
 
     public static void Unhide(AppSettings s, Guid id) => s.HiddenTeamPromptIds.Remove(id);
 
-    /// <summary>Drops pins, hides and seen entries whose prompt is in neither library. Returns whether anything
+    /// <summary>Drops pins, hides, seen entries and usage whose prompt is in neither library. Returns whether anything
     /// changed. With no team library loaded (<paramref name="team"/> null) nothing is pruned, so a team that is
-    /// briefly unreachable never loses its state.</summary>
+    /// briefly unreachable never loses its state (usage of team prompts included).</summary>
     public static bool Prune(AppSettings s, Library personal, Library? team)
     {
         if (team is null) return false;
@@ -96,6 +97,7 @@ public static class TeamUserState
         changed |= s.HiddenTeamPromptIds.RemoveAll(id => !teamIds.Contains(id)) > 0;
         foreach (var id in s.SeenTeamPrompts.Keys.Where(id => !teamIds.Contains(id)).ToList())
             changed |= s.SeenTeamPrompts.Remove(id);
+        changed |= UsageTracker.Prune(s, live) > 0;
         return changed;
     }
 
