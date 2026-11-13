@@ -289,7 +289,8 @@ public sealed class AppHost : IMainHost, IDisposable
         {
             var version = AppVersion.FromSystemVersion(typeof(AppHost).Assembly.GetName().Version ?? new Version(0, 0, 0));
             Team = new TeamLibraryService(_http, version.ToString(), Paths.TeamCacheFile, Settings, () => Library,
-                SaveSettings, () => DateTimeOffset.Now, ex => CrashLog.Append(Paths.CrashLogFile, ex, DateTime.Now));
+                SaveSettings, () => DateTimeOffset.Now, ex => CrashLog.Append(Paths.CrashLogFile, ex, DateTime.Now),
+                seenStore: new PromptLibrary.Core.Team.TeamSeenStore(Paths.TeamSeenFile));
             Team.Changed += (_, _) => RefreshQuickMenu();
             Team.Start();
             // With a team library joined its first good read prunes (an old offline copy must not); with none, drop the

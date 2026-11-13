@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PromptLibrary.Core.Models;
 using PromptLibrary.Core.Storage;
 
 namespace PromptLibrary.Core.Team;
@@ -37,6 +38,10 @@ public sealed class TeamSeenStore(string path)
     {
         foreach (var (id, snapshot) in items) _items[id] = snapshot;
     }
+
+    /// <summary>Stores the current copy of every prompt of a team library.</summary>
+    public void SnapshotAll(Library team)
+        => SetMany(team.Prompts.Select(p => new KeyValuePair<Guid, TeamSeenSnapshot>(p.Id, TeamChange.Snapshot(p, team))));
 
     public void Remove(Guid id) => _items.Remove(id);
 

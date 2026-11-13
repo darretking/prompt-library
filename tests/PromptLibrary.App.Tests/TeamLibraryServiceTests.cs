@@ -552,4 +552,90 @@ public sealed class TeamLibraryServiceTests : IDisposable
         svc.Leave();
         Assert.Equal([personal.Prompts[0].Id], _settings.PinnedPromptIds);
     });
+
+    private string SeenPath => Path.Combine(_root, "cache", "team-seen.json");
+
+    [Fact]
+    public void Join_SnapshotsEveryTeamPrompt() => Sta.Run(() =>
+    {
+        var folder = MakeTeamFolder("acme", "One", "Two");
+        using var svc = NewService();
+
+        Wait(svc.JoinAsync(folder));
+
+        var store = new TeamSeenStore(SeenPath);
+        store.Load();
+        foreach (var p in svc.Team!.Content.Prompts)
+            Assert.Equal(new TeamSeenSnapshot(p.Title, p.Description, p.Text, "Sales"), store.Get(p.Id));
+        Assert.True(svc.TryGetChange(svc.Team.Content.Prompts[0].Id, out var change));
+        Assert.True(change.IsEmpty);
+    });
+
+    [Fact]
+    public void Leave_ClearsSnapshots() => Sta.Run(() =>
+    {
+        var folder = MakeTeamFolder("acme", "One");
+        using var svc = NewService();
+        Wait(svc.JoinAsync(folder));
+        var id = svc.Team!.Content.Prompts[0].Id;
+
+        svc.Leave();
+
+        var store = new TeamSeenStore(SeenPath);
+        store.Load();
+        Assert.Null(store.Get(id));
+        Assert.False(svc.TryGetChange(id, out _));
+    });
+
+    [Fact]
+    public void Join_DifferentSource_ReplacesSnapshots() => Sta.Run(() =>
+    {
+        var a = MakeTeamFolder("a", "A1");
+        var b = MakeTeamFolder("b", "B1");
+        using var svc = NewService();
+        Wait(svc.JoinAsync(a));
+        var aId = svc.Team!.Content.Prompts[0].Id;
+
+        Wait(svc.JoinAsync(b));
+
+        var store = new TeamSeenStore(SeenPath);
+        store.Load();
+        Assert.Null(store.Get(aId));
+        Assert.NotNull(store.Get(svc.Team!.Content.Prompts[0].Id));
+    });
+
+    [Fact]
+    public void OwnSave_UpdatesSnapshots_SoOwnChangesNeverShow() => Sta.Run(() =>
+    {
+        var folder = MakeTeamFolder("acme", "One");
+        using var svc = NewService();
+        Wait(svc.JoinAsync(folder));
+        var edited = svc.Team!;
+        var id = edited.Content.Prompts[0].Id;
+        edited.Content.Prompts[0].Text = "New text";
+
+        Wait(svc.SaveAsync(edited, svc.CurrentHash));
+
+        Assert.True(svc.TryGetChange(id, out var change));
+        Assert.True(change.IsEmpty);
+    });
+
+    [Fact]
+    public void TryGetChange_NoSnapshot_IsFalse_ThenMarkSeenStoresOne() => Sta.Run(() =>
+    {
+        var folder = MakeTeamFolder("acme", "One");
+        using var svc = NewService();
+        Wait(svc.JoinAsync(folder));
+        var id = svc.Team!.Content.Prompts[0].Id;
+        new TeamSeenStore(SeenPath).Save(); // an empty file: as if joined before 1.3
+        using var old = NewService();
+        old.Start();
+        Wait(old.RefreshAsync());
+        Assert.False(old.TryGetChange(id, out _));
+
+        old.MarkSeen(id);
+
+        Assert.True(old.TryGetChange(id, out var change));
+        Assert.True(change.IsEmpty);
+    });
 }
