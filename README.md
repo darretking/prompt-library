@@ -262,6 +262,12 @@ One person keeps the team's proven prompts in a shared folder (a network drive, 
   Settings → Team prompts → <b>Leave team library</b>. The team's prompts disappear from your PC; any copies you made with <b>Make my copy</b> stay in your own prompts. Nothing changes for the rest of the team.
 </details>
 
+<details>
+  <summary><b>For IT: pre-set the team library</b></summary>
+  <br/>
+  The installer can point every PC at the team library. Run <code>msiexec /i PromptLibrary-Setup.msi TEAMSOURCE="\\server\share\Prompts"</code>. For a synced folder, a path under the user's profile works too: <code>TEAMSOURCE="OneDrive - Acme\Shared\Prompts"</code>. The installer also adds Prompt Library to Explorer's <b>Open with</b> list for <code>.json</code> files, without making it the default app.
+</details>
+
 <br/>
 
 ## Backups, updates and your data
