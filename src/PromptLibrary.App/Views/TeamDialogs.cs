@@ -7,10 +7,10 @@ namespace PromptLibrary.App.Views;
 public static class TeamDialogs
 {
     /// <summary>Join a team library. True when one was joined.</summary>
-    public static bool Join(Window? owner, AppHost host)
+    public static bool Join(Window? owner, AppHost host, string? prefill = null)
     {
         if (host.Team is not { } service) return false;
-        var viewModel = new TeamJoinViewModel(service.JoinAsync, ProviderOf);
+        var viewModel = new TeamJoinViewModel(service.JoinAsync, ProviderOf, FindOnThisPc, prefill);
         return Show(new TeamJoinDialog(viewModel), owner);
     }
 
@@ -35,6 +35,10 @@ public static class TeamDialogs
         team.Leave();
         return true;
     }
+
+    // Cloud roots first (the slow detection stays off the UI thread: the VM calls this in the background).
+    private static Task<IReadOnlyList<Core.Team.FoundTeamFile>> FindOnThisPc(CancellationToken ct) =>
+        Core.Team.TeamFileFinder.FindAsync(AppHost.DetectCloudFolders().Select(c => c.RootPath).ToList(), ct);
 
     private static string? ProviderOf(string path) => TeamDialogText.ProviderOf(path, AppHost.DetectCloudFolders);
 

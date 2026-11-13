@@ -20,6 +20,7 @@ public partial class App : Application
     private bool _ownsMutex;
     private EventWaitHandle? _showSignal;
     private AppHost? _host;
+    private readonly CancellationTokenSource _pipeStop = new();
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -28,9 +29,12 @@ public partial class App : Application
 
         _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName + Paths.InstanceSuffix);
         _singleInstance = new Mutex(initiallyOwned: true, MutexName + Paths.InstanceSuffix, out _ownsMutex);
+        var joinText = PromptLibrary.App.Startup.JoinArguments.Parse(e.Args);
         if (!_ownsMutex)
         {
-            _showSignal.Set();
+            // Hand a team file or link to the running copy; if that fails, at least bring it up as before.
+            if (joinText is null || !PromptLibrary.App.Startup.JoinPipe.Send(joinText, PromptLibrary.App.Startup.JoinPipe.Name, TimeSpan.FromSeconds(2)))
+                _showSignal.Set();
             Shutdown();
             return;
         }
@@ -47,6 +51,12 @@ public partial class App : Application
             return; // Start has already shown the problem and shut the app down.
 
         ListenForShowSignal(_showSignal, _host);
+        PromptLibrary.App.Startup.JoinPipe.Listen(PromptLibrary.App.Startup.JoinPipe.Name, text => Dispatcher.BeginInvoke(() => _host.ShowJoinPrefilled(text)),
+            _pipeStop.Token);
+
+        // A first launch with a file or link opens Join with it once start-up is done.
+        if (joinText is not null)
+            Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => _host.ShowJoinPrefilled(joinText));
     }
 
     protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
@@ -59,6 +69,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _pipeStop.Cancel();
         _host?.Dispose();
         if (_ownsMutex)
             _singleInstance!.ReleaseMutex();

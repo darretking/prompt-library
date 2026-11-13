@@ -27,6 +27,37 @@
         <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,6,0,0"
                    Text="A shared folder works best. A link must open the file itself: a GitHub raw link, a Dropbox link or any direct download link." />
 
+        <!-- Found on this PC: team files under the cloud folders; hidden until there is one. Rows are 40 px; click fills the box. -->
+        <TextBlock Style="{StaticResource MutedText}" Text="Looking for team libraries…" Margin="0,16,0,0"
+                   Visibility="{Binding IsLooking, Converter={StaticResource BoolToVisibility}}"
+                   AutomationProperties.LiveSetting="Polite" />
+        <StackPanel Margin="0,16,0,0" Visibility="{Binding HasFound, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Text="Found on this PC" Style="{StaticResource FieldLabel}" />
+            <ItemsControl ItemsSource="{Binding Found}" IsEnabled="{Binding CanEdit}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Style="{StaticResource SubtleButton}" MinHeight="40" Padding="8,4"
+                                HorizontalAlignment="Stretch"
+                                Command="{Binding DataContext.PickFoundCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                CommandParameter="{Binding}"
+                                AutomationProperties.Name="{Binding LibraryName}"
+                                AutomationProperties.HelpText="{Binding ShortLocation}">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                                <TextBlock FontFamily="{StaticResource Font.Icons}" Text="&#xE902;" FontSize="16"
+                                           Foreground="{DynamicResource Brush.Muted}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding LibraryName}" FontSize="13" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding ShortLocation}" Style="{StaticResource MutedText}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
         <StackPanel Margin="0,16,0,0" Visibility="{Binding IsChecking, Converter={StaticResource BoolToVisibility}}">
             <TextBlock Text="Checking…" Style="{StaticResource MutedText}" AutomationProperties.LiveSetting="Polite" />
             <ProgressBar IsIndeterminate="True" Height="6" Margin="0,6,0,0"

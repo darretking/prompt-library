@@ -296,6 +296,7 @@ public sealed class AppHost : IMainHost, IDisposable
             // usage of prompts that are gone now. Only usage: team pins, hides and seen entries stay for a later re-join.
             if (Team.Source is null && UsageTracker.Prune(Settings, Library.Prompts.Select(p => p.Id)) > 0)
                 SaveSettings();
+            _ = ApplyTeamPresetAsync(Team);
         }
         catch (Exception ex)
         {
@@ -481,6 +482,42 @@ public sealed class AppHost : IMainHost, IDisposable
 
         Tray.ShowMessage(AppName, "Couldn't copy — clipboard busy. Try again.", isError: true);
         return false;
+    }
+
+    /// <summary>The installer's team source, joined quietly in the background (see <see cref="TeamPreset"/>).</summary>
+    private async Task ApplyTeamPresetAsync(TeamLibraryService team)
+    {
+        try
+        {
+            await TeamPreset.ApplyAsync(new RegistryTeamPresetSource(), Settings, team.Source is not null,
+                team.JoinAsync, SaveSettings);
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Append(Paths.CrashLogFile, ex, DateTime.Now);
+        }
+    }
+
+    private bool _joinDialogOpen;
+
+    /// <summary>
+    /// A team file or link came from the command line: bring up the main window and open Join with it in the box.
+    /// The user still presses Join. Runs on the UI thread. With Join already open the window is just brought forward.
+    /// </summary>
+    public void ShowJoinPrefilled(string text)
+    {
+        if (_exiting) return;
+        ShowMainWindow();
+        if (_joinDialogOpen || Team is null) return;
+        _joinDialogOpen = true;
+        try
+        {
+            TeamDialogs.Join(_mainWindow is { IsVisible: true } ? _mainWindow : null, this, text);
+        }
+        finally
+        {
+            _joinDialogOpen = false;
+        }
     }
 
     /// <summary>Shows the one main window, creating it the first time.</summary>
