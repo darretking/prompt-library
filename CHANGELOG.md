@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-13
+
 ### Added
 - **Settings → Start fresh → Delete all my prompts…** empties Your prompts (every prompt and category), for example to drop the starter prompts. You type DELETE to confirm. Team prompts, and your team pins and hidden team prompts, are not touched. A safety copy is saved first, so Restore from backup brings everything back, and the starter prompts are not added again at the next start.
 - **Help → What's new** opens this changelog.
@@ -88,7 +90,8 @@ A redesigned, faster Prompt Library with templates, search and history.
 ### Added
 - First release: a global shortcut (Ctrl + Alt + P) that pastes a prompt into any app, a categorised library with search and an editor, automatic backups to OneDrive, Google Drive, Dropbox, iCloud Drive or any folder, and a short first-run setup.
 
-[Unreleased]: https://github.com/darretking/prompt-library/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/darretking/prompt-library/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/darretking/prompt-library/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/darretking/prompt-library/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/darretking/prompt-library/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/darretking/prompt-library/compare/v1.0.1...v1.0.2
