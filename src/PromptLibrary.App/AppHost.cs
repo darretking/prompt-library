@@ -10,6 +10,7 @@ using System.Net.Http;
 using System.Reflection;
 using PromptLibrary.App.Tray;
 using PromptLibrary.App.Updates;
+using PromptLibrary.App.ViewModels;
 using PromptLibrary.App.Views;
 using PromptLibrary.Core.Backup;
 using PromptLibrary.Core.Clipboard;
@@ -423,26 +424,42 @@ public sealed class AppHost : IMainHost, IDisposable
         var prompt = Library.Prompts.FirstOrDefault(p => p.Id == pick.Id)
                      ?? Team?.Team?.Content.Prompts.FirstOrDefault(p => p.Id == pick.Id);
         if (prompt is null) return;
-        if (!_clipboard.TryCopy(prompt.Text))
+
+        // Same as the search window: placeholders open the form, tokens fill, {cursor} moves the caret afterwards.
+        // The tokens are taken before the form takes the focus; cancelling copies nothing and records no use.
+        var tokens = TokenValues.For(prompt.Text);
+        var willPaste = Settings.PasteAfterCopy && pick.ReturnTo != IntPtr.Zero;
+        var filled = PasteFlow.Resolve(prompt.Text, tokens, text =>
         {
-            Tray.ShowMessage(AppName, "Couldn't copy — clipboard busy. Try again.", isError: true);
-            return;
+            var model = new FillInViewModel(text, Settings, tokens, willPaste ? "Paste" : "Copy", prompt.Title, cancelLabel: "Cancel");
+            var result = FillInDialog.AskForResult(_mainWindow, model);
+            if (result is not null) SaveSettings(); // the typed values are remembered
+            return result;
+        });
+        if (filled is null) return;
+
+        try
+        {
+            // The paster brings the previous window back to the front itself (the form may have taken the focus)
+            // and waits until it really is in front before it sends Ctrl+V.
+            var copied = await PasteFlow.RunAsync(new WindowsPasteSteps(this, () => _disposed), Settings, filled.Text,
+                filled.CaretBackSteps, pick.ReturnTo, onCopied: () =>
+                {
+                    UsageTracker.Record(Settings, prompt.Id, DateTimeOffset.Now);
+                    SaveSettings();
+                    RaiseUserStateChanged();
+                },
+                onOutcome: outcome =>
+                {
+                    if (!_disposed && PasteDecision.CopiedMessage(prompt.Title, outcome) is { } message)
+                        Tray.ShowMessage(AppName, message);
+                });
+            if (!copied) Tray.ShowMessage(AppName, "Couldn't copy — clipboard busy. Try again.", isError: true);
         }
-
-        UsageTracker.Record(Settings, prompt.Id, DateTimeOffset.Now);
-        SaveSettings();
-        RaiseUserStateChanged();
-
-        var hasTarget = AutoPaster.IsOtherAppWindow(pick.ReturnTo, out var isOurs);
-        var outcome = PasteDecision.ShouldPaste(Settings.PasteAfterCopy, fromShortcutMenu: pick.ReturnTo != IntPtr.Zero,
-            hasTarget, isOurs)
-            // The tray gives that window its focus back as the menu closes; the paster waits until it is really in
-            // front (asking again itself) before it sends Ctrl+V.
-            ? await AutoPaster.PasteAsync(pick.ReturnTo)
-            : PasteOutcome.NotAttempted;
-
-        if (!_disposed && PasteDecision.CopiedMessage(prompt.Title, outcome) is { } message)
-            Tray.ShowMessage(AppName, message);
+        catch (Exception ex)
+        {
+            CrashLog.Append(Paths.CrashLogFile, ex, DateTime.Now);
+        }
     }
 
     /// <summary>
