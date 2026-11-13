@@ -147,6 +147,7 @@ public sealed class MainViewModel : ObservableObject
         CopyToTeamCommand = new RelayCommand(CopyToTeam);
         PinCommand = new RelayCommand<PromptRow?>(TogglePin);
         HideCommand = new RelayCommand<PromptRow?>(ToggleHide);
+        FeatureCommand = new RelayCommand<PromptRow?>(ToggleFeature);
         MarkAllSeenCommand = new RelayCommand(MarkAllSeen);
         RetryTeamCommand = new AsyncRelayCommand(() => _team?.Service.RefreshAsync() ?? Task.CompletedTask);
         EditTeamCommand = new RelayCommand(StartEditingTeam);
@@ -364,6 +365,7 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>Hide from menu / Unhide the given team row's prompt, or the editor's when null.</summary>
     public IRelayCommand<PromptRow?> HideCommand { get; }
+    public IRelayCommand<PromptRow?> FeatureCommand { get; }
 
     /// <summary>"Show hidden (n)": lists the team prompts hidden from the menu, greyed, each with Unhide.</summary>
     public bool ShowHiddenTeamPrompts
@@ -407,6 +409,12 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>The editor's <c>Hide from menu</c>, or <c>Unhide</c> when the open team prompt is hidden.</summary>
     public string HideLabel => EditorPromptId is { } id && IsHiddenTeamPrompt(id) ? "Unhide" : "Hide from menu";
+
+    /// <summary>The editor's <c>Feature for everyone</c> / <c>Stop featuring</c> (editors, team edit mode only).</summary>
+    public bool ShowFeatureToggle => IsTeamSide && IsEditingTeam && EditorPromptId is not null;
+
+    public string FeatureLabel => EditorPromptId is { } id && TeamContent?.Prompts.FirstOrDefault(p => p.Id == id)?.Featured == true
+        ? "Stop featuring" : "Feature for everyone";
 
     /// <summary>The open prompt's category name (shown as text while the editor is read only).</summary>
     public string? EditorCategoryName => _editor?.CategoryId is { } id
@@ -1568,7 +1576,7 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>True if switching to category <paramref name="id"/> can keep the editor open.</summary>
     private bool EditorSurvivesCategory(Guid? id)
-        => _editor is null || id is null || id == CategoryItem.RecentId || _editor.CategoryId == id;
+        => _editor is null || id is null || id == CategoryItem.RecentId || id == CategoryItem.FeaturedId || _editor.CategoryId == id;
 
     /// <summary>The category the list is limited to: null for All prompts and Recent.</summary>
     private Guid? CategoryFilter => _selectedCategory is { IsCategory: true } category ? category.Id : null;
@@ -1592,6 +1600,37 @@ public sealed class MainViewModel : ObservableObject
     }
 
     private const int RecentLimit = 10;
+
+    /// <summary>The most prompts the editors can feature.</summary>
+    public const int MaxFeatured = 10;
+
+    /// <summary>The team prompts the editors feature that this user hasn't hidden, in library order (team side only).</summary>
+    private List<Prompt> FeaturedPrompts()
+        => !CurrentDocument.IsTeam ? []
+            : CurrentDocument.Library.Prompts
+                .Where(p => p.Featured && !_host.Settings.HiddenTeamPromptIds.Contains(p.Id)).ToList();
+
+    /// <summary>Features or unfeatures a team prompt (the editor's when null): editors in edit mode only, max 10.</summary>
+    private void ToggleFeature(PromptRow? row)
+    {
+        if (!IsTeamSide || !IsEditingTeam || CannotChange) return;
+        if ((row?.Id ?? EditorPromptId) is not { } id) return;
+        if (CurrentDocument.Library.Prompts.FirstOrDefault(p => p.Id == id) is not { } prompt) return;
+
+        if (!prompt.Featured && CurrentDocument.Library.Prompts.Count(p => p.Featured) >= MaxFeatured)
+        {
+            ShowStatus($"Up to {MaxFeatured} prompts can be featured.", FeedbackDuration);
+            return;
+        }
+
+        prompt.Featured = !prompt.Featured;
+        SaveChange(); // one guarded team save; a refused or failed one puts the library back
+        foreach (var item in Prompts.Where(r => r.Id == id)) item.IsFeatured = prompt.Featured;
+        var before = _selectedCategory?.Id;
+        RebuildCategories(before);
+        if (before == CategoryItem.FeaturedId) RefreshPrompts();
+        RaiseEditorState();
+    }
 
     /// <summary>
     /// Pins, usage or hides changed somewhere else (the search window, the tray): the pin glyphs, the Recent row and its
@@ -1650,6 +1689,8 @@ public sealed class MainViewModel : ObservableObject
             Categories.Add(new CategoryItem(null, "All prompts", shown.Count, canEdit));
             if (RecentPrompts() is { Count: > 0 } recent)
                 Categories.Add(new CategoryItem(CategoryItem.RecentId, "Recent", recent.Count, canEdit));
+            if (FeaturedPrompts() is { Count: > 0 } featured)
+                Categories.Add(new CategoryItem(CategoryItem.FeaturedId, "Featured", featured.Count, canEdit));
             foreach (var category in sorted)
                 Categories.Add(new CategoryItem(category.Id, category.Name,
                     shown.Count(p => p.CategoryId == category.Id), canEdit, category.Emoji));
@@ -1679,6 +1720,7 @@ public sealed class MainViewModel : ObservableObject
             Prompts.Clear();
             var now = DateTimeOffset.Now;
             var isRecent = _selectedCategory?.IsRecent == true;
+            var isFeatured = _selectedCategory?.IsFeatured == true;
             if (_searchingBoth)
             {
                 // Both libraries, best match first; hidden team prompts are listed greyed so they can be unhidden.
@@ -1689,13 +1731,19 @@ public sealed class MainViewModel : ObservableObject
             {
                 // The shown category (or the Recent list), best match first.
                 var categoryId = CategoryFilter;
-                var recentIds = isRecent ? RecentPrompts().Select(p => p.Id).ToHashSet() : null;
+                var recentIds = isRecent ? RecentPrompts().Select(p => p.Id).ToHashSet()
+                    : isFeatured ? FeaturedPrompts().Select(p => p.Id).ToHashSet() : null;
                 foreach (var hit in FuzzySearch.Search(CurrentDocument.Library, null, _host.Settings, _searchText, now))
                     if (IsListed(hit.Prompt)
                         && (categoryId is null || hit.Prompt.CategoryId == categoryId)
                         && (recentIds is null || recentIds.Contains(hit.Prompt.Id)))
                         Prompts.Add(NewRow(hit.Prompt, CurrentDocument.IsTeam, showTeamIcon: false,
                             hit.TitleMatches, hit.DescriptionMatches));
+            }
+            else if (isFeatured)
+            {
+                foreach (var prompt in FeaturedPrompts())
+                    Prompts.Add(NewRow(prompt, true, showTeamIcon: false));
             }
             else if (isRecent)
             {
@@ -2255,7 +2303,8 @@ public sealed class MainViewModel : ObservableObject
             isHidden: isTeam && settings.HiddenTeamPromptIds.Contains(prompt.Id),
             isPinned: settings.PinnedPromptIds.Contains(prompt.Id),
             marker: isTeam ? TeamUserState.MarkerFor(settings, prompt) : TeamMarker.None,
-            showTeamIcon, titleMatches, descriptionMatches);
+            showTeamIcon, titleMatches, descriptionMatches)
+        { IsFeatured = isTeam && prompt.Featured };
     }
 
     private void RaiseEditorState()
@@ -2264,6 +2313,8 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(PinLabel));
         OnPropertyChanged(nameof(CanPin));
         OnPropertyChanged(nameof(HideLabel));
+        OnPropertyChanged(nameof(ShowFeatureToggle));
+        OnPropertyChanged(nameof(FeatureLabel));
         OnPropertyChanged(nameof(EditorCategoryName));
         OnPropertyChanged(nameof(CanShowHistory));
         OnPropertyChanged(nameof(SendChoices));
