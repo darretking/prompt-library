@@ -11,6 +11,11 @@ public sealed partial class FillInValueRow : ObservableObject
     [ObservableProperty] private string _name = "";
     [ObservableProperty] private string _value = "";
 
+    /// <summary>The name as the fill-in form labels it: first letter upper-case ("client" shows as "Client").</summary>
+    public string Label => Name.Length == 0 ? Name : char.ToUpperInvariant(Name[0]) + Name[1..];
+
+    partial void OnNameChanged(string value) => OnPropertyChanged(nameof(Label));
+
     /// <summary>Fields found in team prompts have a fixed name; rows added by hand can be named.</summary>
     public bool NameIsEditable { get; init; }
 }

@@ -330,9 +330,6 @@
                                     Visibility="{Binding ShowEditTeamButton, Converter={StaticResource BoolToVisibility}}"
                                     ToolTip="Unlock the team library to change it for everyone"
                                     AutomationProperties.Name="Edit team library" />
-                            <TextBlock Text="Read only" Style="{StaticResource MutedText}" Margin="8,0,0,0"
-                                       ToolTip="{Binding TeamReadOnlyReason}"
-                                       Visibility="{Binding ShowTeamReadOnlyNote, Converter={StaticResource BoolToVisibility}}" />
                             <!-- The negative margin keeps the 24 px icon button from making the line taller. -->
                             <Button Style="{StaticResource IconButton}" Content="&#xE712;" Margin="4,-5,-6,-5"
                                     Click="TeamMore_Click" ToolTip="More"
@@ -1051,7 +1048,7 @@
                                     </ComboBox.ItemContainerStyle>
                                 </ComboBox>
                                 <!-- Read only: the category as plain text. -->
-                                <StackPanel Orientation="Horizontal" Margin="9,7,8,7" VerticalAlignment="Center"
+                                <StackPanel Orientation="Horizontal" Margin="15,7,8,7" VerticalAlignment="Center"
                                             AutomationProperties.Name="{Binding EditorCategoryName, StringFormat=Category {0}}"
                                             Visibility="{Binding Editor.IsReadOnly, Converter={StaticResource BoolToVisibility}}">
                                     <emoji:EmojiImage Text="{Binding EditorCategoryEmoji}" Margin="0,0,6,0">

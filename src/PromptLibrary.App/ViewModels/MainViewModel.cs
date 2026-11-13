@@ -454,7 +454,7 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>The open prompt's category emoji (beside the name while the editor is read only), or null.</summary>
     public string? EditorCategoryEmoji => _editor?.CategoryId is { } id
-        ? CurrentDocument.Library.Categories.FirstOrDefault(c => c.Id == id)?.Emoji
+        ? CurrentDocument.Library.Categories.FirstOrDefault(c => c.Id == id)?.Emoji ?? CategoryItem.DefaultEmoji
         : null;
 
     private bool TeamConnected => _team?.Service.Source is not null;

@@ -10,7 +10,7 @@
     <!-- Field | Value rows: every field the team's prompts use, plus stored values. An empty value is not stored. -->
     <StackPanel Margin="16">
         <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap"
-                   Text="Everyone starts with these values in matching fields. Leave a value empty to store nothing." />
+                   Text="Everyone starts with these values in matching fields. Leave a value empty for no team value." />
         <Grid Margin="0,12,0,4">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="160" />
@@ -28,7 +28,7 @@
                                 <ColumnDefinition Width="160" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                                        ToolTip="{Binding Name}">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
