@@ -60,4 +60,10 @@ public interface IDialogs
 
     /// <summary>Check the team library: the dialog sets <see cref="TeamCheckViewModel.Chosen"/> when a row was clicked.</summary>
     void ShowTeamCheck(TeamCheckViewModel dialog) { }
+
+    /// <summary>Suggest for the team: true when Send suggestion was chosen.</summary>
+    bool ShowSuggest(SuggestViewModel dialog) => false;
+
+    /// <summary>The editors' Suggestions window (modal; closes with Close).</summary>
+    void ShowSuggestions(SuggestionsViewModel dialog) { }
 }

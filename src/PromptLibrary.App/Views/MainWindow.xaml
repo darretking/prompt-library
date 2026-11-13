@@ -320,6 +320,11 @@
                                    AutomationProperties.Name="{Binding TeamEditBlockedText}"
                                    Visibility="{Binding ShowTeamEditBlocked, Converter={StaticResource BoolToVisibility}}" />
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                            <Button Content="{Binding SuggestionsLabel}" Margin="8,-3,0,-3" Padding="10,2"
+                                    Command="{Binding SuggestionsCommand}"
+                                    Visibility="{Binding ShowSuggestionsButton, Converter={StaticResource BoolToVisibility}}"
+                                    ToolTip="Review prompts members suggested"
+                                    AutomationProperties.Name="{Binding SuggestionsLabel}" />
                             <Button Style="{StaticResource LinkButton}" Content="Edit team library" Margin="8,0,0,0"
                                     Command="{Binding EditTeamCommand}"
                                     Visibility="{Binding ShowEditTeamButton, Converter={StaticResource BoolToVisibility}}"
@@ -866,6 +871,9 @@
                                                 <MenuItem Style="{StaticResource FlyoutItem}" Header="Copy to team library"
                                                           Command="{Binding CopyToTeamCommand}"
                                                           Visibility="{Binding ShowCopyToTeam, Converter={StaticResource BoolToVisibility}}" />
+                                                <MenuItem Style="{StaticResource FlyoutItem}" Header="Suggest for the team…"
+                                                          Command="{Binding SuggestCommand}"
+                                                          Visibility="{Binding ShowSuggest, Converter={StaticResource BoolToVisibility}}" />
                                                 <MenuItem Style="{StaticResource FlyoutItem}" Header="Version history…"
                                                           Command="{Binding ShowHistoryCommand}"
                                                           Visibility="{Binding CanShowHistory, Converter={StaticResource BoolToVisibility}}" />

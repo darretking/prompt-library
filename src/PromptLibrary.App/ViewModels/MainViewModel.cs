@@ -116,6 +116,7 @@ public sealed class MainViewModel : ObservableObject
         {
             _team = new TeamDocument(team);
             team.Changed += (_, _) => OnTeamChanged();
+            RefreshSuggestionCount();
         }
 
         NewCategoryCommand = new RelayCommand(StartNewCategory);
@@ -147,6 +148,8 @@ public sealed class MainViewModel : ObservableObject
         MoveToCategoryCommand = new RelayCommand<Category?>(MoveToCategory);
         CopyToYoursCommand = new RelayCommand(CopyToYours);
         CopyToTeamCommand = new RelayCommand(CopyToTeam);
+        SuggestCommand = new RelayCommand(SuggestToTeam);
+        SuggestionsCommand = new RelayCommand(OpenSuggestions);
         PinCommand = new RelayCommand<PromptRow?>(TogglePin);
         HideCommand = new RelayCommand<PromptRow?>(ToggleHide);
         FeatureCommand = new RelayCommand<PromptRow?>(ToggleFeature);
@@ -290,6 +293,22 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     public IRelayCommand CopyToYoursCommand { get; }
     public IRelayCommand CopyToTeamCommand { get; }
+    public IRelayCommand SuggestCommand { get; }
+    public IRelayCommand SuggestionsCommand { get; }
+
+    /// <summary>"Suggest for the team…" in a personal prompt's menu: Your prompts side, a team joined (editors too).</summary>
+    public bool ShowSuggest => IsYoursSide && TeamLoaded;
+
+    private int _suggestionCount;
+    private int _suggestionRefresh;
+
+    /// <summary>The suggestions waiting for editors (file source), counted on each team refresh.</summary>
+    public int SuggestionCount => _suggestionCount;
+
+    /// <summary>The Team header's "Suggestions (n)" button: editors, a team file, at least one suggestion.</summary>
+    public bool ShowSuggestionsButton => IsTeamSide && _suggestionCount > 0 && TeamLoaded && _team!.Service.CanEdit;
+
+    public string SuggestionsLabel => $"Suggestions ({_suggestionCount})";
 
     /// <summary>"Copy to team library" in a personal prompt's menu: Your prompts side, a team joined that you can edit.</summary>
     public bool ShowCopyToTeam => IsYoursSide && TeamLoaded && _team!.Service.CanEdit;
@@ -1889,6 +1908,7 @@ public sealed class MainViewModel : ObservableObject
             OpenPrompt(prompt, byUser: openPromptId is not null); // a search result the user chose, or the side's last prompt
         else
             OpenFirstPromptIfNone();
+        if (side == LibrarySide.Team) RefreshSuggestionCount();
         RaiseSideState();
         return true;
     }
@@ -2018,6 +2038,137 @@ public sealed class MainViewModel : ObservableObject
                 }
             });
         }, TaskScheduler.Default);
+    }
+
+    // ---- Suggestions: members suggest a prompt, editors review them ---------------------------------
+
+    private string? SuggestionsTeamPath =>
+        _team?.Service.Source is { Kind: TeamSourceKind.File } source ? source.Location : null;
+
+    /// <summary>
+    /// Suggest for the team…: asks for a team category, a note and a name, then writes a suggestion file next to the team
+    /// file. A web source or a folder that can't be written gets the suggestion on the clipboard instead.
+    /// </summary>
+    private void SuggestToTeam()
+    {
+        if (!IsYoursSide || _team is not { } team || !TeamLoaded
+            || EditorPromptId is not { } id
+            || _personal.Library.Prompts.FirstOrDefault(p => p.Id == id) is not { } source) return;
+
+        var own = _personal.Library.Categories.FirstOrDefault(c => c.Id == source.CategoryId)?.Name ?? "Prompts";
+        var dialog = new SuggestViewModel(source.Title, own, team.Library.Categories.Select(c => c.Name),
+            SuggestViewModel.DefaultName());
+        if (!_dialogs.ShowSuggest(dialog) || !dialog.Sent) return;
+
+        var suggestion = new Suggestion(Guid.NewGuid(), source.Title, source.Description, source.Text,
+            source.Tags.ToList(), dialog.SelectedCategory.Trim(),
+            string.IsNullOrWhiteSpace(dialog.Note) ? null : dialog.Note.Trim(),
+            string.IsNullOrWhiteSpace(dialog.YourName) ? null : dialog.YourName.Trim(), DateTimeOffset.Now);
+
+        void OnClipboard()
+        {
+            var text = TeamSuggestions.ToClipboardText(suggestion).Replace("\r\n", "\n").Replace("\n", "\r\n");
+            if (_host.CopyText(text, "Team suggestion", notifyInTray: false))
+                ShowStatus("Couldn't reach the team folder. The suggestion is on your clipboard to send to the team owner.",
+                    FeedbackDuration);
+        }
+
+        if (SuggestionsTeamPath is not { } path)
+        {
+            OnClipboard();
+            return;
+        }
+        Task.Run(() => TeamSuggestions.TryWrite(path, suggestion)).ContinueWith(task =>
+        {
+            var written = task.IsCompletedSuccessfully && task.Result == SuggestionWriteResult.Written;
+            _dispatcher.BeginInvoke(() =>
+            {
+                if (written) ShowStatus("Suggestion sent to the team.", FeedbackDuration);
+                else OnClipboard();
+            });
+        }, TaskScheduler.Default);
+    }
+
+    /// <summary>Counts the waiting suggestions off the UI thread; only editors of a team file are counted.</summary>
+    private void RefreshSuggestionCount()
+    {
+        var generation = ++_suggestionRefresh;
+        var path = _team?.Service.CanEdit == true ? SuggestionsTeamPath : null;
+        if (path is null)
+        {
+            SetSuggestionCount(0);
+            return;
+        }
+        Task.Run(() => TeamSuggestions.List(path).Count).ContinueWith(task =>
+        {
+            var count = task.IsCompletedSuccessfully ? task.Result : 0;
+            _dispatcher.BeginInvoke(() =>
+            {
+                if (generation == _suggestionRefresh) SetSuggestionCount(count);
+            });
+        }, TaskScheduler.Default);
+    }
+
+    private void SetSuggestionCount(int count)
+    {
+        _suggestionCount = count;
+        OnPropertyChanged(nameof(SuggestionCount));
+        OnPropertyChanged(nameof(SuggestionsLabel));
+        OnPropertyChanged(nameof(ShowSuggestionsButton));
+    }
+
+    /// <summary>The Suggestions window: read the list now (off the UI thread), then add or dismiss in the dialog.</summary>
+    private void OpenSuggestions()
+    {
+        if (!IsTeamSide || _team is not { } team || !TeamLoaded || !team.Service.CanEdit
+            || SuggestionsTeamPath is not { } path) return;
+        Task.Run(() => TeamSuggestions.List(path)).ContinueWith(task =>
+        {
+            var list = task.IsCompletedSuccessfully ? task.Result : [];
+            _dispatcher.BeginInvoke(() =>
+            {
+                if (_team is not { } current || !TeamLoaded) return;
+                var dialog = new SuggestionsViewModel(path, list, current.Library.Categories.Select(c => c.Name),
+                    DateTimeOffset.Now, (s, category, onSaved) => AddSuggestion(current, s, category, onSaved));
+                _dialogs.ShowSuggestions(dialog);
+                RefreshSuggestionCount();
+            });
+        }, TaskScheduler.Default);
+    }
+
+    /// <summary>Adds a suggestion as a team prompt (new id, not featured) in the named category, created when missing.</summary>
+    private void AddSuggestion(TeamDocument team, Suggestion suggestion, string categoryName, Action onSaved)
+    {
+        if (_teamSaving || !team.Service.CanEdit) return;
+        string? added = null;
+
+        bool Apply()
+        {
+            var library = team.Library;
+            var editor = new LibraryEditor(library, () => DateTimeOffset.Now);
+            try
+            {
+                var category = library.Categories.FirstOrDefault(c =>
+                                   string.Equals(c.Name.Trim(), categoryName.Trim(), StringComparison.OrdinalIgnoreCase))
+                               ?? editor.AddCategory(categoryName.Trim());
+                editor.AddPrompt(category.Id, suggestion.Title, suggestion.Description, suggestion.Text, suggestion.Tags, null);
+                added = category.Name;
+                return true;
+            }
+            catch (ArgumentException ex)
+            {
+                team.Service.RevertToLoaded();
+                _dialogs.ShowMessage(ex.Message);
+                return false;
+            }
+        }
+
+        SaveTeamChange(team, Apply, () =>
+        {
+            onSaved();
+            RefreshSuggestionCount();
+            return $"Added to team prompts · {added}";
+        });
     }
 
     // ---- Copy invite, team note, fill-in values, team check (the Team header's ⋯ menu) ----------------
@@ -2450,6 +2601,7 @@ public sealed class MainViewModel : ObservableObject
         }
 
         UpdateSearchingBoth();
+        RefreshSuggestionCount();
         if (IsTeamSide)
         {
             ReloadTeamSide();
@@ -2563,6 +2715,8 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsEditingTeam));
         OnPropertyChanged(nameof(ShowEditTeamButton));
         OnPropertyChanged(nameof(ShowCopyToTeam));
+        OnPropertyChanged(nameof(ShowSuggest));
+        OnPropertyChanged(nameof(ShowSuggestionsButton));
         OnPropertyChanged(nameof(ShowTeamEditBar));
         OnPropertyChanged(nameof(TeamEditBlockedText));
         OnPropertyChanged(nameof(ShowTeamEditBlocked));

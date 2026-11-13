@@ -344,6 +344,16 @@ public partial class MainWindow : Window, IDialogs
             new TeamCheckDialog(dialog) { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog();
     }
 
+    public bool ShowSuggest(SuggestViewModel dialog)
+        => !_host.AsksNothing
+           && new SuggestDialog(dialog) { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog() == true;
+
+    public void ShowSuggestions(SuggestionsViewModel dialog)
+    {
+        if (!_host.AsksNothing)
+            new SuggestionsWindow(dialog) { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog();
+    }
+
     // ---- Category rail -------------------------------------------------------------------------
 
     private void RailList_KeyDown(object sender, KeyEventArgs e)
