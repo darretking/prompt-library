@@ -45,6 +45,21 @@ public sealed class SettingsNullSafetyTests : IDisposable
     }
 
     [Fact]
+    public void PromptSort_Null_BecomesUsed()
+    {
+        var s = new AppSettings { PromptSort = null! };
+        Assert.Equal("used", s.PromptSort);
+    }
+
+    [Fact]
+    public void PromptSort_MissingFromJson_DefaultsToUsed()
+    {
+        var path = Path.Combine(_dir, "settings.json");
+        File.WriteAllText(path, "{}");
+        Assert.Equal("used", JsonStore.LoadSettings(path).Value!.PromptSort);
+    }
+
+    [Fact]
     public void RestoreClipboard_RoundTrips()
     {
         var path = Path.Combine(_dir, "settings.json");

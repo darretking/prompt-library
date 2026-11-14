@@ -75,4 +75,8 @@ public class AppSettings
     /// <summary><c>system</c> (default), <c>light</c> or <c>dark</c>.</summary>
     public string Theme { get => _theme; set => _theme = value ?? "system"; }
     private string _theme = "system";
+
+    /// <summary><c>used</c> (default, most used first) or <c>name</c> (A to Z): how prompt lists are ordered.</summary>
+    public string PromptSort { get => _promptSort; set => _promptSort = value ?? "used"; }
+    private string _promptSort = "used";
 }
