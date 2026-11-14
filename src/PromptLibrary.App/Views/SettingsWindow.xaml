@@ -90,7 +90,7 @@
                 <RadioButton x:Name="SortNameRadio" GroupName="PromptSort" Content="A to Z" Margin="0,8,0,0"
                              AutomationProperties.Name="Prompt order: A to Z" />
                 <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,8,0,8"
-                           Text="Applies to the prompt list, search and the shortcut menu. Prompts you have not used yet stay A to Z." />
+                           Text="Order follows how often you use each prompt." />
                 <Button x:Name="ClearUsageButton" Content="Clear usage history…" HorizontalAlignment="Left"
                         Click="ClearUsage_Click" AutomationProperties.Name="Clear usage history" />
                 <TextBlock x:Name="ClearUsageStatus" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,4,0,0"
