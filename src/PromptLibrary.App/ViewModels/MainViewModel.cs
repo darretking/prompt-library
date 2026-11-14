@@ -1725,11 +1725,23 @@ public sealed class MainViewModel : ObservableObject
 
         var before = _selectedCategory?.Id;
         RebuildCategories(before);
-        // Not while searching (the order is the match's), unless the list itself changed (Recent, Pinned, or a row that went).
-        if (before == CategoryItem.RecentId || before == CategoryItem.PinnedId || _selectedCategory?.Id != before
-            || string.IsNullOrWhiteSpace(_searchText))
+        // The open list is left alone on a pin or a copy (no jump in a scrolled list). It is rebuilt only when its content
+        // changed (Recent, Pinned, or the shown row went) or, with no search (a search orders by match), when the sort
+        // setting changed or the usage was cleared.
+        var query = !FuzzySearch.ParseQuery(_searchText).IsEmpty;
+        var settings = _host.Settings;
+        var resort = !query && (_builtSort != settings.PromptSort || (_builtHadUsage && settings.Usage.Count == 0));
+        if (before == CategoryItem.RecentId || PinnedMembershipChanged(before) || _selectedCategory?.Id != before || resort)
             RefreshPrompts();
     }
+
+    private string? _builtSort;
+    private bool _builtHadUsage;
+
+    /// <summary>True when the Pinned row is shown and the rows listed are no longer the pinned prompts.</summary>
+    private bool PinnedMembershipChanged(Guid? shown)
+        => shown == CategoryItem.PinnedId
+            && !Prompts.Select(r => r.Id).ToHashSet().SetEquals(PinnedPrompts().Select(p => p.Id));
 
     private void ShowCategory(Guid? id)
     {
@@ -1804,6 +1816,8 @@ public sealed class MainViewModel : ObservableObject
     private void RefreshPrompts()
     {
         var keepId = _editor?.PromptId ?? _selectedPrompt?.Id;
+        _builtSort = _host.Settings.PromptSort;
+        _builtHadUsage = _host.Settings.Usage.Count > 0;
 
         _refreshing = true;
         try

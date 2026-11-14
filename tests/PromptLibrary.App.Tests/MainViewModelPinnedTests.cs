@@ -184,9 +184,8 @@ public sealed class MainViewModelPinnedTests : IDisposable
         var w = Build();
         Use(w.Host, w.C, 3);
         Use(w.Host, w.D, 9);
-        w.Vm.RefreshUserState();
 
-        w.Vm.SelectedCategory = w.Vm.Categories.First(c => c.IsAll);
+        GoFresh(w, w.Vm.Categories.First(c => c.IsAll));
 
         Assert.Equal(["Delta", "Charlie", "Alpha", "Bravo"], Titles(w.Vm));
     });
@@ -209,7 +208,7 @@ public sealed class MainViewModelPinnedTests : IDisposable
     {
         var w = Build();
         Use(w.Host, w.D, 9);
-        w.Vm.RefreshUserState();
+        GoFresh(w, w.Vm.Categories.First(c => c.IsAll));
         Assert.Equal("Delta", Titles(w.Vm)[0]);
 
         w.Host.Settings.PromptSort = "name";
@@ -217,6 +216,53 @@ public sealed class MainViewModelPinnedTests : IDisposable
 
         Assert.Equal(["Alpha", "Bravo", "Charlie", "Delta"], Titles(w.Vm));
     });
+
+    [Fact]
+    public void UsageCleared_RaiseUserState_AllPromptsResorted() => Sta.Run(() =>
+    {
+        var w = Build();
+        Use(w.Host, w.D, 9);
+        GoFresh(w, w.Vm.Categories.First(c => c.IsAll));
+        Assert.Equal("Delta", Titles(w.Vm)[0]);
+
+        w.Host.Settings.Usage.Clear();
+        w.Vm.RefreshUserState();
+
+        Assert.Equal(["Alpha", "Bravo", "Charlie", "Delta"], Titles(w.Vm));
+    });
+
+    [Fact]
+    public void Pin_InAllPrompts_DoesNotRebuildList() => Sta.Run(() =>
+    {
+        var w = Build();
+        var before = w.Vm.Prompts.ToList();
+
+        w.Vm.PinCommand.Execute(before.First(r => r.Title == "Bravo"));
+
+        Assert.Equal(before, w.Vm.Prompts.ToList()); // the same PromptRow instances, same order
+        Assert.True(before.First(r => r.Title == "Bravo").IsPinned);
+        Assert.Contains(w.Vm.Categories, c => c.IsPinnedRow); // the rail still follows
+    });
+
+    [Fact]
+    public void Copy_DoesNotReorderOpenList() => Sta.Run(() =>
+    {
+        var w = Build();
+        w.Vm.SelectedPrompt = w.Vm.Prompts.First(r => r.Title == "Charlie");
+        var before = w.Vm.Prompts.ToList();
+
+        w.Vm.Copy();
+
+        Assert.Equal(before, w.Vm.Prompts.ToList());
+        Assert.Equal(1, w.Host.Settings.Usage[w.C.Id].Count);
+    });
+
+    /// <summary>Opens another rail row and then <paramref name="target"/>, as navigating does (the list sorts fresh).</summary>
+    private static void GoFresh((FakeHost Host, MainViewModel Vm, Category Coding, Category Email, Prompt A, Prompt B, Prompt C, Prompt D) w, CategoryItem target)
+    {
+        w.Vm.SelectedCategory = w.Vm.Categories.Single(c => c.Id == w.Email.Id);
+        w.Vm.SelectedCategory = target;
+    }
 
     [Fact]
     public void PinnedRow_UnpinInMainWindow_UpdatesRow() => Sta.Run(() =>
