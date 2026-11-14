@@ -11,6 +11,9 @@ public sealed class CategoryItem : ObservableObject
     /// <summary>The id the Recent row has in the rail (it isn't a category; nothing else uses this id).</summary>
     public static readonly Guid RecentId = new("5f3a1c52-8d1b-4b53-9c1e-7a7c2b0e4d11");
 
+    /// <summary>The id the Pinned row has in the rail (not a category either; shown when the side has pins).</summary>
+    public static readonly Guid PinnedId = new("7b2e9d40-3c18-4a6f-8e55-d0a4c1f2b936");
+
     /// <summary>The id the Featured row has in the rail (team side; not a category either).</summary>
     public static readonly Guid FeaturedId = new("0c7d4e1a-6b2f-4f8e-9a35-b1d2c3e4f5a6");
 
@@ -53,14 +56,17 @@ public sealed class CategoryItem : ObservableObject
     /// <summary>True for the team side's "Featured" row (prompts the editors feature), which isn't a category.</summary>
     public bool IsFeatured => Id == FeaturedId;
 
-    /// <summary>The Featured row shows a star glyph instead of an emoji.</summary>
-    public bool ShowEmoji => !IsFeatured;
+    /// <summary>True for the "Pinned" row (the side's pinned prompts), which isn't a category.</summary>
+    public bool IsPinnedRow => Id == PinnedId;
+
+    /// <summary>The Featured and Pinned rows show a glyph instead of an emoji.</summary>
+    public bool ShowEmoji => !IsFeatured && !IsPinnedRow;
 
     /// <summary>True for a real category (not All prompts, not Recent, not Featured): it can be renamed, given an emoji and deleted.</summary>
-    public bool IsCategory => Id is not null && !IsRecent && !IsFeatured;
+    public bool IsCategory => Id is not null && !IsRecent && !IsFeatured && !IsPinnedRow;
 
     /// <summary>The emoji in the rail: always colour, so every row lines up the same way (the category's own when it has one).</summary>
-    public string RailEmoji => IsAll ? AllEmoji : IsRecent ? RecentEmoji : IsFeatured ? "" : Emoji ?? DefaultEmoji;
+    public string RailEmoji => IsAll ? AllEmoji : IsRecent ? RecentEmoji : IsFeatured || IsPinnedRow ? "" : Emoji ?? DefaultEmoji;
 
     /// <summary>What the rail says for a screen reader: the plain name.</summary>
     public string DisplayName => Emoji is null ? Name : $"{Emoji} {Name}";
