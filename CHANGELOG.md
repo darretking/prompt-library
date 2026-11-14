@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-14
+
+### Added
+- **Most used first**: prompts and categories are listed by how often you use them (ties and unused prompts A to Z) in the shortcut menu, the search window (Pinned and All prompts) and the main window lists. Featured and Recent keep their own order, and search results stay best match first.
+- **Pinned row** in the main window, after All prompts.
+- **Settings > Prompt order**: choose **Most used first** or **A to Z**, and **Clear usage history…** to start counting again.
+
+### Changed
+- The tray menu updates after each use.
+
 ## [1.3.0] - 2026-11-13
 
 ### Added

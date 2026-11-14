@@ -18,7 +18,7 @@ Your prompt is pasted right where you were typing.
   <img src="https://img.shields.io/badge/no%20account-F5A524" alt="No account needed" />
   <img src="https://img.shields.io/badge/no%20tracking-F5A524" alt="No tracking" />
   <img src="https://img.shields.io/badge/installs%20without-admin%20rights-1B2230" alt="Installs without admin rights" />
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.0-4338CA" alt="Version 1.3.0, see the changelog" /></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.4.0-4338CA" alt="Version 1.4.0, see the changelog" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/free%20%26%20open%20source-GPL--3.0-4338CA" alt="Free and open source, GPL-3.0 licence" /></a>
 </p>
 
@@ -36,6 +36,8 @@ Your prompt is pasted right where you were typing.
 
 <br/>
 
+> **New in 1.4.0:** your most used prompts come first in the shortcut menu, search and the main window, with a new Pinned row and a Prompt order setting.
+>
 > **New in 1.3.0:** more for teams: suggest prompts to the team, see what changed, featured prompts, shared fill-in values, a team note, easier joining and a check of the team library.
 >
 > **New in 1.2.4:** with the shortcut set to open the menu, prompts with fields open the fill-in form and dynamic tokens fill, just as in the search window.
