@@ -1337,6 +1337,7 @@ public sealed class MainViewModel : ObservableObject
         UsageTracker.Record(_host.Settings, id, DateTimeOffset.Now);
         editor.Uses = UsesOf(id);
         _host.SaveSettings();
+        _host.RefreshQuickMenu(); // the menu orders by use
         RefreshUserState(); // the Recent row and list
     }
 
@@ -1646,7 +1647,8 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>True if switching to category <paramref name="id"/> can keep the editor open.</summary>
     private bool EditorSurvivesCategory(Guid? id)
-        => _editor is null || id is null || id == CategoryItem.RecentId || id == CategoryItem.FeaturedId || _editor.CategoryId == id;
+        => _editor is null || id is null || id == CategoryItem.RecentId || id == CategoryItem.FeaturedId
+            || id == CategoryItem.PinnedId || _editor.CategoryId == id;
 
     /// <summary>The category the list is limited to: null for All prompts and Recent.</summary>
     private Guid? CategoryFilter => _selectedCategory is { IsCategory: true } category ? category.Id : null;
@@ -1670,6 +1672,14 @@ public sealed class MainViewModel : ObservableObject
     }
 
     private const int RecentLimit = 10;
+
+    /// <summary>The shown side's pinned, listed prompts, most used first (A to Z when sorting by name).</summary>
+    private List<Prompt> PinnedPrompts()
+    {
+        var pinned = _host.Settings.PinnedPromptIds.ToHashSet();
+        return [.. UsageOrder.Prompts(
+            CurrentDocument.Library.Prompts.Where(p => pinned.Contains(p.Id) && IsListed(p)), _host.Settings)];
+    }
 
     /// <summary>The most prompts the editors can feature.</summary>
     public const int MaxFeatured = 10;
@@ -1715,8 +1725,24 @@ public sealed class MainViewModel : ObservableObject
 
         var before = _selectedCategory?.Id;
         RebuildCategories(before);
-        if (before == CategoryItem.RecentId || _selectedCategory?.Id != before) RefreshPrompts();
+        // The open list is left alone on a pin or a copy (no jump in a scrolled list). It is rebuilt only when its content
+        // changed (Recent, Pinned, or the shown row went) or, with no search (a search orders by match), when the sort
+        // setting changed or the usage was cleared.
+        var query = !FuzzySearch.ParseQuery(_searchText).IsEmpty;
+        var settings = _host.Settings;
+        var resort = !query && (_builtSort != settings.PromptSort || (_builtHadUsage && settings.Usage.Count == 0));
+        if (before == CategoryItem.RecentId || PinnedMembershipChanged(before) || _selectedCategory?.Id != before || resort)
+            RefreshPrompts();
     }
+
+    private string? _builtSort;
+    private bool _builtHadUsage;
+
+    /// <summary>True when the Pinned row is shown and the rows listed are no longer the pinned prompts.</summary>
+    // While search text filters the Pinned row the rows never equal the full pin set, so the list rebuilds; harmless, the order there is best-match.
+    private bool PinnedMembershipChanged(Guid? shown)
+        => shown == CategoryItem.PinnedId
+            && !Prompts.Select(r => r.Id).ToHashSet().SetEquals(PinnedPrompts().Select(p => p.Id));
 
     private void ShowCategory(Guid? id)
     {
@@ -1765,6 +1791,8 @@ public sealed class MainViewModel : ObservableObject
             Categories.Add(new CategoryItem(null, "All prompts", shown.Count, canEdit));
             if (RecentPrompts() is { Count: > 0 } recent)
                 Categories.Add(new CategoryItem(CategoryItem.RecentId, "Recent", recent.Count, canEdit));
+            if (PinnedPrompts() is { Count: > 0 } pinned)
+                Categories.Insert(1, new CategoryItem(CategoryItem.PinnedId, "Pinned", pinned.Count, canEdit));
             if (FeaturedPrompts() is { Count: > 0 } featured)
                 Categories.Add(new CategoryItem(CategoryItem.FeaturedId, "Featured", featured.Count, canEdit));
             foreach (var category in sorted)
@@ -1789,6 +1817,8 @@ public sealed class MainViewModel : ObservableObject
     private void RefreshPrompts()
     {
         var keepId = _editor?.PromptId ?? _selectedPrompt?.Id;
+        _builtSort = _host.Settings.PromptSort;
+        _builtHadUsage = _host.Settings.Usage.Count > 0;
 
         _refreshing = true;
         try
@@ -1797,6 +1827,7 @@ public sealed class MainViewModel : ObservableObject
             var now = DateTimeOffset.Now;
             var isRecent = _selectedCategory?.IsRecent == true;
             var isFeatured = _selectedCategory?.IsFeatured == true;
+            var isPinned = _selectedCategory?.IsPinnedRow == true;
             if (_searchingBoth)
             {
                 // Both libraries, best match first; hidden team prompts are listed greyed so they can be unhidden.
@@ -1808,7 +1839,8 @@ public sealed class MainViewModel : ObservableObject
                 // The shown category (or the Recent list), best match first.
                 var categoryId = CategoryFilter;
                 var recentIds = isRecent ? RecentPrompts().Select(p => p.Id).ToHashSet()
-                    : isFeatured ? FeaturedPrompts().Select(p => p.Id).ToHashSet() : null;
+                    : isFeatured ? FeaturedPrompts().Select(p => p.Id).ToHashSet()
+                    : isPinned ? PinnedPrompts().Select(p => p.Id).ToHashSet() : null;
                 foreach (var hit in FuzzySearch.Search(CurrentDocument.Library, null, _host.Settings, _searchText, now))
                     if (IsListed(hit.Prompt)
                         && (categoryId is null || hit.Prompt.CategoryId == categoryId)
@@ -1826,11 +1858,17 @@ public sealed class MainViewModel : ObservableObject
                 foreach (var prompt in RecentPrompts())
                     Prompts.Add(NewRow(prompt, CurrentDocument.IsTeam, showTeamIcon: false));
             }
+            else if (isPinned)
+            {
+                foreach (var prompt in PinnedPrompts())
+                    Prompts.Add(NewRow(prompt, CurrentDocument.IsTeam, showTeamIcon: false));
+            }
             else
             {
-                foreach (var prompt in PromptFilter.Apply(CurrentDocument.Library, CategoryFilter, null))
-                    if (IsListed(prompt))
-                        Prompts.Add(NewRow(prompt, CurrentDocument.IsTeam, showTeamIcon: false));
+                // PromptFilter gives A to Z; the list follows the user's order (most used first by default).
+                var listed = PromptFilter.Apply(CurrentDocument.Library, CategoryFilter, null).Where(IsListed);
+                foreach (var prompt in UsageOrder.Prompts(listed, _host.Settings))
+                    Prompts.Add(NewRow(prompt, CurrentDocument.IsTeam, showTeamIcon: false));
             }
 
             // While the items were replaced the list box pushed null selections, and the binding may have left
@@ -2289,6 +2327,7 @@ public sealed class MainViewModel : ObservableObject
         foreach (var item in Prompts.Where(r => r.Id == id))
             item.IsPinned = settings.PinnedPromptIds.Contains(id);
         RaiseEditorState();
+        RefreshUserState(); // the Pinned row and its list follow
     }
 
     /// <summary>Hides a team prompt from the menu (which unpins it), or unhides it; the editor's when null.</summary>
@@ -2643,7 +2682,7 @@ public sealed class MainViewModel : ObservableObject
         }
 
         var target = _categoryBeforeSearch;
-        if (target is not null && target != CategoryItem.RecentId
+        if (target is not null && target != CategoryItem.RecentId && target != CategoryItem.PinnedId
             && _editor?.CategoryId is { } editorCategory && editorCategory != target)
             target = editorCategory;
         SetRailSelection(target);

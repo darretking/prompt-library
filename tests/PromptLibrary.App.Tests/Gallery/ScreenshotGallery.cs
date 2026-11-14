@@ -148,6 +148,13 @@ public sealed class ScreenshotGallery
         yield return ("30-search-opening", SearchOpening);
         yield return ("17b-search-tags", n => Search(n, vm => { vm.Query = "kids"; vm.Move(0); }));
         yield return ("18-settings", n => Window(n, new SettingsWindow(NewHost(populated: true)), null, null));
+        yield return ("32-main-pinned", n => Main(n, w => w.Vm.SelectedCategory = w.Vm.Categories.First(c => c.IsPinnedRow)));
+        yield return ("33-settings-prompt-order", n => Window(n, new SettingsWindow(NewHost(populated: true)), null, null, beforeCapture: win =>
+        {
+            var scroll = Find<System.Windows.Controls.ScrollViewer>(win) ?? throw new InvalidOperationException("no ScrollViewer in Settings");
+            var section = (FrameworkElement)win.FindName("SortUsedRadio");
+            scroll.ScrollToVerticalOffset(section.TranslatePoint(new Point(0, 0), (UIElement)scroll.Content).Y - 40);
+        }));
         yield return ("19-onboarding-step1", n => Onboarding(n, last: false));
         yield return ("20-onboarding-last-step", n => Onboarding(n, last: true));
         yield return ("21-main-minimum-size", n => Main(n, w => { }, width: 860, height: 520));

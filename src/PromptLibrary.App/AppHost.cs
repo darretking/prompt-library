@@ -450,6 +450,7 @@ public sealed class AppHost : IMainHost, IDisposable
                 {
                     UsageTracker.Record(Settings, prompt.Id, DateTimeOffset.Now);
                     SaveSettings();
+                    RefreshQuickMenu();
                     RaiseUserStateChanged();
                 },
                 onOutcome: outcome =>

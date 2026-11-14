@@ -92,9 +92,10 @@ public class QuickMenuBuilderTests
 
         var menu = QuickMenuBuilder.Build(mine, team, s);
 
-        Assert.Equal(new[] { t2, m1 }, menu.Pinned.Select(p => p.Id));
-        Assert.True(menu.Pinned[0].IsTeam);
-        Assert.False(menu.Pinned[1].IsTeam);
+        // Pinned follow the sort setting (no usage here, so A to Z: m1, t2)
+        Assert.Equal(new[] { m1, t2 }, menu.Pinned.Select(p => p.Id));
+        Assert.False(menu.Pinned[0].IsTeam);
+        Assert.True(menu.Pinned[1].IsTeam);
         Assert.Contains(menu.Team.Single().Prompts, p => p.Id == t2 && p.IsTeam);
         Assert.Contains(menu.Yours.Single().Prompts, p => p.Id == m1 && !p.IsTeam);
     }
@@ -179,6 +180,103 @@ public class QuickMenuBuilderTests
 
         team.Prompts.RemoveAt(6);
         Assert.False(QuickMenuBuilder.Build(new Library(), team, new AppSettings()).TeamCollapsed);
+    }
+
+    private static AppSettings Uses(params (Prompt p, int n)[] counts)
+    {
+        var s = new AppSettings();
+        foreach (var (p, n) in counts) s.Usage[p.Id] = new PromptUsage { Count = n };
+        return s;
+    }
+
+    [Fact]
+    public void Build_ByUse_PromptsInCategoryMostUsedFirst()
+    {
+        var (lib, _) = Lib("Cat", "a", "b", "c", "d");
+        var s = Uses((lib.Prompts[2], 5), (lib.Prompts[1], 2), (lib.Prompts[3], 2));
+
+        var menu = QuickMenuBuilder.Build(lib, null, s);
+
+        Assert.Equal(new[] { "c", "b", "d", "a" }, menu.Yours.Single().Prompts.Select(p => p.Title));
+    }
+
+    [Fact]
+    public void Build_ByUse_CategoriesBySumOfUses()
+    {
+        var (lib, _) = Lib("Alpha", "a");
+        var (zed, _) = Lib("Zed", "z1", "z2");
+        lib.Categories.AddRange(zed.Categories);
+        lib.Prompts.AddRange(zed.Prompts);
+        var s = Uses((zed.Prompts[0], 2), (zed.Prompts[1], 3));
+
+        var menu = QuickMenuBuilder.Build(lib, null, s);
+
+        Assert.Equal(new[] { "Zed", "Alpha" }, menu.Yours.Select(c => c.Name));
+    }
+
+    [Fact]
+    public void Build_ByUse_TeamCategoriesSorted_HiddenNotCounted()
+    {
+        var (team, _) = Lib("Alpha", "a");
+        var (mid, _) = Lib("Mid", "m1");
+        var (zed, _) = Lib("Zed", "z1", "z2");
+        foreach (var l in new[] { mid, zed })
+        {
+            team.Categories.AddRange(l.Categories);
+            team.Prompts.AddRange(l.Prompts);
+        }
+        var s = Uses((mid.Prompts[0], 1), (zed.Prompts[0], 10));
+        s.HiddenTeamPromptIds = [zed.Prompts[0].Id]; // its 10 uses must not lift Zed above Mid
+
+        var menu = QuickMenuBuilder.Build(new Library(), team, s);
+
+        Assert.Equal(new[] { "Mid", "Alpha", "Zed" }, menu.Team.Select(c => c.Name));
+    }
+
+    [Fact]
+    public void Build_ByUse_PinnedMostUsedFirst()
+    {
+        var (lib, _) = Lib("Cat", "A", "B");
+        var s = Uses((lib.Prompts[1], 4));
+        s.PinnedPromptIds = [lib.Prompts[0].Id, lib.Prompts[1].Id];
+
+        Assert.Equal(new[] { "B", "A" }, QuickMenuBuilder.Build(lib, null, s).Pinned.Select(p => p.Title));
+    }
+
+    [Fact]
+    public void Build_ByName_PinnedAToZ()
+    {
+        var (lib, _) = Lib("Cat", "A", "b");
+        var s = Uses((lib.Prompts[1], 9));
+        s.PromptSort = "name";
+        s.PinnedPromptIds = [lib.Prompts[1].Id, lib.Prompts[0].Id];
+
+        Assert.Equal(new[] { "A", "b" }, QuickMenuBuilder.Build(lib, null, s).Pinned.Select(p => p.Title));
+    }
+
+    [Fact]
+    public void Build_UsageForDeletedPrompt_Ignored()
+    {
+        var (lib, _) = Lib("Cat", "b", "a");
+        var s = new AppSettings();
+        s.Usage[Guid.NewGuid()] = new PromptUsage { Count = 99 };
+
+        var menu = QuickMenuBuilder.Build(lib, null, s);
+
+        Assert.Equal(new[] { "a", "b" }, menu.Yours.Single().Prompts.Select(p => p.Title));
+    }
+
+    [Fact]
+    public void Build_FeaturedKeepsLibraryOrder()
+    {
+        var (mine, _) = Lib("Mine", "m1");
+        var (team, _) = Lib("Team", "t1", "t2", "t3");
+        foreach (var p in team.Prompts) p.Featured = true;
+        var s = Uses((team.Prompts[2], 9), (team.Prompts[1], 3));
+
+        var menu = QuickMenuBuilder.Build(mine, team, s);
+
+        Assert.Equal(new[] { "t1", "t2", "t3" }, menu.Featured.Select(p => p.Title));
     }
 
     private sealed class QuickMenuEq : IEqualityComparer<QuickMenuCategory>
