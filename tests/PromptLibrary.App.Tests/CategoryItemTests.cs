@@ -15,6 +15,17 @@ public class CategoryItemTests
     }
 
     [Fact]
+    public void CategoryItem_PinnedRow_IsNotCategory_HidesEmoji()
+    {
+        var item = new CategoryItem(CategoryItem.PinnedId, "Pinned", 2);
+        Assert.True(item.IsPinnedRow);
+        Assert.False(item.IsCategory);
+        Assert.False(item.ShowEmoji);
+        Assert.Equal("", item.RailEmoji);
+        Assert.True(new CategoryItem(Guid.NewGuid(), "Coding", 1).ShowEmoji);
+    }
+
+    [Fact]
     public void RailEmoji_DefaultDoesNotBecomeTheCategorysOwn()
     {
         var item = new CategoryItem(Guid.NewGuid(), "Coding", 1);

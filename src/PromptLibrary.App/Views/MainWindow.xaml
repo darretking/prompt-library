@@ -471,6 +471,9 @@
                                                     <TextBlock Style="{StaticResource InlineGlyph}" Text="&#xE734;" HorizontalAlignment="Center"
                                                                VerticalAlignment="Center" Foreground="{DynamicResource Brush.Brand}"
                                                                Visibility="{Binding IsFeatured, Converter={StaticResource BoolToVisibility}}" />
+                                                    <TextBlock Style="{StaticResource InlineGlyph}" Text="&#xE718;" HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center" Foreground="{DynamicResource Brush.Brand}"
+                                                               Visibility="{Binding IsPinnedRow, Converter={StaticResource BoolToVisibility}}" />
                                                 </Grid>
                                             </Border>
                                             <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis"
