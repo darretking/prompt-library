@@ -57,7 +57,14 @@ public class UsageOrderTests
     {
         var s = new AppSettings();
         var (lower, upper) = (P("a"), P("A"));
-        Assert.Equal([lower, upper], UsageOrder.Prompts([lower, upper], s));
-        Assert.Equal([upper, lower], UsageOrder.Prompts([upper, lower], s));
+        Assert.Equal([lower.Id, upper.Id], UsageOrder.Prompts([lower, upper], s).Select(p => p.Id));
+        Assert.Equal([upper.Id, lower.Id], UsageOrder.Prompts([upper, lower], s).Select(p => p.Id));
+    }
+
+    [Fact]
+    public void Prompts_AccentedTitle_SortsWithItsLetter()
+    {
+        var s = new AppSettings();
+        Assert.Equal(["é", "f"], Titles(UsageOrder.Prompts([P("f"), P("é")], s)));
     }
 }

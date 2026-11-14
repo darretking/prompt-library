@@ -17,7 +17,7 @@ public static class UsageOrder
     /// <summary>Most used first, ties A to Z (or just A to Z when sorting by name). Stable.</summary>
     public static IReadOnlyList<T> Sort<T>(IEnumerable<T> items, Func<T, int> uses, Func<T, string> name, AppSettings s)
     {
-        var comparer = StringComparer.OrdinalIgnoreCase;
+        var comparer = StringComparer.CurrentCultureIgnoreCase;
         return SortsByUse(s)
             ? items.OrderByDescending(uses).ThenBy(name, comparer).ToList()
             : items.OrderBy(name, comparer).ToList();
