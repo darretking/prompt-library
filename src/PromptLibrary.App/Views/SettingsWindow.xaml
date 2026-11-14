@@ -87,14 +87,16 @@
                 <TextBlock Text="Prompt order" Style="{StaticResource FieldLabel}" Margin="0,24,0,4" />
                 <RadioButton x:Name="SortUsedRadio" GroupName="PromptSort" Content="Most used first"
                              AutomationProperties.Name="Prompt order: most used first" />
-                <RadioButton x:Name="SortNameRadio" GroupName="PromptSort" Content="A to Z" Margin="0,8,0,0"
-                             AutomationProperties.Name="Prompt order: A to Z" />
-                <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,8,0,8"
+                <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="24,2,0,0"
                            Text="Order follows how often you use each prompt." />
-                <Button x:Name="ClearUsageButton" Content="Clear usage history…" HorizontalAlignment="Left"
-                        Click="ClearUsage_Click" AutomationProperties.Name="Clear usage history" />
+                <RadioButton x:Name="SortNameRadio" GroupName="PromptSort" Content="A to Z" Margin="0,12,0,0"
+                             AutomationProperties.Name="Prompt order: A to Z" />
+                <Button x:Name="ClearUsageButton" Content="Clear usage history…" HorizontalAlignment="Left" Margin="0,12,0,0"
+                        Click="ClearUsage_Click" AutomationProperties.Name="Clear usage history"
+                        ToolTip="Forget how often each prompt was used"
+                        AutomationProperties.HelpText="Forget how often each prompt was used" />
                 <TextBlock x:Name="ClearUsageStatus" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,4,0,0"
-                           AutomationProperties.LiveSetting="Polite" />
+                           Visibility="Collapsed" AutomationProperties.LiveSetting="Polite" />
 
                 <!-- Team prompts: Join / Start until a team library is connected, then only the connected state + Leave. -->
                 <StackPanel x:Name="TeamSection" Margin="0,24,0,0"

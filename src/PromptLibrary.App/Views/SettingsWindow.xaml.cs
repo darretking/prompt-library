@@ -82,6 +82,7 @@ public partial class SettingsWindow : Window
         SortNameRadio.Checked += (_, _) => _order.SetSortByUse(false);
         ClearUsageButton.IsEnabled = _order.CanClear;
         host.UserStateChanged += OnUserStateChanged;
+        Activated += (_, _) => RefreshClearUsage(); // the main window's copy does not raise UserStateChanged
         Closed += (_, _) => host.UserStateChanged -= OnUserStateChanged;
 
         Picker.Attach(host);
@@ -97,12 +98,27 @@ public partial class SettingsWindow : Window
     }
 
     private void OnUserStateChanged(object? sender, EventArgs e)
-        => Dispatcher.BeginInvoke(() => ClearUsageButton.IsEnabled = _order.CanClear);
+        => Dispatcher.BeginInvoke(RefreshClearUsage);
+
+    /// <summary>The button follows whether usage exists; once it does again, the old "cleared" note goes.</summary>
+    private void RefreshClearUsage()
+    {
+        var can = _order.CanClear;
+        ClearUsageButton.IsEnabled = can;
+        if (can)
+        {
+            ClearUsageStatus.Text = "";
+            ClearUsageStatus.Visibility = Visibility.Collapsed;
+        }
+    }
 
     private void ClearUsage_Click(object sender, RoutedEventArgs e)
     {
         if (_order.ClearUsage())
+        {
             ClearUsageStatus.Text = "Usage history cleared.";
+            ClearUsageStatus.Visibility = Visibility.Visible;
+        }
     }
 
     private void OnLibraryChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(UpdateDeleteAll);

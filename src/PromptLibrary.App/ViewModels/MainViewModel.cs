@@ -1739,6 +1739,7 @@ public sealed class MainViewModel : ObservableObject
     private bool _builtHadUsage;
 
     /// <summary>True when the Pinned row is shown and the rows listed are no longer the pinned prompts.</summary>
+    // While search text filters the Pinned row the rows never equal the full pin set, so the list rebuilds; harmless, the order there is best-match.
     private bool PinnedMembershipChanged(Guid? shown)
         => shown == CategoryItem.PinnedId
             && !Prompts.Select(r => r.Id).ToHashSet().SetEquals(PinnedPrompts().Select(p => p.Id));
