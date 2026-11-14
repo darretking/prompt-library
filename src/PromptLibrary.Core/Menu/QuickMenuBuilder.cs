@@ -1,4 +1,5 @@
 using PromptLibrary.Core.Models;
+using PromptLibrary.Core.Usage;
 
 namespace PromptLibrary.Core.Menu;
 
@@ -26,7 +27,7 @@ public static class QuickMenuBuilder
     public static QuickMenu Build(Library personal, Library? team, AppSettings settings)
     {
         var hidden = new HashSet<Guid>(settings.HiddenTeamPromptIds);
-        var teamCats = team is null ? [] : Categories(team, true, hidden);
+        var teamCats = team is null ? [] : Categories(team, true, hidden, settings);
 
         var pinned = new List<QuickMenuPrompt>();
         foreach (var id in settings.PinnedPromptIds)
@@ -43,26 +44,28 @@ public static class QuickMenuBuilder
             .Select(p => new QuickMenuPrompt(p.Id, p.Title, true))
             .ToList();
 
-        return new QuickMenu(pinned, teamCats, Categories(personal, false, null),
+        pinned = UsageOrder.Sort(pinned, p => UsageOrder.Uses(settings, p.Id), p => p.Title, settings).ToList();
+
+        return new QuickMenu(pinned, teamCats, Categories(personal, false, null, settings),
             teamCats.Count > TeamCollapseThreshold) { Featured = featured };
     }
 
+    /// <summary>One library as categories, A to Z (no usage is known here).</summary>
     public static IReadOnlyList<QuickMenuCategory> Build(Library lib)
-        => Categories(lib, false, null);
+        => Categories(lib, false, null, new AppSettings { PromptSort = UsageOrder.ByName });
 
-    private static IReadOnlyList<QuickMenuCategory> Categories(Library lib, bool isTeam, HashSet<Guid>? hidden)
+    private static IReadOnlyList<QuickMenuCategory> Categories(
+        Library lib, bool isTeam, HashSet<Guid>? hidden, AppSettings settings)
     {
-        var comparer = StringComparer.CurrentCultureIgnoreCase;
-        return lib.Categories
-            .OrderBy(c => c.Name, comparer)
-            .Select(c => new QuickMenuCategory(
-                MenuText.WithEmoji(c.Emoji, c.Name),
-                lib.Prompts
-                    .Where(p => p.CategoryId == c.Id && hidden?.Contains(p.Id) != true)
-                    .OrderBy(p => p.Title, comparer)
-                    .Select(p => new QuickMenuPrompt(p.Id, p.Title, isTeam))
-                    .ToList()))
-            .Where(c => c.Prompts.Count > 0)
+        var groups = lib.Categories
+            .Select(c => (Category: c, Prompts: UsageOrder.Prompts(
+                lib.Prompts.Where(p => p.CategoryId == c.Id && hidden?.Contains(p.Id) != true), settings)))
+            .Where(g => g.Prompts.Count > 0);
+        // Sorted on the raw category name; the emoji is added only when mapping to the menu entry.
+        return UsageOrder.Sort(groups, g => g.Prompts.Sum(p => UsageOrder.Uses(settings, p.Id)), g => g.Category.Name, settings)
+            .Select(g => new QuickMenuCategory(
+                MenuText.WithEmoji(g.Category.Emoji, g.Category.Name),
+                g.Prompts.Select(p => new QuickMenuPrompt(p.Id, p.Title, isTeam)).ToList()))
             .ToList();
     }
 }
