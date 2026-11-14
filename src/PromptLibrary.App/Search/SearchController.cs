@@ -205,6 +205,7 @@ internal sealed class SearchController : ISearchActions, IDisposable
     {
         UsageTracker.Record(_host.Settings, prompt.Id, DateTimeOffset.Now);
         _host.SaveSettings();
+        _host.RefreshQuickMenu(); // most-used order follows
         _host.RaiseUserStateChanged(); // the main window's Recent list follows
     }
 }
