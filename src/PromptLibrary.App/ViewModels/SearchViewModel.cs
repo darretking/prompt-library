@@ -488,7 +488,10 @@ public sealed class SearchViewModel : ObservableObject
         var shown = new HashSet<Guid>();
         var groups = new List<(string Name, List<Entry> Entries)>();
 
-        var pins = _host.Settings.PinnedPromptIds.Where(entries.ContainsKey).Distinct().Select(id => entries[id]).ToList();
+        var s = _host.Settings; // read on every rebuild, so a changed sort setting applies at once
+        Entry[] Ordered(IEnumerable<Entry> list) => [.. UsageOrder.Sort(list, e => UsageOrder.Uses(s, e.Prompt.Id), e => e.Prompt.Title, s)];
+
+        var pins = Ordered(_host.Settings.PinnedPromptIds.Where(entries.ContainsKey).Distinct().Select(id => entries[id])).ToList();
         if (pins.Count > 0) groups.Add(("Pinned", pins));
         shown.UnionWith(pins.Select(e => e.Prompt.Id));
 
@@ -501,8 +504,7 @@ public sealed class SearchViewModel : ObservableObject
         if (recent.Count > 0) groups.Add(("Recent", recent));
         shown.UnionWith(recent.Select(e => e.Prompt.Id));
 
-        var rest = entries.Values.Where(e => !shown.Contains(e.Prompt.Id))
-            .OrderBy(e => e.Prompt.Title, StringComparer.CurrentCultureIgnoreCase).ToList();
+        var rest = Ordered(entries.Values.Where(e => !shown.Contains(e.Prompt.Id))).ToList();
         if (rest.Count > 0) groups.Add(("All prompts", rest));
 
         foreach (var (name, list) in groups)

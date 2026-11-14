@@ -103,6 +103,84 @@ public class SearchViewModelTests
     });
 
     [Fact]
+    public void EmptyQuery_PinnedGroup_MostUsedFirst() => Sta.Run(() =>
+    {
+        var host = new FakeActions();
+        var (lib, cat) = NewLibrary();
+        host.Library = lib;
+        var a = Add(lib, cat, "A");
+        var b = Add(lib, cat, "B");
+        var c = Add(lib, cat, "C");
+        Add(lib, cat, "D");
+        foreach (var p in new[] { a, b, c }) host.Settings.PinnedPromptIds.Add(p.Id);
+        host.Settings.Usage[b.Id] = new PromptUsage { Count = 1, LastUsedAt = Now };
+        host.Settings.Usage[c.Id] = new PromptUsage { Count = 5, LastUsedAt = Now };
+
+        var vm = Make(host);
+        vm.Reset();
+
+        Assert.Equal(["[Pinned]", "C", "B", "A", "[All prompts]", "D"], Shape(vm));
+    });
+
+    private static FakeActions TenUsedPlusTwoUnused(string? sort)
+    {
+        var host = new FakeActions();
+        var (lib, cat) = NewLibrary();
+        host.Library = lib;
+        if (sort is not null) host.Settings.PromptSort = sort;
+        for (var i = 0; i < 10; i++)
+        {
+            var p = Add(lib, cat, $"P{i:00}");
+            // P08 and P09 fall outside the eight most recent, so they land in All prompts.
+            host.Settings.Usage[p.Id] = new PromptUsage { Count = i == 9 ? 5 : 1, LastUsedAt = Now.AddHours(-i) };
+        }
+        Add(lib, cat, "Zzz");
+        Add(lib, cat, "Aaa");
+        return host;
+    }
+
+    private static List<string> AllPrompts(SearchViewModel vm)
+        => vm.Items.SkipWhile(i => i.Header != "All prompts").Skip(1).Select(i => i.Title).ToList();
+
+    [Fact]
+    public void EmptyQuery_AllPromptsGroup_MostUsedFirst_TiesAToZ() => Sta.Run(() =>
+    {
+        var vm = Make(TenUsedPlusTwoUnused(null));
+        vm.Reset();
+        Assert.Equal(["P09", "P08", "Aaa", "Zzz"], AllPrompts(vm));
+    });
+
+    [Fact]
+    public void EmptyQuery_ByName_AllPromptsAToZ() => Sta.Run(() =>
+    {
+        var vm = Make(TenUsedPlusTwoUnused("name"));
+        vm.Reset();
+        Assert.Equal(["Aaa", "P08", "P09", "Zzz"], AllPrompts(vm));
+    });
+
+    [Fact]
+    public void EmptyQuery_RecentAndFeaturedOrderUnchanged() => Sta.Run(() =>
+    {
+        var host = new FakeActions();
+        var (lib, cat) = NewLibrary();
+        var (team, tcat) = NewLibrary();
+        host.Library = lib;
+        host.TeamLibrary = team;
+        var f1 = Add(team, tcat, "Feat A");
+        var f2 = Add(team, tcat, "Feat B");
+        f1.Featured = f2.Featured = true;
+        var old = Add(lib, cat, "Old");
+        var recent = Add(lib, cat, "Recent");
+        host.Settings.Usage[old.Id] = new PromptUsage { Count = 9, LastUsedAt = Now.AddDays(-3) };
+        host.Settings.Usage[recent.Id] = new PromptUsage { Count = 1, LastUsedAt = Now };
+
+        var vm = Make(host);
+        vm.Reset();
+
+        Assert.Equal(["[Featured]", "Feat A", "Feat B", "[Recent]", "Recent", "Old"], Shape(vm));
+    });
+
+    [Fact]
     public void EmptyQuery_OnlyAllPrompts_HasNoHeader() => Sta.Run(() =>
     {
         var host = new FakeActions();
