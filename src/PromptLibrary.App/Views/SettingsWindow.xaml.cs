@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using PromptLibrary.App.Settings;
 using PromptLibrary.App.ViewModels;
 using PromptLibrary.Core.Hotkeys;
 
@@ -17,6 +18,7 @@ public partial class SettingsWindow : Window
     private readonly AppHost _host;
     private readonly UserCloseTracker _closes;
     private readonly TeamConnectionViewModel _team;
+    private readonly PromptOrderSettings _order;
 
     public SettingsWindow(AppHost host)
     {
@@ -70,6 +72,18 @@ public partial class SettingsWindow : Window
         StartupBox.Checked += (_, _) => ApplyStartWithWindows(true);
         StartupBox.Unchecked += (_, _) => ApplyStartWithWindows(false);
 
+        _order = new PromptOrderSettings(host.Settings, () => host.SaveSettings(), host.RefreshQuickMenu,
+            host.RaiseUserStateChanged,
+            () => ConfirmDialog.Ask(this,
+                "Clear usage history?\n\nPrompts go back to A to Z order until you use them again, and Recent is emptied.",
+                "Clear", "Cancel"));
+        (_order.SortsByUse ? SortUsedRadio : SortNameRadio).IsChecked = true;
+        SortUsedRadio.Checked += (_, _) => _order.SetSortByUse(true);
+        SortNameRadio.Checked += (_, _) => _order.SetSortByUse(false);
+        ClearUsageButton.IsEnabled = _order.CanClear;
+        host.UserStateChanged += OnUserStateChanged;
+        Closed += (_, _) => host.UserStateChanged -= OnUserStateChanged;
+
         Picker.Attach(host);
 
         _team = new TeamConnectionViewModel(host.Team);
@@ -80,6 +94,15 @@ public partial class SettingsWindow : Window
         UpdateDeleteAll();
         host.LibraryChanged += OnLibraryChanged;
         Closed += (_, _) => host.LibraryChanged -= OnLibraryChanged;
+    }
+
+    private void OnUserStateChanged(object? sender, EventArgs e)
+        => Dispatcher.BeginInvoke(() => ClearUsageButton.IsEnabled = _order.CanClear);
+
+    private void ClearUsage_Click(object sender, RoutedEventArgs e)
+    {
+        if (_order.ClearUsage())
+            ClearUsageStatus.Text = "Usage history cleared.";
     }
 
     private void OnLibraryChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(UpdateDeleteAll);
